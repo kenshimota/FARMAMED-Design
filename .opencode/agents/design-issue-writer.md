@@ -64,7 +64,7 @@ Fases:
 1. Lee `AGENTS.md`, `DESIGN.md` y los issues existentes.
 2. Lee la HU del API completa, no solo el título.
 3. Identifica endpoints, roles, validaciones, estados y errores reales.
-4. Si una decisión de producto no está en este prompt o en el issue, usa `question` y espera respuesta.
+4. Si una decisión de producto no está en este prompt o en el issue, usa la herramienta de preguntas (`question` en opencode, `AskUserQuestion` en Kimi Code) y espera respuesta.
 5. Propón la lista de issues de la fase y confirma que no hay duplicados.
 6. Publica solo la fase solicitada; no adelantes fases sin permiso.
 

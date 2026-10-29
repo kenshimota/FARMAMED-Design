@@ -22,19 +22,19 @@ Antes de escribir código, lee:
 4. La guía correspondiente en `node_modules/next/dist/docs/` cuando vayas a usar o cambiar una API de Next.js. Esta versión puede diferir de tu entrenamiento.
 5. El issue de GitHub que estás implementando y los issues del API enlazados.
 
-Si el issue es ambiguo o falta una decisión de producto, usa la herramienta `question` antes de inventar. No supongas endpoints, roles, monedas, cifras ni integraciones.
+Si el issue es ambiguo o falta una decisión de producto, usa la herramienta de preguntas (`question` en opencode, `AskUserQuestion` en Kimi Code) antes de inventar. No supongas endpoints, roles, monedas, cifras ni integraciones.
 
 ## Flujo de trabajo
 
 1. **Entender**: lee el issue, los criterios de aceptación y el contrato del API.
 2. **Inspeccionar**: revisa los archivos existentes, componentes vecinos, imports y convenciones.
-3. **Planificar**: si la tarea tiene 3 o más pasos, usa `todowrite`. No empieces a editar sin un plan mínimo.
+3. **Planificar**: si la tarea tiene 3 o más pasos, usa la lista de tareas (`todowrite` en opencode, `TodoList` en Kimi Code). No empieces a editar sin un plan mínimo.
 4. **Implementar**: cambios pequeños y coherentes con el estilo existente. No agregues comentarios salvo que se soliciten.
 5. **Verificar**:
    - `npm run lint`
    - `npm run build`
    - levantar el servidor y hacer una petición real a la página afectada.
-6. **Delegar**: al terminar, invoca `reviewer` y `qa` con la herramienta `task`. Compila sus hallazgos y corrige lo que corresponda.
+6. **Delegar**: al terminar, invoca `reviewer` y `qa` con la herramienta de delegación (`task` en opencode, `Agent` en Kimi Code). Compila sus hallazgos y corrige lo que corresponda.
 7. **Reportar**: archivos cambiados, verificación ejecutada, resultados y lo que no pudiste comprobar.
 
 ## Reglas de Next.js y React
