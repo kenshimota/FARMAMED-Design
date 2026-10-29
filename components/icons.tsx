@@ -6,6 +6,7 @@ export type IconName =
   | "arrow-up-right"
   | "bell"
   | "box"
+  | "calculator"
   | "cart"
   | "chart"
   | "check"
@@ -13,18 +14,83 @@ export type IconName =
   | "clipboard"
   | "clock"
   | "close"
+  | "coins"
   | "database"
+  | "home"
+  | "image"
   | "layers"
+  | "link"
+  | "map-pin"
   | "menu"
   | "package"
   | "pill"
   | "search"
   | "shield"
   | "sparkles"
+  | "tag"
   | "truck"
-  | "users";
+  | "user"
+  | "users"
+  | "warehouse";
 
 const paths: Record<IconName, ReactNode> = {
+  calculator: (
+    <>
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h.01M16 19h.01" />
+    </>
+  ),
+  coins: (
+    <>
+      <ellipse cx="9" cy="6" rx="6" ry="3" />
+      <path d="M3 6v4c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.2-.5M3 10v4c0 1.7 2.7 3 6 3h1" />
+      <ellipse cx="16" cy="15" rx="5" ry="5" />
+      <path d="M16 12.5v5M14.5 14h2a1 1 0 0 1 0 2h-1a1 1 0 0 0 0 2h2" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="m3 11 9-8 9 8" />
+      <path d="M5 10v10h14V10M9 20v-6h6v6" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1" />
+      <path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1" />
+    </>
+  ),
+  "map-pin": (
+    <>
+      <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M20.6 13.6 13.7 20.5a2 2 0 0 1-2.8 0L3.5 13.1a2 2 0 0 1-.6-1.4V5a2 2 0 0 1 2-2h6.7a2 2 0 0 1 1.4.6l7.6 7.1a2 2 0 0 1 0 2.9Z" />
+      <circle cx="7.5" cy="7.5" r="1" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 22a8 8 0 0 1 16 0" />
+    </>
+  ),
+  warehouse: (
+    <>
+      <path d="m3 9 9-6 9 6v12H3V9Z" />
+      <path d="M7 21v-8h10v8M7 9h.01M12 9h.01M17 9h.01" />
+    </>
+  ),
   alert: (
     <>
       <path d="M10.3 3.7 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z" />

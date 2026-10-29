@@ -20,6 +20,18 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Configuración del ERP
+
+El ERP vive bajo `/app/*`. El cliente del API se centraliza en `lib/api.ts` y usa por defecto `https://farmamed.strixcryptoapp.site/api/v1`.
+
+Para apuntar a otra instancia, define esta variable pública antes de ejecutar el entorno de desarrollo o compilar:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+```
+
+La variable se expone al navegador porque las llamadas de autenticación se realizan desde el cliente. No incluyas secretos ni credenciales en su valor. Los archivos `.env*` están ignorados; documenta cualquier configuración compartida sin datos sensibles.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
