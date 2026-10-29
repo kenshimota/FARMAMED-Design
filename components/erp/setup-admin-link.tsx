@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { NoticeBanner } from "@/components/erp/ui/banner";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 
 async function fetchSetupAvailability() {
@@ -21,7 +22,7 @@ export function SetupAdminLink() {
 
   if (resource.status === "loading" || resource.status === "refreshing") {
     return (
-      <p className="mt-4 text-center text-[12px] text-muted" role="status">
+      <p className="mb-6 text-[12px] text-muted" role="status">
         Consultando el registro inicial…
       </p>
     );
@@ -29,7 +30,7 @@ export function SetupAdminLink() {
 
   if (resource.status === "error") {
     return (
-      <p className="mt-4 text-center text-[12px] leading-5 text-muted" role="alert">
+      <p className="mb-6 text-[12px] leading-5 text-muted" role="alert">
         {resource.error?.message ?? "No pudimos consultar la disponibilidad del registro inicial."}{" "}
         {resource.error?.canRetry && (
           <button
@@ -47,11 +48,14 @@ export function SetupAdminLink() {
   if (!resource.data) return null;
 
   return (
-    <p className="mt-5 border-t border-line pt-5 text-center text-[12px] leading-5 text-muted">
-      ¿Es la primera vez que usas Farmamed?{" "}
-      <Link className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline" href="/app/setup-admin">
-        Configurar administrador inicial
+    <NoticeBanner className="mb-6" role="status" tone="info">
+      El sistema aún no tiene administrador.{" "}
+      <Link
+        className="inline-flex min-h-11 items-center font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+        href="/app/setup-admin"
+      >
+        Configura la cuenta inicial.
       </Link>
-    </p>
+    </NoticeBanner>
   );
 }

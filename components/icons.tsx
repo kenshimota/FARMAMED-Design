@@ -16,6 +16,8 @@ export type IconName =
   | "close"
   | "coins"
   | "database"
+  | "eye"
+  | "eye-off"
   | "home"
   | "image"
   | "layers"
@@ -52,6 +54,20 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="m3 11 9-8 9 8" />
       <path d="M5 10v10h14V10M9 20v-6h6v6" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="m3 3 18 18" />
+      <path d="M10.6 5.1A11 11 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.4 3.4" />
+      <path d="M6.2 6.7A18.4 18.4 0 0 0 2 12s3.6 7 10 7c1.5 0 2.9-.3 4.1-.9" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
     </>
   ),
   image: (
