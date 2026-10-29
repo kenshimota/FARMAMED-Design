@@ -85,8 +85,12 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "admin already exists": "Ya existe un administrador. Inicia sesión.",
 };
 
+export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
+
 const KNOWN_MESSAGES: Record<string, string> = {
   "default transaction currency is not configured": CURRENCY_NOT_CONFIGURED,
+  "password must be at least 8 characters long": PASSWORD_MIN_MESSAGE,
+  "invalid email": "El correo no es válido.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;

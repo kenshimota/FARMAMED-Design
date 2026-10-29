@@ -24,9 +24,11 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `app/page.tsx`: contenido principal y secciones; debe permanecer como Server Component.
 - `app/globals.css`: tokens de marca, estilos compartidos y preferencias de movimiento.
 - `app/layout.tsx`: fuentes, idioma y metadata.
-- `app/app/(public)/`: acceso, configuración inicial y recuperación; no usa el shell protegido.
+- `app/app/login/`: inicio de sesión con composición propia de dos columnas y escena de marca; no usa el shell protegido.
+- `app/app/(public)/`: configuración inicial y recuperación; no usa el shell protegido.
 - `app/app/(erp)/`: único grupo de rutas protegidas y layout del ERP.
 - `components/erp/`: shell responsive, navegación, estados de sesión y placeholders del ERP.
+- `components/erp/login-scene.tsx`: límite cliente que decide entre la escena 3D y su alternativa estática según tamaño y movimiento.
 - `lib/`: cliente del API, sesión, matriz de permisos y definición de rutas.
 - `components/pharma-experience.tsx`: límite cliente y carga diferida de la escena.
 - `components/pharma-scene.tsx`: geometría, texturas, animación y limpieza de Three.js.

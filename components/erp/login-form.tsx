@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
+  useEffect,
   useState,
   type FormEvent,
-  type FocusEvent,
 } from "react";
 import { Icon } from "@/components/icons";
 import { BusyButton } from "@/components/erp/ui/action-button";
@@ -19,9 +19,9 @@ import {
 } from "@/components/erp/ui/form";
 import { ApiError } from "@/lib/api";
 import {
+  PASSWORD_MIN_MESSAGE,
   translateApiError,
   translateFieldMessage,
-  type UiErrorKind,
 } from "@/lib/api-errors";
 import { formatWaitPhrase } from "@/lib/format";
 import {
@@ -29,6 +29,15 @@ import {
   getSafeReturnPath,
   saveStoredToken,
 } from "@/lib/session";
+
+const COPY = {
+  empty: "Completa tu identificador y tu contraseña.",
+  missing: "Completa todos los campos.",
+  invalid: "El correo, el usuario o la contraseña no son correctos.",
+  network: "No pudimos conectar con el servidor. Intenta de nuevo.",
+  generic: "No pudimos iniciar sesión. Intenta de nuevo.",
+  success: "Sesión iniciada.",
+} as const;
 
 const notices = {
   expirada: "Tu sesión expiró. Inicia sesión de nuevo.",
@@ -44,11 +53,10 @@ const fieldLabels = {
 const apiFieldToForm: Record<string, keyof typeof fieldLabels> = {
   identifier: "identificador",
   identificador: "identificador",
+  email: "identificador",
   password: "contrasena",
   contrasena: "contrasena",
 };
-
-const credentialKinds: UiErrorKind[] = ["session-expired", "forbidden"];
 
 function mapLoginFieldErrors(error: unknown): Record<string, string> {
   const mapped: Record<string, string> = {};
@@ -60,12 +68,13 @@ function mapLoginFieldErrors(error: unknown): Record<string, string> {
   return mapped;
 }
 
-export function LoginForm() {
+export function LoginForm({ aviso, retorno }: { aviso: string | null; retorno: string | null }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSummary, setShowSummary] = useState(false);
@@ -73,29 +82,18 @@ export function LoginForm() {
   const [cooldownAnnouncement, setCooldownAnnouncement] = useState<string | null>(null);
   const remaining = useRetryCooldown(cooldown);
 
-  const noticeKey = searchParams.get("aviso");
+  const noticeKey = aviso;
   const notice =
     noticeKey === "expirada" || noticeKey === "bloqueada" || noticeKey === "cerrada"
       ? notices[noticeKey]
       : null;
-  const returnPath = getSafeReturnPath(searchParams.get("retorno"));
+  const returnPath = getSafeReturnPath(retorno);
 
-  function validateField(id: keyof typeof fieldLabels) {
-    if (id === "identificador" && !identifier.trim()) return "Escribe tu identificador.";
-    if (id === "contrasena" && !password) return "Escribe tu contraseña.";
-    return null;
-  }
-
-  function handleBlur(event: FocusEvent<HTMLInputElement>) {
-    const id = event.target.id as keyof typeof fieldLabels;
-    const error = validateField(id);
-    setFieldErrors((current) => {
-      const next = { ...current };
-      if (error) next[id] = error;
-      else delete next[id];
-      return next;
-    });
-  }
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => router.replace(returnPath), 600);
+    return () => window.clearTimeout(timer);
+  }, [success, returnPath, router]);
 
   function buildSummary(errors: Record<string, string>): FormErrorItem[] {
     return Object.entries(errors).map(([field, error]) => ({
@@ -105,33 +103,56 @@ export function LoginForm() {
     }));
   }
 
+  function clearFieldError(field: keyof typeof fieldLabels) {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function focusField(id: string) {
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.focus();
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const errors: Record<string, string> = {};
-    const identifierError = validateField("identificador");
-    const passwordError = validateField("contrasena");
-    if (identifierError) errors.identificador = identifierError;
-    if (passwordError) errors.contrasena = passwordError;
+    const trimmedIdentifier = identifier.trim();
 
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
+    if (!trimmedIdentifier || !password) {
+      setMessage(COPY.empty);
+      setSuccess(null);
+      setFieldErrors({});
+      setShowSummary(false);
+      focusField(!trimmedIdentifier ? "identificador" : "contrasena");
+      return;
+    }
+
+    if (password.length < 8) {
+      setFieldErrors({ contrasena: PASSWORD_MIN_MESSAGE });
       setShowSummary(true);
       setMessage(null);
+      setSuccess(null);
       window.requestAnimationFrame(() => focusFirstInvalidField());
       return;
     }
 
     setSubmitting(true);
     setMessage(null);
+    setSuccess(null);
     setFieldErrors({});
     setShowSummary(false);
+    setShowPassword(false);
     setCooldown(null);
     setCooldownAnnouncement(null);
 
     try {
-      const token = await authenticate(identifier.trim(), password);
+      const token = await authenticate(trimmedIdentifier, password);
       saveStoredToken(token);
-      router.replace(returnPath);
+      setSuccess(COPY.success);
     } catch (caughtError) {
       const translated = translateApiError(caughtError);
       if (translated.kind === "rate-limit" && translated.retryAfterSeconds) {
@@ -140,6 +161,8 @@ export function LoginForm() {
           `Podrás intentar de nuevo en ${formatWaitPhrase(translated.retryAfterSeconds)}.`,
         );
         setMessage("Demasiadas solicitudes.");
+      } else if (translated.kind === "blocked") {
+        setMessage(translated.message);
       } else if (translated.kind === "validation") {
         const mapped = mapLoginFieldErrors(caughtError);
         if (Object.keys(mapped).length > 0) {
@@ -148,17 +171,17 @@ export function LoginForm() {
           setMessage(null);
           window.requestAnimationFrame(() => focusFirstInvalidField());
         } else {
-          setMessage("El identificador o la contraseña no son correctos.");
+          setMessage(translated.message);
         }
-      } else if (credentialKinds.includes(translated.kind)) {
-        setMessage("El identificador o la contraseña no son correctos.");
+      } else if (translated.kind === "session-expired" || translated.kind === "forbidden") {
+        setMessage(COPY.invalid);
+      } else if (translated.kind === "bad-request") {
+        setMessage(COPY.missing);
+        focusField("identificador");
+      } else if (translated.kind === "network") {
+        setMessage(caughtError instanceof TypeError ? COPY.network : COPY.generic);
       } else {
         setMessage(translated.message);
-        if (translated.kind === "bad-request") {
-          window.requestAnimationFrame(() => {
-            document.getElementById("identificador")?.focus();
-          });
-        }
       }
       setSubmitting(false);
     }
@@ -175,6 +198,11 @@ export function LoginForm() {
           tone="info"
         >
           {notice}
+        </NoticeBanner>
+      )}
+      {success && (
+        <NoticeBanner className="mb-5" role="status" tone="success">
+          {success}
         </NoticeBanner>
       )}
       {message && (
@@ -198,9 +226,10 @@ export function LoginForm() {
         </div>
       )}
 
-      <form className="space-y-5" onSubmit={handleSubmit}>
+      <form className="space-y-5" noValidate onSubmit={handleSubmit}>
         <FormField
           error={fieldErrors.identificador}
+          help="Puedes usar tu correo o tu nombre de usuario."
           id="identificador"
           label="Identificador"
           required
@@ -213,8 +242,10 @@ export function LoginForm() {
               className="h-12 w-full rounded-xl border border-ink/15 bg-surface px-4 text-[15px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
               disabled={submitting}
               name="identifier"
-              onBlur={handleBlur}
-              onChange={(event) => setIdentifier(event.target.value)}
+              onChange={(event) => {
+                setIdentifier(event.target.value);
+                clearFieldError("identificador");
+              }}
               placeholder="Correo o nombre de usuario"
               type="text"
               value={identifier}
@@ -228,22 +259,44 @@ export function LoginForm() {
           required
         >
           {(aria) => (
-            <input
-              {...aria}
-              autoComplete="current-password"
-              className="h-12 w-full rounded-xl border border-ink/15 bg-surface px-4 text-[15px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
-              disabled={submitting}
-              name="password"
-              onBlur={handleBlur}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Tu contraseña"
-              type="password"
-              value={password}
-            />
+            <div>
+              <div className="relative">
+                <input
+                  {...aria}
+                  autoComplete="current-password"
+                  className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-4 pr-12 text-[15px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
+                  disabled={submitting}
+                  name="password"
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    clearFieldError("contrasena");
+                  }}
+                  placeholder="Tu contraseña"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                />
+                <button
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-muted transition-colors hover:text-ink"
+                  disabled={submitting}
+                  onClick={() => setShowPassword((current) => !current)}
+                  type="button"
+                >
+                  <Icon name={showPassword ? "eye-off" : "eye"} size={19} />
+                </button>
+              </div>
+              <Link
+                className="inline-flex min-h-11 items-center text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                href="/app/recuperar"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           )}
         </FormField>
         <BusyButton
           busy={submitting}
+          busyLabel="Iniciando sesión…"
           className="w-full"
           disabled={remaining > 0}
           type="submit"
@@ -252,12 +305,6 @@ export function LoginForm() {
           <Icon name="arrow-right" size={18} />
         </BusyButton>
       </form>
-
-      <div className="mt-6 border-t border-line pt-5 text-center text-[13px]">
-        <Link className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline" href="/app/recuperar">
-          ¿Olvidaste tu contraseña?
-        </Link>
-      </div>
     </div>
   );
 }
