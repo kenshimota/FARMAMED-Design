@@ -7,6 +7,8 @@ import { Icon } from "@/components/icons";
 import { ErpLoading } from "@/components/erp/erp-loading";
 import { ErpShell } from "@/components/erp/erp-shell";
 import { SessionProvider } from "@/components/erp/session-context";
+import { CurrencyStatusProvider } from "@/components/erp/ui/currency-status-context";
+import { ToastProvider } from "@/components/erp/ui/toast";
 import { ApiError } from "@/lib/api";
 import {
   buildLoginUrl,
@@ -43,18 +45,11 @@ export function SessionGate({ children }: { children: ReactNode }) {
         if (active) setState({ status: "authenticated", user });
       } catch (error) {
         if (!active) return;
-        if (error instanceof ApiError && error.status === 401) {
-          clearStoredToken();
-          const returnPath = `${window.location.pathname}${window.location.search}`;
-          router.replace(buildLoginUrl(returnPath, "expirada"));
-        } else if (
-          error instanceof ApiError &&
-          error.status === 403 &&
-          error.message === "User is blocked"
-        ) {
-          clearStoredToken();
-          router.replace(buildLoginUrl(undefined, "bloqueada"));
-        } else if (error instanceof ApiError && error.status === 403) {
+        if (error instanceof ApiError && (error.status === 401 || error.isUserBlocked())) {
+          setState({ status: "loading" });
+          return;
+        }
+        if (error instanceof ApiError && error.status === 403) {
           setState({ status: "forbidden" });
         } else {
           setState({ status: "error" });
@@ -115,7 +110,11 @@ export function SessionGate({ children }: { children: ReactNode }) {
 
   return (
     <SessionProvider logout={logout} user={state.user}>
-      <ErpShell>{children}</ErpShell>
+      <CurrencyStatusProvider>
+        <ToastProvider>
+          <ErpShell>{children}</ErpShell>
+        </ToastProvider>
+      </CurrencyStatusProvider>
     </SessionProvider>
   );
 }

@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { CurrencyStatusPanel } from "@/components/erp/currency-status-panel";
+import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import { EmptyState } from "@/components/erp/ui/empty-state";
 import { canReadModule, ROLE_LABELS } from "@/lib/permissions";
 import { ERP_ROUTES, getNavigationHref } from "@/lib/routes";
 import { useSession } from "@/components/erp/session-context";
@@ -19,6 +22,7 @@ export function DashboardHome() {
 
   return (
     <div className="space-y-6">
+      <CurrencyNoticeBanner />
       <section className="relative overflow-hidden rounded-[28px] border border-ink/[0.08] bg-surface p-6 shadow-[0_18px_60px_rgba(27,12,104,0.05)] sm:p-9 lg:p-11">
         <div aria-hidden="true" className="technical-grid absolute inset-0 opacity-60 [mask-image:linear-gradient(120deg,black,transparent_65%)]" />
         <div aria-hidden="true" className="absolute -right-20 -top-24 h-72 w-72 rounded-full border-[52px] border-lime/10" />
@@ -47,48 +51,59 @@ export function DashboardHome() {
           </div>
           <p className="text-[12px] text-muted">Según los permisos de tu rol</p>
         </div>
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {availableRoutes.map((route) => {
-            const href = getNavigationHref(route, user.role);
-            const content = (
-              <>
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand shadow-sm">
-                  <Icon name={route.icon} size={20} />
-                </span>
-                <span>
-                  <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                    {route.label}
-                    {href && <Icon className="text-muted transition-transform group-hover:translate-x-0.5" name="arrow-right" size={14} />}
+        {availableRoutes.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              description="Tu rol todavía no tiene módulos habilitados. Contacta a un administrador para revisar tus permisos."
+              title="Sin módulos disponibles"
+            />
+          </div>
+        ) : (
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {availableRoutes.map((route) => {
+              const href = getNavigationHref(route, user.role);
+              const content = (
+                <>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand shadow-sm">
+                    <Icon name={route.icon} size={20} />
                   </span>
-                  <span className="mt-2 block text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                    {href ? route.group : "Requiere bodega"}
+                  <span>
+                    <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                      {route.label}
+                      {href && <Icon className="text-muted transition-transform group-hover:translate-x-0.5" name="arrow-right" size={14} />}
+                    </span>
+                    <span className="mt-2 block text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+                      {href ? route.group : "Requiere bodega"}
+                    </span>
                   </span>
-                </span>
-              </>
-            );
+                </>
+              );
 
-            return (
-              <li key={route.path}>
-                {href ? (
-                  <Link
-                    className="group flex min-h-28 items-start gap-4 rounded-2xl border border-line bg-background p-4 transition-colors hover:border-brand/30 hover:bg-soft-blue"
-                    href={href}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    className="flex min-h-28 items-start gap-4 rounded-2xl border border-line bg-background p-4 text-muted"
-                  >
-                    {content}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+              return (
+                <li key={route.path}>
+                  {href ? (
+                    <Link
+                      className="group flex min-h-28 items-start gap-4 rounded-2xl border border-line bg-background p-4 transition-colors hover:border-brand/30 hover:bg-soft-blue"
+                      href={href}
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <span
+                      aria-disabled="true"
+                      className="flex min-h-28 items-start gap-4 rounded-2xl border border-line bg-background p-4 text-muted"
+                    >
+                      {content}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
+
+      <CurrencyStatusPanel />
     </div>
   );
 }

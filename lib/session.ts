@@ -1,15 +1,14 @@
 import { apiFetch } from "@/lib/api";
 import { isRole, type Role } from "@/lib/permissions";
+import type { LoginNotice } from "@/lib/session-store";
 
-const TOKEN_STORAGE_KEY = "farmamed.session.token";
+export type { LoginNotice };
 
 export type SessionUser = {
   name: string;
   email: string;
   role: Role;
 };
-
-export type LoginNotice = "expirada" | "bloqueada" | "cerrada";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -59,20 +58,6 @@ function getToken(payload: unknown) {
   return getString(container.token, container.accessToken, container.access_token, container.jwt) ?? null;
 }
 
-export function getStoredToken() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-export function saveStoredToken(token: string) {
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredToken() {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
-
 export async function authenticate(identifier: string, password: string) {
   const payload = await apiFetch<unknown>("/auth/login", {
     method: "POST",
@@ -90,33 +75,12 @@ export async function getSessionUser(token: string) {
   return user;
 }
 
-export function getSafeReturnPath(value: string | null) {
-  if (
-    !value ||
-    (!value.startsWith("/app/") && value !== "/app") ||
-    value.startsWith("//") ||
-    value.includes("\\")
-  ) {
-    return "/app";
-  }
-
-  const pathname = value.split(/[?#]/, 1)[0];
-  if (
-    pathname === "/app/login" ||
-    pathname === "/app/setup-admin" ||
-    pathname === "/app/recuperar" ||
-    pathname.startsWith("/app/recuperar/")
-  ) {
-    return "/app";
-  }
-
-  return value;
-}
-
-export function buildLoginUrl(returnPath?: string, notice?: LoginNotice) {
-  const params = new URLSearchParams();
-  if (returnPath) params.set("retorno", getSafeReturnPath(returnPath));
-  if (notice) params.set("aviso", notice);
-  const query = params.toString();
-  return `/app/login${query ? `?${query}` : ""}`;
-}
+export {
+  TOKEN_STORAGE_KEY,
+  buildLoginUrl,
+  clearStoredToken,
+  getCurrentReturnPath,
+  getSafeReturnPath,
+  getStoredToken,
+  saveStoredToken,
+} from "@/lib/session-store";
