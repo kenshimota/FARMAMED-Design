@@ -58,6 +58,11 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `.opencode/skills/design-issue-spec/`: plantilla, épicas, fases y reglas de publicación de issues.
 - Solo `builder` escribe código. `reviewer` y `qa` son de solo lectura. `design-issue-writer` publica issues y no implementa.
 - Los prompts están en español y heredan el modelo de la sesión.
+- `.kimi-code/agents/` contiene las versiones para Kimi Code, generadas desde `.opencode/agents/` con `node scripts/sync-kimi-agents.mjs`.
+- `.kimi-code/skills` enlaza a `.opencode/skills`, de modo que ambos agentes usan las mismas skills.
+- En opencode los permisos viven en `permission`; en Kimi Code se aplican con `tools`, `disallowedTools` y `subagents`.
+- `reviewer`, `qa` y `design-issue-writer` no tienen `Write` ni `Edit` en Kimi Code.
+- Tras cambiar agentes o skills, ejecutar `node scripts/sync-kimi-agents.mjs`; en opencode reiniciar la sesión y en Kimi Code abrir una sesión nueva o usar `/reload`.
 - Los cambios en `.opencode/` requieren reiniciar opencode para cargarse.
 
 ### Three.js
