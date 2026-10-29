@@ -60,8 +60,26 @@ button {
 }
 
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--cyan) 75%, white);
+  outline: 3px solid color-mix(in srgb, var(--cyan) 55%, var(--ink));
   outline-offset: 4px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  z-index: 100;
+  transform: translateY(-160%);
+  border-radius: 12px;
+  background: var(--ink);
+  color: white;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 .section-shell {
@@ -178,6 +196,36 @@ button {
   background-size: 24px 24px;
 }
 
+.erp-panel-enter {
+  animation: erp-panel-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.erp-fade-enter {
+  animation: erp-fade-enter 150ms ease-out both;
+}
+
+@keyframes erp-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes erp-fade-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes hero-enter {
   from {
     opacity: 0;
@@ -223,11 +271,24 @@ button {
   .hero-enter,
   .hero-enter-delay,
   .hero-enter-late,
-  .scene-loading {
+  .scene-loading,
+  .erp-panel-enter,
+  .erp-fade-enter {
     animation: none;
   }
 
   .button-base {
     transition: none;
+  }
+
+  .button-base:hover,
+  .erp-motion [class*="group-hover:translate-x"] {
+    transform: none !important;
+  }
+
+  .erp-motion,
+  .erp-motion * {
+    animation: none !important;
+    transition: none !important;
   }
 }
