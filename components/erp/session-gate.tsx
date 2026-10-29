@@ -7,6 +7,8 @@ import { Icon } from "@/components/icons";
 import { ErpLoading } from "@/components/erp/erp-loading";
 import { ErpShell } from "@/components/erp/erp-shell";
 import { SessionProvider } from "@/components/erp/session-context";
+import { CurrencyStatusProvider } from "@/components/erp/ui/currency-status-context";
+import { ToastProvider } from "@/components/erp/ui/toast";
 import { ApiError } from "@/lib/api";
 import {
   buildLoginUrl,
@@ -115,7 +117,11 @@ export function SessionGate({ children }: { children: ReactNode }) {
 
   return (
     <SessionProvider logout={logout} user={state.user}>
-      <ErpShell>{children}</ErpShell>
+      <CurrencyStatusProvider>
+        <ToastProvider>
+          <ErpShell>{children}</ErpShell>
+        </ToastProvider>
+      </CurrencyStatusProvider>
     </SessionProvider>
   );
 }
