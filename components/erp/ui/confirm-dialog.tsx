@@ -6,11 +6,12 @@ import {
   useId,
   useRef,
   useState,
-  type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/icons";
 import { BusyButton } from "@/components/erp/ui/action-button";
+import { translateApiError, type UiError } from "@/lib/api-errors";
 
 export type ConfirmDialogProps = {
   open: boolean;
@@ -20,6 +21,7 @@ export type ConfirmDialogProps = {
   cancelLabel?: string;
   requireText?: { value: string; label: string };
   onConfirm: () => void | Promise<void>;
+  onError: (error: UiError) => void;
   onClose: () => void;
 };
 
@@ -34,10 +36,12 @@ export function ConfirmDialog({
   cancelLabel = "Cancelar",
   requireText,
   onConfirm,
+  onError,
   onClose,
 }: ConfirmDialogProps) {
   const titleId = useId();
   const descriptionId = useId();
+  const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,70 +60,96 @@ export function ConfirmDialog({
     onClose();
   }, [busy, onClose]);
 
+  const handleCloseRef = useRef(handleClose);
+  useEffect(() => {
+    handleCloseRef.current = handleClose;
+  });
+
   useEffect(() => {
     if (!open) return;
     returnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     const panel = panelRef.current;
-    const focusable = panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-    (focusable ?? panel)?.focus();
+    const firstFocusable = panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+    (firstFocusable ?? panel)?.focus();
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        handleCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const currentPanel = panelRef.current;
+      if (!currentPanel) return;
+      const focusable = Array.from(
+        currentPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    const overlay = overlayRef.current;
+    const muted: { element: HTMLElement; previous: string | null }[] = [];
+    for (const child of Array.from(document.body.children)) {
+      const element = child as HTMLElement;
+      if (element === overlay) continue;
+      muted.push({ element, previous: element.getAttribute("inert") });
+      element.setAttribute("inert", "");
+    }
+
     return () => {
+      document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
+      for (const { element, previous } of muted) {
+        if (previous === null) element.removeAttribute("inert");
+        else element.setAttribute("inert", previous);
+      }
       returnFocusRef.current?.focus();
     };
   }, [open]);
 
-  if (!open) return null;
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      handleClose();
-      return;
-    }
-    if (event.key !== "Tab") return;
-
-    const panel = panelRef.current;
-    if (!panel) return;
-    const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-      (element) => element.getClientRects().length > 0,
-    );
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (!first || !last) return;
-
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
+  if (!open || typeof document === "undefined") return null;
 
   async function handleConfirm() {
     if (!canConfirm || busy) return;
     setBusy(true);
     try {
       await onConfirm();
-    } catch {
+    } catch (caught) {
       setBusy(false);
-      onClose();
+      try {
+        onError(translateApiError(caught));
+      } finally {
+        onClose();
+      }
       return;
     }
     setBusy(false);
     onClose();
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[95] flex items-end justify-center bg-ink/35 p-4 backdrop-blur-[2px] sm:items-center"
       onClick={handleClose}
+      ref={overlayRef}
     >
       <div
         aria-describedby={description ? descriptionId : undefined}
@@ -127,7 +157,6 @@ export function ConfirmDialog({
         aria-modal="true"
         className="w-full max-w-lg rounded-[24px] border border-line bg-surface p-6 shadow-[0_24px_80px_rgba(27,12,104,0.24)] sm:p-8"
         onClick={(event) => event.stopPropagation()}
-        onKeyDown={handleKeyDown}
         ref={panelRef}
         role="dialog"
         tabIndex={-1}
@@ -185,6 +214,7 @@ export function ConfirmDialog({
           </BusyButton>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

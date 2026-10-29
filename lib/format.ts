@@ -19,7 +19,7 @@ function formatWith(
   if (parsed === null) return EMPTY_VALUE;
   const formatted = new Intl.NumberFormat(LOCALE, options).format(parsed);
   if (!trimTrailingZeros) return formatted;
-  return formatted.replace(/,(\d*?)0+$/, "").replace(/,$/, "");
+  return formatted.replace(/,(\d*?)0+$/, ",$1").replace(/,$/, "");
 }
 
 export function formatInteger(value: NumericValue) {
@@ -108,4 +108,14 @@ export function formatDuration(seconds: number) {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+export function formatWaitPhrase(seconds: number) {
+  const total = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  const parts: string[] = [];
+  if (minutes > 0) parts.push(minutes === 1 ? "1 minuto" : `${minutes} minutos`);
+  if (rest > 0 || minutes === 0) parts.push(rest === 1 ? "1 segundo" : `${rest} segundos`);
+  return parts.join(" y ");
 }

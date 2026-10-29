@@ -69,7 +69,7 @@ function ToastCard({
         </p>
         {isError && item.retry && (
           <button
-            className="mt-2 min-h-9 rounded-full border border-ink/15 px-3.5 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand"
+            className="mt-2 min-h-11 rounded-full border border-ink/15 px-4 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand"
             onClick={() => {
               onDismiss(item.id);
               void item.retry?.();
@@ -82,7 +82,7 @@ function ToastCard({
       </div>
       <button
         aria-label="Cerrar aviso"
-        className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-background hover:text-ink"
+        className="-mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-background hover:text-ink"
         onClick={() => onDismiss(item.id)}
         type="button"
       >

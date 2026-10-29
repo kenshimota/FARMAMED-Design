@@ -35,7 +35,7 @@ export function useRetryCooldown(trigger: CooldownTrigger | null) {
 
 export function CooldownText({ remaining }: { remaining: number }) {
   return (
-    <span className="tabular-nums" role="timer">
+    <span aria-hidden="true" className="tabular-nums">
       {formatDuration(remaining)}
     </span>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import {
   clearCurrencyNotConfigured,
   flagCurrencyNotConfigured,
@@ -9,13 +9,13 @@ import {
 import { getStoredToken } from "@/lib/session-store";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 
+const DEFAULT_TRANSACTION_CURRENCY_CODE = "USD_BCV";
+
 export type CurrencyRecord = {
-  id: number | null;
   code: string;
   name: string;
   symbol: string;
   rate: number | string | null;
-  isDefaultForTransactions: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,25 +31,19 @@ function readList(payload: unknown): unknown[] | null {
   return null;
 }
 
-function readString(...values: unknown[]) {
-  return (
-    values.find((value): value is string => typeof value === "string" && value.trim().length > 0) ??
-    ""
-  );
+function readText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : "";
 }
 
 function parseCurrency(source: unknown): CurrencyRecord | null {
   if (!isRecord(source)) return null;
-  const code = readString(source.code, source.currency_code);
+  const code = readText(source.code);
   if (!code) return null;
   return {
-    id: typeof source.id === "number" ? source.id : null,
     code,
-    name: readString(source.name) || code,
-    symbol: readString(source.symbol),
+    name: readText(source.name) || code,
+    symbol: readText(source.symbol),
     rate: typeof source.rate === "number" || typeof source.rate === "string" ? source.rate : null,
-    isDefaultForTransactions:
-      source.is_default_for_transactions === true || source.isDefaultForTransactions === true,
   };
 }
 
@@ -66,11 +60,16 @@ export function useCurrencyStatus(enabled: boolean): CurrencyStatus {
   const loader = useCallback(async () => {
     const payload = await apiFetch<unknown>("/currencies", { token: getStoredToken() ?? undefined });
     const list = readList(payload);
-    if (list === null) throw new Error("Respuesta inválida");
+    if (list === null) throw new ApiError(500, null);
     const currencies = list
       .map(parseCurrency)
       .filter((currency): currency is CurrencyRecord => currency !== null);
-    const defaultCurrency = currencies.find((currency) => currency.isDefaultForTransactions) ?? null;
+    if (list.length > 0 && currencies.length === 0) throw new ApiError(500, null);
+
+    const defaultCurrency =
+      currencies.find(
+        (currency) => currency.code.toUpperCase() === DEFAULT_TRANSACTION_CURRENCY_CODE,
+      ) ?? null;
     if (defaultCurrency) {
       clearCurrencyNotConfigured();
     } else {

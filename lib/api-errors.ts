@@ -1,5 +1,6 @@
 import { ApiError } from "@/lib/api";
 import { CURRENCY_NOT_CONFIGURED } from "@/lib/feedback";
+import { formatWaitPhrase } from "@/lib/format";
 
 export type UiErrorKind =
   | "network"
@@ -46,6 +47,7 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "category already exists": "Ya existe una categoría con ese nombre.",
   "category is in use": "No puedes eliminarla porque está en uso.",
   "product already exists": "Ya existe un producto con esa referencia.",
+  "product is in use": "No puedes eliminar este producto porque está en uso.",
   "image already exists": "Ya existe una imagen con esa referencia.",
   "image is in use": "No puedes eliminarla porque un producto la usa.",
   "item state already exists": "Ya existe un estado con ese nombre.",
@@ -55,6 +57,7 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "city already exists": "Ya existe esa ciudad en el estado.",
   "city is in use": "No puedes eliminarla porque un proveedor la usa.",
   "cost already exists": "Ya existe un costo para ese producto y estado.",
+  "cost is in use": "No puedes eliminar este costo porque está en uso.",
   "purchase is not editable": "Esta compra ya no se puede editar.",
   "purchase already confirmed": "Esta compra ya fue confirmada.",
   "item already exists": "Ese producto y estado ya están en la compra.",
@@ -72,6 +75,7 @@ const CONFLICT_MESSAGES: Record<string, string> = {
     "Solo puedes eliminar lotes con existencia y reservado en cero.",
   "customer already exists": "Ya existe un cliente con ese correo.",
   "customer already has a seller": "Este cliente ya tiene un vendedor asignado.",
+  "user already exists": "Ya existe un usuario con ese identificador.",
   "you cannot block your own account": "No puedes bloquear tu propia cuenta.",
   "cannot block the last administrator":
     "No puedes bloquear al último administrador activo.",
@@ -87,7 +91,7 @@ const KNOWN_MESSAGES: Record<string, string> = {
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
 
-function translateFieldMessage(message: string) {
+export function translateFieldMessage(message: string) {
   const key = message.trim().toLowerCase();
   return KNOWN_MESSAGES[key] ?? FIELD_MESSAGE_FALLBACK;
 }
@@ -193,7 +197,7 @@ export function translateApiError(error: unknown): UiError {
         kind: "rate-limit",
         message:
           wait && wait > 0
-            ? `Demasiadas solicitudes. Intenta de nuevo en ${wait} segundos.`
+            ? `Demasiadas solicitudes. Intenta de nuevo en ${formatWaitPhrase(wait)}.`
             : COPY.rateLimit,
         fieldErrors,
         canRetry: true,

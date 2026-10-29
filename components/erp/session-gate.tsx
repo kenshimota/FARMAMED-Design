@@ -45,18 +45,11 @@ export function SessionGate({ children }: { children: ReactNode }) {
         if (active) setState({ status: "authenticated", user });
       } catch (error) {
         if (!active) return;
-        if (error instanceof ApiError && error.status === 401) {
-          clearStoredToken();
-          const returnPath = `${window.location.pathname}${window.location.search}`;
-          router.replace(buildLoginUrl(returnPath, "expirada"));
-        } else if (
-          error instanceof ApiError &&
-          error.status === 403 &&
-          error.message === "User is blocked"
-        ) {
-          clearStoredToken();
-          router.replace(buildLoginUrl(undefined, "bloqueada"));
-        } else if (error instanceof ApiError && error.status === 403) {
+        if (error instanceof ApiError && (error.status === 401 || error.isUserBlocked())) {
+          setState({ status: "loading" });
+          return;
+        }
+        if (error instanceof ApiError && error.status === 403) {
           setState({ status: "forbidden" });
         } else {
           setState({ status: "error" });

@@ -29,15 +29,17 @@ export function SetupAdminLink() {
 
   if (resource.status === "error") {
     return (
-      <p className="mt-4 text-center text-[12px] leading-5 text-muted">
+      <p className="mt-4 text-center text-[12px] leading-5 text-muted" role="alert">
         {resource.error?.message ?? "No pudimos consultar la disponibilidad del registro inicial."}{" "}
-        <button
-          className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-          onClick={resource.reload}
-          type="button"
-        >
-          Reintentar
-        </button>
+        {resource.error?.canRetry && (
+          <button
+            className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+            onClick={resource.reload}
+            type="button"
+          >
+            Reintentar
+          </button>
+        )}
       </p>
     );
   }

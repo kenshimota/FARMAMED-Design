@@ -36,7 +36,7 @@ export function SetupStatus() {
     return (
       <PanelError
         description={`${resource.error?.message ?? "No pudimos consultar el estado."} No se ha enviado ningún registro.`}
-        onRetry={resource.reload}
+        onRetry={resource.error?.canRetry ? resource.reload : undefined}
         title="No pudimos consultar el estado"
       />
     );

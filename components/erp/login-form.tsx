@@ -17,7 +17,13 @@ import {
   focusFirstInvalidField,
   type FormErrorItem,
 } from "@/components/erp/ui/form";
-import { translateApiError, type UiErrorKind } from "@/lib/api-errors";
+import { ApiError } from "@/lib/api";
+import {
+  translateApiError,
+  translateFieldMessage,
+  type UiErrorKind,
+} from "@/lib/api-errors";
+import { formatWaitPhrase } from "@/lib/format";
 import {
   authenticate,
   getSafeReturnPath,
@@ -35,7 +41,24 @@ const fieldLabels = {
   contrasena: "Contraseña",
 } as const;
 
-const credentialKinds: UiErrorKind[] = ["session-expired", "forbidden", "validation"];
+const apiFieldToForm: Record<string, keyof typeof fieldLabels> = {
+  identifier: "identificador",
+  identificador: "identificador",
+  password: "contrasena",
+  contrasena: "contrasena",
+};
+
+const credentialKinds: UiErrorKind[] = ["session-expired", "forbidden"];
+
+function mapLoginFieldErrors(error: unknown): Record<string, string> {
+  const mapped: Record<string, string> = {};
+  if (!(error instanceof ApiError)) return mapped;
+  for (const [field, rawMessage] of Object.entries(error.fieldErrors)) {
+    const target = apiFieldToForm[field.toLowerCase()];
+    if (target) mapped[target] = translateFieldMessage(rawMessage);
+  }
+  return mapped;
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -47,6 +70,7 @@ export function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSummary, setShowSummary] = useState(false);
   const [cooldown, setCooldown] = useState<CooldownTrigger | null>(null);
+  const [cooldownAnnouncement, setCooldownAnnouncement] = useState<string | null>(null);
   const remaining = useRetryCooldown(cooldown);
 
   const noticeKey = searchParams.get("aviso");
@@ -102,6 +126,7 @@ export function LoginForm() {
     setFieldErrors({});
     setShowSummary(false);
     setCooldown(null);
+    setCooldownAnnouncement(null);
 
     try {
       const token = await authenticate(identifier.trim(), password);
@@ -111,7 +136,20 @@ export function LoginForm() {
       const translated = translateApiError(caughtError);
       if (translated.kind === "rate-limit" && translated.retryAfterSeconds) {
         setCooldown({ seconds: translated.retryAfterSeconds, id: Date.now() });
+        setCooldownAnnouncement(
+          `Podrás intentar de nuevo en ${formatWaitPhrase(translated.retryAfterSeconds)}.`,
+        );
         setMessage("Demasiadas solicitudes.");
+      } else if (translated.kind === "validation") {
+        const mapped = mapLoginFieldErrors(caughtError);
+        if (Object.keys(mapped).length > 0) {
+          setFieldErrors(mapped);
+          setShowSummary(true);
+          setMessage(null);
+          window.requestAnimationFrame(() => focusFirstInvalidField());
+        } else {
+          setMessage("El identificador o la contraseña no son correctos.");
+        }
       } else if (credentialKinds.includes(translated.kind)) {
         setMessage("El identificador o la contraseña no son correctos.");
       } else {
@@ -141,15 +179,18 @@ export function LoginForm() {
       )}
       {message && (
         <NoticeBanner className="mb-5" role="alert" tone="danger">
-          <span>
-            {message}
-            {remaining > 0 && (
-              <>
-                {" "}Podrás intentar de nuevo en <CooldownText remaining={remaining} />.
-              </>
-            )}
-          </span>
+          {message}
         </NoticeBanner>
+      )}
+      {remaining > 0 && (
+        <p aria-hidden="true" className="mb-5 text-[12px] leading-5 text-muted">
+          Podrás intentar de nuevo en <CooldownText remaining={remaining} />.
+        </p>
+      )}
+      {cooldownAnnouncement && (
+        <p className="sr-only" role="status">
+          {cooldownAnnouncement}
+        </p>
       )}
       {showSummary && summaryItems.length > 0 && (
         <div className="mb-5">

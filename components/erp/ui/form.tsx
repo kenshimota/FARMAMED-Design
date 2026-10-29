@@ -104,14 +104,44 @@ export function focusFirstInvalidField(container: HTMLElement | Document = docum
   return field;
 }
 
+// La navegación por enlaces y la recarga están cubiertas; router.push y el
+// historial atrás/adelante de Next.js no exponen un evento cancelable, por lo
+// que esos casos quedan sin confirmación hasta que exista una API que lo permita.
 export function useUnsavedChangesWarning(active: boolean) {
   useEffect(() => {
     if (!active) return;
+
     function handleBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
       event.returnValue = "";
     }
+
+    function handleClick(event: MouseEvent) {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor || anchor.target === "_blank") return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+      const url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      const leave = window.confirm(
+        "Tienes cambios sin guardar. Si sales de esta pantalla, perderás esos cambios.",
+      );
+      if (!leave) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("click", handleClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("click", handleClick, true);
+    };
   }, [active]);
 }

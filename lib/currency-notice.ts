@@ -2,6 +2,10 @@ let currencyNotConfigured = false;
 
 const listeners = new Set<() => void>();
 
+function isClient() {
+  return typeof window !== "undefined";
+}
+
 export function subscribeCurrencyNotice(listener: () => void) {
   listeners.add(listener);
   return () => {
@@ -14,13 +18,13 @@ export function getCurrencyNoticeSnapshot() {
 }
 
 export function flagCurrencyNotConfigured() {
-  if (currencyNotConfigured) return;
+  if (!isClient() || currencyNotConfigured) return;
   currencyNotConfigured = true;
   for (const listener of listeners) listener();
 }
 
 export function clearCurrencyNotConfigured() {
-  if (!currencyNotConfigured) return;
+  if (!isClient() || !currencyNotConfigured) return;
   currencyNotConfigured = false;
   for (const listener of listeners) listener();
 }

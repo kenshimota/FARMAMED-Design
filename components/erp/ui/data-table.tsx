@@ -139,7 +139,13 @@ export function DataTable<T>({
                       {column.render(row)}
                     </td>
                   ))}
-                  {rowActions && <td className="py-3.5 text-right">{rowActions(row)}</td>}
+                  {rowActions && (
+                    <td className="py-3.5 text-right">
+                      <div aria-label={`Acciones de ${rowLabel(row)}`} role="group">
+                        {rowActions(row)}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -162,7 +168,15 @@ export function DataTable<T>({
                     </div>
                   ))}
                 </dl>
-                {rowActions && <div className="mt-4 flex flex-wrap gap-2">{rowActions(row)}</div>}
+                {rowActions && (
+                  <div
+                    aria-label={`Acciones de ${rowLabel(row)}`}
+                    className="mt-4 flex flex-wrap gap-2"
+                    role="group"
+                  >
+                    {rowActions(row)}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
