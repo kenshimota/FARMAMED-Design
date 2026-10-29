@@ -45,6 +45,21 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - La opción `ssr: false` de `next/dynamic` solo se utiliza dentro de Client Components.
 - No añadir dependencias para iconos, modelos o interacciones que ya están resueltas localmente sin justificar la necesidad.
 
+### Agentes y skills
+
+- `.opencode/agents/builder.md`: implementa cambios de interfaz y delega en `reviewer` y `qa`.
+- `.opencode/agents/reviewer.md`: revisa sin editar y devuelve hallazgos con severidad.
+- `.opencode/agents/qa.md`: verifica lint, build, arranque y respuestas HTTP sin editar.
+- `.opencode/agents/design-issue-writer.md`: redacta y publica issues de diseño desde las HU del API.
+- `.opencode/skills/farmamed-design-system/`: tokens, copy, accesibilidad, responsive y movimiento.
+- `.opencode/skills/nextjs-16-guardrails/`: APIs de Next.js 16, límites cliente/servidor y verificación.
+- `.opencode/skills/threejs-scene-lifecycle/`: creación, pausa, fallback y limpieza de Three.js.
+- `.opencode/skills/api-contract-farmamed/`: endpoints, roles, errores, moneda y relación stocks/lotes.
+- `.opencode/skills/design-issue-spec/`: plantilla, épicas, fases y reglas de publicación de issues.
+- Solo `builder` escribe código. `reviewer` y `qa` son de solo lectura. `design-issue-writer` publica issues y no implementa.
+- Los prompts están en español y heredan el modelo de la sesión.
+- Los cambios en `.opencode/` requieren reiniciar opencode para cargarse.
+
 ### Three.js
 
 - La escena se construye con geometría y texturas procedurales; no requiere descargas de modelos. Si se incorpora un asset externo, documentar origen y licencia y guardarlo en `public/assets/`.
