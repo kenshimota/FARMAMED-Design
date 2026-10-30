@@ -36,7 +36,7 @@ const QUICK_ACTIONS: Record<Role, QuickAction[]> = {
     { label: "Ver asignaciones", href: "/app/asignaciones", icon: "link", module: "asignaciones", write: false },
   ],
   manager_warehouse: [
-    { label: "Nueva bodega", href: "/app/bodegas", icon: "warehouse", module: "bodegas", write: true },
+    { label: "Nueva bodega", href: "/app/bodegas/nueva", icon: "warehouse", module: "bodegas", write: true },
     { label: "Ver estantes", href: "/app/bodegas", icon: "layers", module: "estantes", write: false },
     { label: "Ver lotes", href: "/app/lotes", icon: "layers", module: "lotes", write: false },
     { label: "Ver existencias", href: "/app/existencias", icon: "box", module: "existencias", write: false },
