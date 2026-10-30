@@ -62,6 +62,7 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `.opencode/skills/threejs-scene-lifecycle/`: creación, pausa, fallback y limpieza de Three.js.
 - `.opencode/skills/api-contract-farmamed/`: endpoints, roles, errores, moneda y relación stocks/lotes.
 - `.opencode/skills/design-issue-spec/`: plantilla, épicas, fases y reglas de publicación de issues.
+- `.opencode/skills/release-flow/`: ciclo de issues, PR a `dev`, versionado `v0.4.x` y publicación de tags.
 - Solo `builder` escribe código. `reviewer` y `qa` son de solo lectura. `design-issue-writer` publica issues y no implementa.
 - Los prompts están en español y heredan el modelo de la sesión.
 - `.kimi-code/agents/` contiene las versiones para Kimi Code, generadas desde `.opencode/agents/` con `node scripts/sync-kimi-agents.mjs`.
@@ -79,6 +80,13 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - Respetar `prefers-reduced-motion`: la escena debe conservar una composición estática útil sin animación continua.
 - Al desmontar, cancelar `requestAnimationFrame`, desconectar observadores y listeners, y disponer texturas, materiales, geometrías y renderer. Compartir recursos no elimina la obligación de liberarlos.
 - Mantener el canvas fuera del orden de tabulación y proporcionar una descripción accesible de la composición.
+
+### Versiones y releases
+
+- Cada deploy (merge de un issue a `dev`) incrementa el último número de la versión: `v0.4.0` → `v0.4.1` → `v0.4.2`. Al llegar a `v0.X.99`, el siguiente salta a `v0.X+1.0`.
+- El tag apunta al commit de merge en `dev` y se calcula desde el último tag existente en ese momento; el push del tag dispara CI.
+- Los cambios `chore`/`docs` (skills, agentes, este archivo) van por PR a `dev` sin tag.
+- El ciclo completo por issue (rama, builder, qa+reviewer, PR, CI, merge, cierre manual del issue y borrado de rama) está en `.opencode/skills/release-flow/`.
 
 ### Antes de entregar
 
