@@ -26,4 +26,6 @@ export const LARGE_LIST_NOTICE =
 
 export const RECOVERY_COOLDOWN_SECONDS = 120;
 
+export const RECOVERY_CODE_TTL_SECONDS = 300;
+
 export const SUCCESS_TOAST_DURATION_MS = 5000;

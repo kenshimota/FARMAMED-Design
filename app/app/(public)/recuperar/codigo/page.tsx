@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { AuthCard } from "@/components/erp/auth-card";
-import { RecoveryPlaceholder } from "@/components/erp/recovery-placeholder";
+import { RecoveryCodeForm } from "@/components/erp/recovery-code-form";
 
-export const metadata: Metadata = { title: "Validar código" };
+export const metadata: Metadata = { title: "Ingresa el código" };
 
 export default function RecoveryCodePage() {
   return (
-    <AuthCard eyebrow="Recuperación de acceso" title="Valida tu código" description="Este espacio está reservado para validar el código de recuperación.">
-      <RecoveryPlaceholder step="codigo" />
+    <AuthCard
+      description="Ingresa el código de 8 dígitos que enviamos a tu correo para confirmar que eres tú."
+      eyebrow="Recuperación de acceso"
+      title="Ingresa el código"
+    >
+      <RecoveryCodeForm />
     </AuthCard>
   );
 }
