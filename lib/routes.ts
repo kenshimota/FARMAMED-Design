@@ -1,5 +1,5 @@
 import type { IconName } from "@/components/icons";
-import { canReadModule, type ModuleKey, type Role } from "@/lib/permissions";
+import { canReadModule, type ModuleKey } from "@/lib/permissions";
 
 export type ErpGroup =
   | "Inicio"
@@ -304,6 +304,26 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     navigation: true,
   },
   {
+    path: "/app/monedas/nueva",
+    title: "Nueva moneda",
+    label: "Nueva moneda",
+    group: "Finanzas",
+    module: "monedas",
+    icon: "coins",
+    description: "Registra una nueva moneda y su tasa de referencia.",
+    parent: "/app/monedas",
+  },
+  {
+    path: "/app/monedas/[id]/editar",
+    title: "Editar moneda",
+    label: "Editar moneda",
+    group: "Finanzas",
+    module: "monedas",
+    icon: "coins",
+    description: "Actualiza nombre, símbolo, tasa y estado de una moneda.",
+    parent: "/app/monedas",
+  },
+  {
     path: "/app/monedas/[id]/historial",
     title: "Historial de tasas",
     label: "Historial de tasas",
@@ -338,9 +358,9 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     title: "Roles",
     label: "Roles",
     group: "Administración",
-    module: "usuarios",
+    module: "roles",
     icon: "shield",
-    description: "Consulta del catálogo de roles disponibles.",
+    description: "Consulta el catálogo de roles y la matriz de permisos de interfaz.",
     navigation: true,
   },
   {
@@ -386,7 +406,7 @@ export function getRouteByPathname(pathname: string) {
   return ERP_ROUTES.find((route) => matchesRoute(pathname, route.path));
 }
 
-export function getNavigationHref(route: ErpRouteDefinition, role: Role) {
+export function getNavigationHref(route: ErpRouteDefinition, role: string) {
   if (!route.path.includes("[")) return route.path;
   if (!route.parent) return null;
   const parent = getRouteDefinition(route.parent);

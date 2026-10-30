@@ -19,7 +19,7 @@ import {
   type StockRow,
   type SupplierRow,
 } from "@/lib/dashboard";
-import { canReadModule, type Role } from "@/lib/permissions";
+import { canReadModule } from "@/lib/permissions";
 
 export type DashboardData = {
   products: AsyncResource<number>;
@@ -31,7 +31,7 @@ export type DashboardData = {
   suppliers: AsyncResource<SupplierRow[]>;
 };
 
-export function useDashboardData(role: Role): DashboardData {
+export function useDashboardData(role: string): DashboardData {
   const loadProducts = useCallback(() => fetchProductCount(), []);
   const loadCustomers = useCallback(() => fetchCustomerCount(), []);
   const loadPurchases = useCallback(() => fetchDraftPurchases(), []);

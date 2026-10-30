@@ -9,8 +9,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Icon } from "@/components/icons";
-import { ROLE_LABELS } from "@/lib/permissions";
-import type { SessionUser } from "@/lib/session";
+import { getRolePresentation } from "@/lib/permissions";
+import { sessionDisplayName, type SessionUser } from "@/lib/session";
 
 type AccountMenuProps = {
   user: SessionUser;
@@ -92,12 +92,12 @@ export function AccountMenu({ user, onLogout }: AccountMenuProps) {
         type="button"
       >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">
-          {getInitials(user.name)}
+          {getInitials(sessionDisplayName(user))}
         </span>
         <span className="hidden max-w-40 lg:block">
-          <span className="block truncate text-[12px] font-semibold text-ink">{user.name}</span>
+          <span className="block truncate text-[12px] font-semibold text-ink">{sessionDisplayName(user)}</span>
           <span className="mt-0.5 block truncate text-[10px] text-muted">
-            {ROLE_LABELS[user.role]}
+            {getRolePresentation(user.role).label}
           </span>
         </span>
         <Icon className="hidden text-muted sm:block" name="chevron-down" size={15} />
@@ -112,10 +112,10 @@ export function AccountMenu({ user, onLogout }: AccountMenuProps) {
           role="menu"
         >
           <div className="border-b border-line bg-background px-5 py-4">
-            <p className="truncate text-[14px] font-semibold text-ink">{user.name}</p>
+            <p className="truncate text-[14px] font-semibold text-ink">{sessionDisplayName(user)}</p>
             <p className="mt-1 truncate text-[12px] text-muted">{user.email}</p>
             <p className="mt-3 inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[10px] font-semibold text-brand">
-              {ROLE_LABELS[user.role]}
+              {getRolePresentation(user.role).label}
             </p>
           </div>
           <div className="p-2">

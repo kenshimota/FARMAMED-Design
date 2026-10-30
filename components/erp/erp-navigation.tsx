@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId } from "react";
 import { Icon } from "@/components/icons";
-import { canReadModule, type Role } from "@/lib/permissions";
+import { canReadModule } from "@/lib/permissions";
 import {
   ERP_ROUTES,
   FUTURE_MODULES,
@@ -15,7 +15,7 @@ import {
 } from "@/lib/routes";
 
 type ErpNavigationProps = {
-  role: Role;
+  role: string;
   collapsed: boolean;
   collapsedGroups: Record<string, boolean>;
   onToggleGroup: (group: ErpGroup) => void;
