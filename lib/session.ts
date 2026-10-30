@@ -5,6 +5,7 @@ import type { LoginNotice } from "@/lib/session-store";
 export type { LoginNotice };
 
 export type SessionUser = {
+  id: number | string | null;
   name: string;
   email: string;
   role: Role;
@@ -37,6 +38,15 @@ function getRole(value: unknown) {
   return null;
 }
 
+function getId(value: unknown): number | string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : value.trim();
+  }
+  return null;
+}
+
 export function parseSessionUser(payload: unknown): SessionUser | null {
   const source = getUserSource(payload);
   if (!isRecord(source)) return null;
@@ -49,7 +59,7 @@ export function parseSessionUser(payload: unknown): SessionUser | null {
     getString(source.name, source.fullName, source.full_name, source.username) ??
     email;
 
-  return { name, email, role };
+  return { id: getId(source.id), name, email, role };
 }
 
 function getToken(payload: unknown) {
