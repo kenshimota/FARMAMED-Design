@@ -85,6 +85,8 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "cannot delete the last administrator":
     "No puedes eliminar al último administrador activo.",
   "admin already exists": "Ya existe un administrador. Inicia sesión.",
+  "tax already exists": "Ya existe un impuesto con ese código.",
+  "tax is in use": "No puedes eliminar este impuesto porque está en uso. Puedes desactivarlo.",
 };
 
 export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
