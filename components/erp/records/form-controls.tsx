@@ -20,6 +20,7 @@ type TextFieldProps = {
   maxLength?: number;
   placeholder?: string;
   autoComplete?: string;
+  autoFocus?: boolean;
 };
 
 export function TextField({
@@ -34,6 +35,7 @@ export function TextField({
   maxLength,
   placeholder,
   autoComplete = "off",
+  autoFocus = false,
 }: TextFieldProps) {
   return (
     <FormField error={error} help={help} id={id} label={label} required={required}>
@@ -41,7 +43,9 @@ export function TextField({
         <input
           {...aria}
           autoComplete={autoComplete}
+          autoFocus={autoFocus}
           className={`${CONTROL_CLASS} h-12`}
+          data-autofocus={autoFocus ? "" : undefined}
           disabled={disabled}
           maxLength={maxLength}
           name={id}

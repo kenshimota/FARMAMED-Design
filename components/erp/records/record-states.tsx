@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useId } from "react";
 import { Icon } from "@/components/icons";
 import { Skeleton, SkeletonTable, SkeletonText } from "@/components/erp/ui/skeleton";
 
@@ -14,6 +15,25 @@ export function RecordsListSkeleton() {
       </div>
       <div aria-hidden="true" className="rounded-[24px] border border-line bg-surface p-5">
         <SkeletonTable columns={6} rows={6} />
+      </div>
+    </div>
+  );
+}
+
+export function RecordsTableSkeleton({
+  columns = 4,
+  rows = 6,
+  label = "Cargando registros…",
+}: {
+  columns?: number;
+  rows?: number;
+  label?: string;
+}) {
+  return (
+    <div aria-busy="true" role="status">
+      <span className="sr-only">{label}</span>
+      <div aria-hidden="true" className="rounded-[24px] border border-line bg-surface p-5">
+        <SkeletonTable columns={columns} rows={rows} />
       </div>
     </div>
   );
@@ -65,7 +85,7 @@ type RecordsLoadErrorProps = {
   title: string;
   description: string;
   onRetry?: () => void;
-  backHref?: string;
+  backHref?: string | null;
   backLabel?: string;
   headingLevel?: "h1" | "h2";
 };
@@ -79,9 +99,10 @@ export function RecordsLoadError({
   headingLevel = "h2",
 }: RecordsLoadErrorProps) {
   const Heading = headingLevel;
+  const titleId = useId();
   return (
     <section
-      aria-labelledby="titulo-error-registros"
+      aria-labelledby={titleId}
       className="rounded-[28px] border border-line bg-surface p-8 text-center shadow-[0_18px_60px_rgba(27,12,104,0.06)] sm:p-12"
     >
       <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-soft-blue text-alert">
@@ -89,7 +110,7 @@ export function RecordsLoadError({
       </span>
       <Heading
         className="mt-5 text-2xl font-semibold tracking-[-0.035em] text-ink"
-        id="titulo-error-registros"
+        id={titleId}
       >
         {title}
       </Heading>
@@ -103,9 +124,11 @@ export function RecordsLoadError({
             <Icon name="arrow-right" size={17} />
           </button>
         )}
-        <Link className="button-base button-secondary" href={backHref}>
-          {backLabel}
-        </Link>
+        {backHref && (
+          <Link className="button-base button-secondary" href={backHref}>
+            {backLabel}
+          </Link>
+        )}
       </div>
     </section>
   );

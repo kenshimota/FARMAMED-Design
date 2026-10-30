@@ -61,8 +61,3 @@ export function productSummaryItems(errors: Record<string, string>): FormErrorIt
       message: errors[key],
     }));
 }
-
-export function toApiId(value: string) {
-  const trimmed = value.trim();
-  return /^\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
-}

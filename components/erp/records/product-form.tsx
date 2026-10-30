@@ -19,7 +19,6 @@ import {
   PRODUCT_FIELD_IDS,
   mapProductFieldErrors,
   productSummaryItems,
-  toApiId,
   type ProductFieldKey,
 } from "@/components/erp/records/product-errors";
 import { SelectField, TextAreaField, TextField } from "@/components/erp/records/form-controls";
@@ -37,6 +36,7 @@ import {
   getImagePreviewSource,
   isPositiveRecordId,
   parseProduct,
+  toApiId,
 } from "@/components/erp/records/records-api";
 import { ApiError, apiFetch } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
