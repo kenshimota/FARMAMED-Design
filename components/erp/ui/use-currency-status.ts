@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { ApiError, apiFetch } from "@/lib/api";
+import type { UiError } from "@/lib/api-errors";
 import {
   clearCurrencyNotConfigured,
   flagCurrencyNotConfigured,
@@ -12,10 +13,12 @@ import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 const DEFAULT_TRANSACTION_CURRENCY_CODE = "USD_BCV";
 
 export type CurrencyRecord = {
+  id: number | null;
   code: string;
   name: string;
   symbol: string;
   rate: number | string | null;
+  isDefaultForTransactions: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,15 +38,23 @@ function readText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : "";
 }
 
+function readId(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value.trim());
+  return null;
+}
+
 function parseCurrency(source: unknown): CurrencyRecord | null {
   if (!isRecord(source)) return null;
   const code = readText(source.code);
   if (!code) return null;
   return {
+    id: readId(source.id),
     code,
     name: readText(source.name) || code,
     symbol: readText(source.symbol),
     rate: typeof source.rate === "number" || typeof source.rate === "string" ? source.rate : null,
+    isDefaultForTransactions: source.is_default_for_transactions === true,
   };
 }
 
@@ -52,6 +63,7 @@ export type CurrencyStatus = {
   currencies: CurrencyRecord[];
   defaultCurrency: CurrencyRecord | null;
   errorMessage: string | null;
+  errorKind: UiError["kind"] | null;
   canRetry: boolean;
   reload: () => void;
 };
@@ -67,9 +79,11 @@ export function useCurrencyStatus(enabled: boolean): CurrencyStatus {
     if (list.length > 0 && currencies.length === 0) throw new ApiError(500, null);
 
     const defaultCurrency =
+      currencies.find((currency) => currency.isDefaultForTransactions) ??
       currencies.find(
         (currency) => currency.code.toUpperCase() === DEFAULT_TRANSACTION_CURRENCY_CODE,
-      ) ?? null;
+      ) ??
+      null;
     if (defaultCurrency) {
       clearCurrencyNotConfigured();
     } else {
@@ -91,6 +105,7 @@ export function useCurrencyStatus(enabled: boolean): CurrencyStatus {
         ? "No pudimos consultar la moneda de transacciones."
         : error.message
       : null,
+    errorKind: error ? error.kind : null,
     canRetry: error ? (notFound ? true : error.canRetry) : false,
     reload: resource.reload,
   };
