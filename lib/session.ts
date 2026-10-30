@@ -62,7 +62,7 @@ export function parseSessionUser(payload: unknown): SessionUser | null {
   return { id: getId(source.id), name, email, role };
 }
 
-function getToken(payload: unknown) {
+export function getToken(payload: unknown) {
   const container = getPayloadContainer(payload);
   if (!isRecord(container)) return null;
   return getString(container.token, container.accessToken, container.access_token, container.jwt) ?? null;

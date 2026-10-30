@@ -12,7 +12,7 @@ export type CooldownTrigger = {
 
 export function useRetryCooldown(trigger: CooldownTrigger | null) {
   const [remaining, setRemaining] = useState(0);
-  const [prevTriggerId, setPrevTriggerId] = useState<number | null>(trigger?.id ?? null);
+  const [prevTriggerId, setPrevTriggerId] = useState<number | null>(null);
   const triggerId = trigger?.id ?? null;
 
   if (triggerId !== prevTriggerId) {
