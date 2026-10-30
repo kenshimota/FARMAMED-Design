@@ -53,6 +53,36 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     navigation: true,
   },
   {
+    path: "/app/productos/nuevo",
+    title: "Nuevo producto",
+    label: "Nuevo producto",
+    group: "Catálogo",
+    module: "catalogo",
+    icon: "package",
+    description: "Registra un producto con su categoría e imagen.",
+    parent: "/app/productos",
+  },
+  {
+    path: "/app/productos/[id]",
+    title: "Detalle del producto",
+    label: "Detalle del producto",
+    group: "Catálogo",
+    module: "catalogo",
+    icon: "package",
+    description: "Consulta los datos registrados de un producto.",
+    parent: "/app/productos",
+  },
+  {
+    path: "/app/productos/[id]/editar",
+    title: "Editar producto",
+    label: "Editar producto",
+    group: "Catálogo",
+    module: "catalogo",
+    icon: "package",
+    description: "Actualiza los datos registrados de un producto.",
+    parent: "/app/productos",
+  },
+  {
     path: "/app/categorias",
     title: "Categorías",
     label: "Categorías",
@@ -294,7 +324,18 @@ export function getNavigationHref(route: ErpRouteDefinition, role: Role) {
 }
 
 export function isNavigationRouteActive(pathname: string, href: string) {
-  return getRouteByPathname(normalizePathname(pathname))?.path === href;
+  let route = getRouteByPathname(normalizePathname(pathname));
+  if (!route) return false;
+
+  const visited = new Set<string>();
+  while (route.parent && !visited.has(route.path)) {
+    visited.add(route.path);
+    const parent = getRouteDefinition(route.parent);
+    if (!parent) break;
+    route = parent;
+  }
+
+  return route.path === href;
 }
 
 export function getBreadcrumbs(pathname: string) {
