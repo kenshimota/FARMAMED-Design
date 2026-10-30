@@ -7,7 +7,7 @@ import { SkeletonCard } from "@/components/erp/ui/skeleton";
 import type { CurrencyStatus } from "@/components/erp/ui/use-currency-status";
 import type { AsyncResource } from "@/components/erp/ui/use-async-resource";
 import { formatCount, isApproximateCount } from "@/lib/dashboard";
-import { canReadModule, type ModuleKey, type Role } from "@/lib/permissions";
+import { canReadModule, type ModuleKey } from "@/lib/permissions";
 
 type SummaryCard = {
   key: string;
@@ -107,7 +107,7 @@ const CARD_ORDER: {
 ];
 
 function buildCards(
-  role: Role,
+  role: string,
   data: DashboardData,
   currencies: CurrencyStatus | null,
 ): SummaryCard[] {
@@ -139,7 +139,7 @@ export function DashboardCards({
   data,
   currencies,
 }: {
-  role: Role;
+  role: string;
   data: DashboardData;
   currencies: CurrencyStatus | null;
 }) {

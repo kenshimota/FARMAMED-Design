@@ -25,7 +25,12 @@ import {
 } from "@/lib/dashboard";
 import { PURCHASE_WITHOUT_ITEMS, SUCCESS_MESSAGES } from "@/lib/feedback";
 import { formatCurrentDate } from "@/lib/format";
-import { canReadModule, canWriteModule, ROLE_LABELS } from "@/lib/permissions";
+import {
+  canReadModule,
+  canWriteModule,
+  getRolePresentation,
+} from "@/lib/permissions";
+import { sessionDisplayName } from "@/lib/session";
 
 const PURCHASE_WITHOUT_ITEMS_MESSAGE = "purchase has no items";
 
@@ -44,7 +49,8 @@ export function DashboardHome() {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const confirmingRef = useRef(false);
 
-  const firstName = user.name.trim().split(/\s+/)[0] || user.name;
+  const displayName = sessionDisplayName(user);
+  const firstName = displayName.trim().split(/\s+/)[0] || displayName;
   const primaryAction = getPrimaryAction(user.role);
 
   const suppliersById = useMemo(() => {
@@ -116,7 +122,7 @@ export function DashboardHome() {
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-soft-blue px-3.5 py-2 text-[11px] font-semibold text-ink">
               <Icon aria-hidden="true" className="text-brand" name="user" size={14} />
-              {ROLE_LABELS[user.role]}
+              {getRolePresentation(user.role).label}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-line bg-background px-3.5 py-2 text-[11px] font-semibold text-muted">
               <Icon aria-hidden="true" className="text-muted" name="clock" size={14} />

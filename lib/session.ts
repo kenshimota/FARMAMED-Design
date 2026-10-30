@@ -1,15 +1,20 @@
 import { apiFetch } from "@/lib/api";
-import { isRole, type Role } from "@/lib/permissions";
+import { isRole } from "@/lib/permissions";
 import type { LoginNotice } from "@/lib/session-store";
 
 export type { LoginNotice };
 
 export type SessionUser = {
   id: number | string | null;
-  name: string;
+  username: string;
+  name: string | null;
   email: string;
-  role: Role;
+  role: string;
 };
+
+export function sessionDisplayName(user: SessionUser) {
+  return user.name?.trim() || user.username || user.email;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -33,8 +38,10 @@ function getString(...values: unknown[]) {
 }
 
 function getRole(value: unknown) {
-  if (isRole(value)) return value;
-  if (isRecord(value) && isRole(value.name)) return value.name;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (isRecord(value) && typeof value.name === "string" && value.name.trim()) {
+    return value.name.trim();
+  }
   return null;
 }
 
@@ -53,13 +60,17 @@ export function parseSessionUser(payload: unknown): SessionUser | null {
 
   const role = getRole(source.role ?? source.role_name ?? source.roleName);
   if (!role) return null;
+  if (!isRole(role)) {
+    console.warn(
+      `[Farmamed] Rol de sesión no reconocido "${role}". Registrar para revisión.`,
+    );
+  }
 
   const email = getString(source.email) ?? "Correo no disponible";
-  const name =
-    getString(source.name, source.fullName, source.full_name, source.username) ??
-    email;
+  const username = getString(source.username) ?? "";
+  const name = getString(source.name, source.fullName, source.full_name) ?? null;
 
-  return { id: getId(source.id), name, email, role };
+  return { id: getId(source.id), username, name, email, role };
 }
 
 export function getToken(payload: unknown) {
