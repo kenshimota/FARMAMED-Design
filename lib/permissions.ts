@@ -80,12 +80,16 @@ export const ROLE_LABELS: Record<Role, string> = {
   customer: "Cliente",
   seller: "Vendedor",
   dispatcher: "Despachador",
-  manager_warehouse: "Encargado de almacén",
+  manager_warehouse: "Gerente de bodega",
   support: "Soporte",
 };
 
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
+}
+
+export function getRoleLabel(name: string) {
+  return isRole(name) ? ROLE_LABELS[name] : name;
 }
 
 export function canReadModule(role: Role, module: ModuleKey) {

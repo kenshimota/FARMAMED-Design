@@ -224,6 +224,16 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     navigation: true,
   },
   {
+    path: "/app/usuarios/nuevo",
+    title: "Nuevo usuario",
+    label: "Nuevo usuario",
+    group: "Administración",
+    module: "usuarios",
+    icon: "users",
+    description: "Crea una cuenta y define su rol.",
+    parent: "/app/usuarios",
+  },
+  {
     path: "/app/roles",
     title: "Roles",
     label: "Roles",
