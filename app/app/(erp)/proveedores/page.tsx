@@ -1,7 +1,12 @@
-import { ModulePlaceholder } from "@/components/erp/module-placeholder";
+import type { Metadata } from "next";
+import { SupplierListPage } from "@/components/erp/records/supplier-list";
 
-export const metadata = { title: "Proveedores" };
+export const metadata: Metadata = {
+  title: "Proveedores",
+  description:
+    "Consulta y administra el directorio de proveedores de Farmamed con su contacto y ubicación.",
+};
 
 export default function SuppliersPage() {
-  return <ModulePlaceholder routePath="/app/proveedores" />;
+  return <SupplierListPage />;
 }
