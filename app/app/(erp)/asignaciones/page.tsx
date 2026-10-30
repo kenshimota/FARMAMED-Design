@@ -1,7 +1,12 @@
-import { ModulePlaceholder } from "@/components/erp/module-placeholder";
+import type { Metadata } from "next";
+import { AssignmentListPage } from "@/components/erp/records/assignment-list";
 
-export const metadata = { title: "Clientes por vendedor" };
+export const metadata: Metadata = {
+  title: "Asignaciones",
+  description:
+    "Consulta y administra los vendedores asignados a cada cliente de Farmamed.",
+};
 
 export default function AssignmentsPage() {
-  return <ModulePlaceholder routePath="/app/asignaciones" />;
+  return <AssignmentListPage />;
 }

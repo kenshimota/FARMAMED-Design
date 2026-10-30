@@ -188,7 +188,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Clientes", module: "clientes" },
   { label: "Bodegas", module: "bodegas" },
   { label: "Estantes y secciones", module: "estantes" },
-  { label: "Clientes por vendedor", module: "asignaciones" },
+  { label: "Asignaciones", module: "asignaciones" },
   { label: "Existencias", module: "existencias" },
   { label: "Lotes", module: "lotes" },
   { label: "Costos", module: "costos" },
