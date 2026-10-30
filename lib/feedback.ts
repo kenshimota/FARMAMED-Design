@@ -16,6 +16,9 @@ export const CURRENCY_NOT_CONFIGURED = "La moneda de transacciones no está conf
 export const CURRENCY_NOT_CONFIGURED_DETAIL =
   "La moneda de transacciones no está configurada. Contacta a un administrador.";
 
+export const PURCHASE_WITHOUT_ITEMS =
+  "Esta compra no tiene productos. Ábrela para agregar líneas antes de confirmar.";
+
 export const LARGE_LIST_THRESHOLD = 200;
 
 export const LARGE_LIST_NOTICE =

@@ -46,10 +46,30 @@ export function CurrencyStatusPanel() {
         {currencyStatus.status === "loading" || currencyStatus.status === "refreshing" ? (
           <SkeletonPanel lines={2} />
         ) : currencyStatus.status === "error" ? (
-          <PanelError
-            description={currencyStatus.errorMessage ?? "No pudimos cargar esta sección."}
-            onRetry={currencyStatus.canRetry ? currencyStatus.reload : undefined}
-          />
+          currencyStatus.errorKind === "currency" ? (
+            <NoticeBanner
+              action={
+                currencyStatus.canRetry ? (
+                  <button
+                    className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                    onClick={currencyStatus.reload}
+                    type="button"
+                  >
+                    Reintentar
+                  </button>
+                ) : undefined
+              }
+              role="status"
+              tone="warning"
+            >
+              {CURRENCY_NOT_CONFIGURED_DETAIL}
+            </NoticeBanner>
+          ) : (
+            <PanelError
+              description={currencyStatus.errorMessage ?? "No pudimos cargar esta sección."}
+              onRetry={currencyStatus.canRetry ? currencyStatus.reload : undefined}
+            />
+          )
         ) : currencyStatus.defaultCurrency ? (
           <dl className="grid gap-4 rounded-2xl border border-line bg-background px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
