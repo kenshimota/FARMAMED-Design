@@ -13,6 +13,7 @@ export const API_BASE_URL = (
 
 type ApiRequestOptions = RequestInit & {
   token?: string;
+  skipSessionFlow?: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,7 +85,7 @@ function runSessionFlow(error: ApiError, authenticated: boolean) {
 
 export async function apiFetch<T>(
   path: string,
-  { token, ...options }: ApiRequestOptions = {},
+  { token, skipSessionFlow = false, ...options }: ApiRequestOptions = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
@@ -122,7 +123,7 @@ export async function apiFetch<T>(
       parseRetryAfter(response.headers.get("Retry-After")),
     );
     if (error.status === 503) flagCurrencyNotConfigured();
-    runSessionFlow(error, Boolean(token));
+    runSessionFlow(error, !skipSessionFlow && Boolean(token));
     throw error;
   }
 

@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { AuthCard } from "@/components/erp/auth-card";
-import { RecoveryPlaceholder } from "@/components/erp/recovery-placeholder";
+import { RecoveryPasswordForm } from "@/components/erp/recovery-password-form";
 
-export const metadata: Metadata = { title: "Nueva contraseña" };
+export const metadata: Metadata = { title: "Define una nueva contraseña" };
 
-export default function NewPasswordPage() {
+export default function RecoveryNewPasswordPage() {
   return (
-    <AuthCard eyebrow="Recuperación de acceso" title="Define una nueva contraseña" description="Este espacio está reservado para completar la recuperación con un token válido.">
-      <RecoveryPlaceholder step="nueva" />
+    <AuthCard
+      description="Elige una contraseña nueva con al menos 8 caracteres para volver a entrar a Farmamed."
+      eyebrow="Recuperación de acceso"
+      title="Define una nueva contraseña"
+    >
+      <RecoveryPasswordForm />
     </AuthCard>
   );
 }
