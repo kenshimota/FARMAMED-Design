@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import {
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { Icon } from "@/components/icons";
 import { FormField } from "@/components/erp/ui/form";
 
@@ -22,6 +26,7 @@ type TextFieldProps = {
   placeholder?: string;
   autoComplete?: string;
   autoFocus?: boolean;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
   mono?: boolean;
   readOnly?: boolean;
 };
@@ -40,6 +45,7 @@ export function TextField({
   placeholder,
   autoComplete = "off",
   autoFocus = false,
+  inputMode,
   mono = false,
   readOnly = false,
 }: TextFieldProps) {
@@ -53,6 +59,7 @@ export function TextField({
           className={`${CONTROL_CLASS} h-12 read-only:bg-background read-only:text-muted ${mono ? "font-mono text-[14px]" : ""}`}
           data-autofocus={autoFocus ? "" : undefined}
           disabled={disabled}
+          inputMode={inputMode}
           maxLength={maxLength}
           name={id}
           onBlur={onBlur}
