@@ -283,6 +283,16 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/bodegas",
   },
   {
+    path: "/app/estantes",
+    title: "Estantes",
+    label: "Estantes",
+    group: "Operación",
+    module: "estantes",
+    icon: "layers",
+    description: "Jerarquía de estantes y secciones agrupada por bodega.",
+    navigation: true,
+  },
+  {
     path: "/app/bodegas/[id]/estantes",
     title: "Estantes y secciones",
     label: "Estantes y secciones",
@@ -290,8 +300,38 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     module: "estantes",
     icon: "layers",
     description: "Ubicación física de estantes y secciones por bodega.",
-    navigation: true,
+    navigation: false,
     parent: "/app/bodegas",
+  },
+  {
+    path: "/app/bodegas/[id]/estantes/nuevo",
+    title: "Nuevo estante",
+    label: "Nuevo estante",
+    group: "Operación",
+    module: "estantes",
+    icon: "layers",
+    description: "Registra un estante dentro de una bodega.",
+    parent: "/app/bodegas/[id]/estantes",
+  },
+  {
+    path: "/app/bodegas/[id]/estantes/[shelf_id]",
+    title: "Detalle del estante",
+    label: "Detalle del estante",
+    group: "Operación",
+    module: "estantes",
+    icon: "layers",
+    description: "Consulta un estante y administra sus secciones.",
+    parent: "/app/bodegas/[id]/estantes",
+  },
+  {
+    path: "/app/bodegas/[id]/estantes/[shelf_id]/secciones/nueva",
+    title: "Nueva sección",
+    label: "Nueva sección",
+    group: "Operación",
+    module: "estantes",
+    icon: "layers",
+    description: "Registra una sección dentro de un estante.",
+    parent: "/app/bodegas/[id]/estantes/[shelf_id]",
   },
   {
     path: "/app/asignaciones",
@@ -518,20 +558,47 @@ export function isNavigationRouteActive(pathname: string, href: string) {
   return route.path === href;
 }
 
+function resolveRouteHref(routePath: string, pathname: string) {
+  if (!routePath.includes("[")) return routePath;
+
+  const routeSegments = routePath.split("/");
+  const pathSegments = normalizePathname(pathname).split("/");
+  return routeSegments
+    .map((segment, index) =>
+      segment.startsWith("[") && segment.endsWith("]")
+        ? pathSegments[index] ?? segment
+        : segment,
+    )
+    .join("/");
+}
+
 export function getBreadcrumbs(pathname: string) {
   const route = getRouteByPathname(pathname);
   if (!route) return [{ label: "Inicio", href: "/app" }];
   if (route.path === "/app") return [{ label: route.label }];
 
+  const chain: ErpRouteDefinition[] = [];
+  const visited = new Set<string>();
+  let current: ErpRouteDefinition | undefined = route;
+
+  while (current && !visited.has(current.path)) {
+    visited.add(current.path);
+    chain.unshift(current);
+    current = current.parent ? getRouteDefinition(current.parent) : undefined;
+  }
+
   const breadcrumbs: { label: string; href?: string }[] = [
     { label: "Inicio", href: "/app" },
   ];
 
-  if (route.parent) {
-    const parent = getRouteDefinition(route.parent);
-    if (parent) breadcrumbs.push({ label: parent.label, href: parent.path });
-  }
+  chain.forEach((item, index) => {
+    const isCurrent = index === chain.length - 1;
+    breadcrumbs.push(
+      isCurrent
+        ? { label: item.label }
+        : { label: item.label, href: resolveRouteHref(item.path, pathname) },
+    );
+  });
 
-  breadcrumbs.push({ label: route.label });
   return breadcrumbs;
 }
