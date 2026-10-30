@@ -13,6 +13,7 @@ type TextFieldProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   error?: string;
   help?: ReactNode;
   required?: boolean;
@@ -28,6 +29,7 @@ export function TextField({
   label,
   value,
   onChange,
+  onBlur,
   error,
   help,
   required = false,
@@ -49,6 +51,7 @@ export function TextField({
           disabled={disabled}
           maxLength={maxLength}
           name={id}
+          onBlur={onBlur}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           type="text"
