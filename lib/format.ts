@@ -51,6 +51,12 @@ export function formatPercent(value: NumericValue) {
   return formatted === EMPTY_VALUE ? formatted : `${formatted} %`;
 }
 
+export function formatUnits(value: NumericValue) {
+  const parsed = toNumber(value);
+  if (parsed === null) return EMPTY_VALUE;
+  return parsed === 1 ? "1 unidad" : `${formatInteger(parsed)} unidades`;
+}
+
 export type CurrencyDisplay = {
   code?: string | null;
   symbol?: string | null;
