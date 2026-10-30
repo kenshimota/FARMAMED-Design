@@ -145,6 +145,11 @@ export function isPositiveRecordId(value: string | null | undefined) {
   return Boolean(value && /^[1-9]\d*$/.test(value));
 }
 
+export function toApiId(value: string) {
+  const trimmed = value.trim();
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
+}
+
 function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
 }
