@@ -25,7 +25,7 @@ const QUICK_ACTIONS: Record<Role, QuickAction[]> = {
   ],
   seller: [
     { label: "Nueva compra", href: "/app/compras", icon: "clipboard", module: "compras", write: true },
-    { label: "Nuevo cliente", href: "/app/clientes", icon: "users", module: "clientes", write: true },
+    { label: "Nuevo cliente", href: "/app/clientes/nuevo", icon: "users", module: "clientes", write: true },
     { label: "Nuevo producto", href: "/app/productos", icon: "package", module: "catalogo", write: true },
     { label: "Ver existencias", href: "/app/existencias", icon: "box", module: "existencias", write: false },
   ],

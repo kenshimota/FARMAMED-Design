@@ -204,6 +204,106 @@ button {
   background-size: 24px 24px;
 }
 
+.fm-map-marker,
+.fm-map-cluster,
+.fm-map-picker-marker {
+  border: 0;
+  background: transparent;
+}
+
+.fm-map-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fm-map-marker span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: var(--brand);
+  box-shadow: 0 2px 8px rgba(27, 12, 104, 0.35);
+  transition: transform 160ms ease, background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.fm-map-marker span::after {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 4px auto 0;
+  border-radius: 999px;
+  background: #ffffff;
+  content: "";
+}
+
+.fm-map-marker--active span {
+  transform: scale(1.45);
+  background: var(--ink);
+  box-shadow: 0 0 0 3px rgba(165, 215, 55, 0.9),
+    0 4px 14px rgba(27, 12, 104, 0.42);
+}
+
+.fm-map-marker:focus-visible span,
+.fm-map-cluster:focus-visible span {
+  outline: 3px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.fm-map-cluster span {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(11, 100, 184, 0.35),
+    0 6px 18px rgba(27, 12, 104, 0.35);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fm-map-picker-marker span {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--lime);
+  box-shadow: 0 0 0 6px rgba(165, 215, 55, 0.3),
+    0 6px 18px rgba(27, 12, 104, 0.32);
+}
+
+.leaflet-container.leaflet-container {
+  background: color-mix(in srgb, var(--line) 55%, var(--surface));
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.leaflet-container.leaflet-container:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--cyan) 55%, var(--ink));
+  outline-offset: -3px;
+}
+
+.leaflet-container.leaflet-container .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.92);
+  color: #333333;
+  font-size: 12px;
+}
+
+.leaflet-container.leaflet-container .leaflet-control-attribution a {
+  color: var(--brand);
+}
+
+.leaflet-container .leaflet-bar a {
+  color: var(--ink);
+}
+
 .erp-panel-enter {
   animation: erp-panel-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -374,5 +474,10 @@ button {
   .erp-motion * {
     animation: none !important;
     transition: none !important;
+  }
+
+  .fm-map-marker span,
+  .fm-map-marker--active span {
+    transition: none;
   }
 }
