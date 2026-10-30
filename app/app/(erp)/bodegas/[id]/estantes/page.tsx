@@ -1,7 +1,17 @@
-import { ModulePlaceholder } from "@/components/erp/module-placeholder";
+import type { Metadata } from "next";
+import { ShelfHierarchyPage } from "@/components/erp/records/shelf-hierarchy-page";
 
-export const metadata = { title: "Estantes y secciones" };
+export const metadata: Metadata = {
+  title: "Estantes y secciones",
+  description:
+    "Consulta y administra los estantes y las secciones de una bodega de Farmamed, con su código, nombre y descripción.",
+};
 
-export default function ShelvesPage() {
-  return <ModulePlaceholder routePath="/app/bodegas/[id]/estantes" />;
+type ShelvesRouteProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function ShelvesRoute({ params }: ShelvesRouteProps) {
+  const { id } = await params;
+  return <ShelfHierarchyPage key={id} warehouseId={id} />;
 }
