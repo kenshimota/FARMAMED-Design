@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { FormField } from "@/components/erp/ui/form";
 
@@ -21,6 +21,8 @@ type TextFieldProps = {
   placeholder?: string;
   autoComplete?: string;
   autoFocus?: boolean;
+  mono?: boolean;
+  readOnly?: boolean;
 };
 
 export function TextField({
@@ -36,6 +38,8 @@ export function TextField({
   placeholder,
   autoComplete = "off",
   autoFocus = false,
+  mono = false,
+  readOnly = false,
 }: TextFieldProps) {
   return (
     <FormField error={error} help={help} id={id} label={label} required={required}>
@@ -44,13 +48,14 @@ export function TextField({
           {...aria}
           autoComplete={autoComplete}
           autoFocus={autoFocus}
-          className={`${CONTROL_CLASS} h-12`}
+          className={`${CONTROL_CLASS} h-12 read-only:bg-background read-only:text-muted ${mono ? "font-mono text-[14px]" : ""}`}
           data-autofocus={autoFocus ? "" : undefined}
           disabled={disabled}
           maxLength={maxLength}
           name={id}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
+          readOnly={readOnly}
           type="text"
           value={value}
         />
@@ -59,7 +64,7 @@ export function TextField({
   );
 }
 
-type TextAreaFieldProps = TextFieldProps & {
+type TextAreaFieldProps = Omit<TextFieldProps, "mono"> & {
   rows?: number;
 };
 
@@ -99,6 +104,109 @@ export type SelectOption = {
   value: string;
   label: string;
 };
+
+type SwitchFieldProps = {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  help?: ReactNode;
+  error?: string;
+  disabled?: boolean;
+};
+
+export function SwitchField({
+  id,
+  label,
+  checked,
+  onChange,
+  help,
+  error,
+  disabled = false,
+}: SwitchFieldProps) {
+  const [interacted, setInteracted] = useState(false);
+  const labelId = `${id}-etiqueta`;
+  const helpId = `${id}-ayuda`;
+  const errorId = `${id}-error`;
+  const describedBy = [help ? helpId : null, error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
+  const stateLabel = checked ? "Sí, se puede vender." : "No se puede vender.";
+
+  return (
+    <div>
+      <div
+        className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3.5 ${
+          error ? "border-alert/40" : "border-ink/15"
+        }`}
+      >
+        <label
+          className={`min-w-0 ${disabled ? "" : "cursor-pointer"}`}
+          htmlFor={id}
+        >
+          <span className="block text-[13px] font-semibold text-ink" id={labelId}>
+            {label}
+          </span>
+          {help && (
+            <span className="mt-1 block text-[12px] leading-5 text-muted" id={helpId}>
+              {help}
+            </span>
+          )}
+        </label>
+        <button
+          aria-checked={checked}
+          aria-describedby={describedBy || undefined}
+          aria-invalid={error ? true : undefined}
+          aria-labelledby={labelId}
+          className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${
+            checked
+              ? "border-olive bg-olive hover:bg-[color-mix(in_srgb,var(--olive)_85%,var(--ink))]"
+              : "border-ink/60 bg-ink/50 hover:bg-ink/60"
+          }`}
+          disabled={disabled}
+          id={id}
+          onClick={() => {
+            setInteracted(true);
+            onChange(!checked);
+          }}
+          role="switch"
+          type="button"
+        >
+          <span
+            aria-hidden="true"
+            className={`h-6 w-6 rounded-full bg-surface shadow-[0_2px_8px_rgba(27,12,104,0.2)] transition-transform motion-reduce:transition-none ${
+              checked ? "translate-x-7" : "translate-x-1"
+            }`}
+          />
+        </button>
+      </div>
+      <p
+        className={`mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold ${
+          checked ? "text-ink" : "text-muted"
+        }`}
+      >
+        <Icon
+          className={checked ? "text-olive" : undefined}
+          name={checked ? "check" : "close"}
+          size={14}
+        />
+        {stateLabel}
+      </p>
+      <span aria-live="polite" className="sr-only">
+        {interacted ? stateLabel : ""}
+      </span>
+      {error && (
+        <p
+          className="mt-2 text-[12px] font-semibold leading-5 text-alert-ink"
+          id={errorId}
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 type SelectFieldProps = {
   id: string;
