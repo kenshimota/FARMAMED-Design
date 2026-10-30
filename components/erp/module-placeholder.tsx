@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
@@ -8,9 +9,10 @@ import { getRouteDefinition } from "@/lib/routes";
 
 type ModulePlaceholderProps = {
   routePath: string;
+  actions?: ReactNode;
 };
 
-export function ModulePlaceholder({ routePath }: ModulePlaceholderProps) {
+export function ModulePlaceholder({ routePath, actions }: ModulePlaceholderProps) {
   const { user } = useSession();
   const route = getRouteDefinition(routePath);
   if (!route) throw new Error(`Ruta no registrada: ${routePath}`);
@@ -31,10 +33,15 @@ export function ModulePlaceholder({ routePath }: ModulePlaceholderProps) {
         <div aria-hidden="true" className="technical-grid absolute inset-0 opacity-50 [mask-image:linear-gradient(135deg,black,transparent_58%)]" />
         <div aria-hidden="true" className="absolute -right-20 -top-20 h-64 w-64 rounded-full border-[44px] border-lime/10" />
         <div className="relative max-w-3xl p-6 sm:p-10 lg:p-12">
-          <span className="eyebrow">{route.group}</span>
-          <h1 id="titulo-modulo" className="mt-5 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-4xl">
-            {route.title}
-          </h1>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <span className="eyebrow">{route.group}</span>
+              <h1 id="titulo-modulo" className="mt-5 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-4xl">
+                {route.title}
+              </h1>
+            </div>
+            {actions}
+          </div>
           <p className="mt-4 max-w-2xl text-[15px] leading-7 text-muted">
             {route.description}
           </p>
@@ -54,7 +61,9 @@ export function ModulePlaceholder({ routePath }: ModulePlaceholderProps) {
             <span className={`rounded-full px-3 py-1.5 ${canWrite ? "bg-soft-lime text-ink" : "bg-soft-blue text-brand"}`}>
               {canWrite ? "Permiso de lectura y edición" : "Permiso de solo lectura"}
             </span>
-            <span className="rounded-full bg-background px-3 py-1.5 text-muted">Sin acciones operativas en esta etapa</span>
+            {!actions && (
+              <span className="rounded-full bg-background px-3 py-1.5 text-muted">Sin acciones operativas en esta etapa</span>
+            )}
           </div>
           {inventoryNote && (
             <p className="mt-5 max-w-2xl rounded-xl border border-olive/20 bg-soft-lime px-4 py-3 text-[12px] leading-6 text-ink">

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback } from "react";
 import { Icon } from "@/components/icons";
+import { SetupAdminForm } from "@/components/erp/setup-admin-form";
 import { apiFetch } from "@/lib/api";
 import { PanelError } from "@/components/erp/ui/panel-error";
 import { LoadingRegion, SkeletonText } from "@/components/erp/ui/skeleton";
@@ -17,6 +19,18 @@ async function fetchSetupStatus() {
   return { hasAdmin };
 }
 
+function LoginLink() {
+  return (
+    <Link
+      className="mt-3 inline-flex min-h-11 items-center gap-2 text-[13px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+      href="/app/login"
+    >
+      Inicia sesión
+      <Icon name="arrow-right" size={16} />
+    </Link>
+  );
+}
+
 export function SetupStatus() {
   const loader = useCallback(() => fetchSetupStatus(), []);
   const resource = useAsyncResource(loader);
@@ -27,6 +41,7 @@ export function SetupStatus() {
         <div className="rounded-2xl border border-line bg-background p-5">
           <SkeletonText lines={2} />
           <p className="mt-4 text-[13px] font-medium text-muted">Consultando disponibilidad…</p>
+          <LoginLink />
         </div>
       </LoadingRegion>
     );
@@ -34,30 +49,33 @@ export function SetupStatus() {
 
   if (resource.status === "error" || !resource.data) {
     return (
-      <PanelError
-        description={`${resource.error?.message ?? "No pudimos consultar el estado."} No se ha enviado ningún registro.`}
-        onRetry={resource.error?.canRetry ? resource.reload : undefined}
-        title="No pudimos consultar el estado"
-      />
+      <div>
+        <PanelError
+          description={`${resource.error?.message ?? "No pudimos consultar el estado."} No se ha enviado ningún registro.`}
+          onRetry={resource.error?.canRetry ? resource.reload : undefined}
+          title="No pudimos consultar el estado"
+        />
+        <LoginLink />
+      </div>
     );
   }
 
-  const available = !resource.data.hasAdmin;
-  return (
-    <div className={`rounded-2xl border p-5 ${available ? "border-olive/30 bg-soft-lime" : "border-brand/20 bg-soft-blue"}`} role="status">
-      <div className="flex items-start gap-3">
-        <Icon className={available ? "mt-0.5 shrink-0 text-olive" : "mt-0.5 shrink-0 text-brand"} name={available ? "check" : "shield"} size={21} />
-        <div>
-          <h2 className="text-sm font-semibold text-ink">
-            {available ? "Registro inicial disponible" : "El registro inicial ya no está disponible"}
-          </h2>
-          <p className="mt-2 text-[13px] leading-6 text-muted">
-            {available
-              ? "Todavía no hay un administrador registrado. El formulario de registro se incorporará en una próxima etapa."
-              : "Ya existe un administrador registrado. Inicia sesión con tu cuenta o contacta a un administrador."}
-          </p>
+  if (resource.data.hasAdmin) {
+    return (
+      <div className="rounded-2xl border border-brand/20 bg-soft-blue p-5" role="status">
+        <div className="flex items-start gap-3">
+          <Icon className="mt-0.5 shrink-0 text-brand" name="shield" size={21} />
+          <div>
+            <h2 className="text-sm font-semibold text-ink">El sistema ya tiene un administrador</h2>
+            <p className="mt-2 text-[13px] leading-6 text-muted">
+              No es posible crear otra cuenta inicial.
+            </p>
+            <LoginLink />
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return <SetupAdminForm />;
 }

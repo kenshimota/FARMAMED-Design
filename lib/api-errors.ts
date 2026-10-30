@@ -87,10 +87,12 @@ const CONFLICT_MESSAGES: Record<string, string> = {
 
 export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
 
+export const INVALID_EMAIL_MESSAGE = "Ingresa un correo válido.";
+
 const KNOWN_MESSAGES: Record<string, string> = {
   "default transaction currency is not configured": CURRENCY_NOT_CONFIGURED,
   "password must be at least 8 characters long": PASSWORD_MIN_MESSAGE,
-  "invalid email": "El correo no es válido.",
+  "invalid email": INVALID_EMAIL_MESSAGE,
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
