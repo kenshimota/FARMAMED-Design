@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { Icon, type IconName } from "@/components/icons";
 import { PharmaExperience } from "@/components/pharma-experience";
@@ -273,8 +274,8 @@ export default function Home() {
               <h2 className="mt-6 text-balance text-4xl font-semibold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl">Haz que cada parte de tu droguería trabaje en conjunto.</h2>
               <p className="mx-auto mt-5 max-w-xl text-[14px] leading-6 text-white/70">Explora cómo Farmamed ERP convierte una operación compleja en una experiencia clara y conectada.</p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-                <a className="button-base bg-lime text-ink shadow-lg shadow-ink/15 transition-transform hover:-translate-y-0.5 hover:bg-white" href="#producto">Ver la demostración <Icon name="arrow-up-right" size={18} /></a>
-                <a className="button-base border border-white/25 text-white transition-colors hover:bg-white/10" href="#inicio">Volver al inicio</a>
+                <Link className="button-base bg-lime text-ink shadow-lg shadow-ink/15 transition-transform hover:-translate-y-0.5 hover:bg-white" href="/app/login">Iniciar sesión <Icon name="arrow-right" size={18} /></Link>
+                <a className="button-base border border-white/25 text-white transition-colors hover:bg-white/10" href="#producto">Ver la demostración</a>
               </div>
             </div>
           </div>
@@ -289,6 +290,7 @@ export default function Home() {
             <a className="transition-colors hover:text-white" href="#modulos">Módulos</a>
             <a className="transition-colors hover:text-white" href="#como-funciona">Cómo funciona</a>
             <a className="transition-colors hover:text-white" href="#beneficios">Beneficios</a>
+            <Link className="transition-colors hover:text-white" href="/app/login">Iniciar sesión</Link>
           </nav>
         </div>
         <div className="border-t border-white/10">

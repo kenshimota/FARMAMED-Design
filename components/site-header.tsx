@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Brand } from "./brand";
 import { Icon } from "./icons";
@@ -37,6 +38,13 @@ export function SiteHeader() {
           ))}
         </nav>
 
+        <Link
+          className="hidden text-[13px] font-medium text-ink/65 transition-colors hover:text-brand md:inline-flex"
+          href="/app/login"
+        >
+          Iniciar sesión
+        </Link>
+
         <a className="button-base button-primary !min-h-[42px] !px-5 !text-[12px] max-md:!hidden md:inline-flex" href="#producto">
           Explorar plataforma
           <Icon name="arrow-up-right" size={15} />
@@ -70,6 +78,15 @@ export function SiteHeader() {
                 <Icon name="arrow-right" size={17} />
               </a>
             ))}
+            <div aria-hidden="true" className="my-2 h-px bg-ink/10" />
+            <Link
+              className="flex items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-ink transition-colors hover:bg-soft-blue hover:text-brand"
+              href="/app/login"
+              onClick={() => setOpen(false)}
+            >
+              Iniciar sesión
+              <Icon name="arrow-right" size={17} />
+            </Link>
           </nav>
         ) : null}
       </div>
