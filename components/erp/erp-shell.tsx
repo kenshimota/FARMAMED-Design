@@ -17,8 +17,9 @@ import { useSession } from "@/components/erp/session-context";
 import {
   canReadModule,
   canWriteModule,
-  ROLE_LABELS,
+  getRolePresentation,
 } from "@/lib/permissions";
+import { sessionDisplayName } from "@/lib/session";
 import {
   ERP_ROUTES,
   NAV_GROUPS,
@@ -198,8 +199,8 @@ export function ErpShell({ children }: { children: ReactNode }) {
           {renderNavigation(false)}
         </div>
         <div className={`border-t border-line p-4 ${navigationExpanded ? "block" : "hidden"} xl:block`}>
-          <p className="truncate text-[12px] font-semibold text-ink">{user.name}</p>
-          <p className="mt-1 text-[10px] text-muted">{ROLE_LABELS[user.role]}</p>
+          <p className="truncate text-[12px] font-semibold text-ink">{sessionDisplayName(user)}</p>
+          <p className="mt-1 text-[10px] text-muted">{getRolePresentation(user.role).label}</p>
           <p className="mt-2 inline-flex items-center gap-2 text-[10px] font-medium text-muted">
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-olive" />
             Sesión activa
@@ -293,8 +294,8 @@ export function ErpShell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="border-b border-line px-6 py-4">
-              <p className="truncate text-[13px] font-semibold text-ink">{user.name}</p>
-              <p className="mt-1 text-[11px] text-muted">{ROLE_LABELS[user.role]}</p>
+              <p className="truncate text-[13px] font-semibold text-ink">{sessionDisplayName(user)}</p>
+              <p className="mt-1 text-[11px] text-muted">{getRolePresentation(user.role).label}</p>
             </div>
             {renderNavigation(false, true)}
           </aside>

@@ -51,19 +51,19 @@ const QUICK_ACTIONS: Record<Role, QuickAction[]> = {
   ],
 };
 
-export function getQuickActions(role: Role) {
-  return QUICK_ACTIONS[role].filter((action) =>
+export function getQuickActions(role: string) {
+  return (QUICK_ACTIONS[role as Role] ?? []).filter((action) =>
     action.write
       ? canWriteModule(role, action.module)
       : canReadModule(role, action.module),
   );
 }
 
-export function getPrimaryAction(role: Role) {
+export function getPrimaryAction(role: string) {
   return getQuickActions(role)[0] ?? null;
 }
 
-export function DashboardQuickActions({ role }: { role: Role }) {
+export function DashboardQuickActions({ role }: { role: string }) {
   const actions = getQuickActions(role);
 
   return (

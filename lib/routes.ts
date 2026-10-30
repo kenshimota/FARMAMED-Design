@@ -1,5 +1,5 @@
 import type { IconName } from "@/components/icons";
-import { canReadModule, type ModuleKey, type Role } from "@/lib/permissions";
+import { canReadModule, type ModuleKey } from "@/lib/permissions";
 
 export type ErpGroup =
   | "Inicio"
@@ -318,9 +318,9 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     title: "Roles",
     label: "Roles",
     group: "Administración",
-    module: "usuarios",
+    module: "roles",
     icon: "shield",
-    description: "Consulta del catálogo de roles disponibles.",
+    description: "Consulta el catálogo de roles y la matriz de permisos de interfaz.",
     navigation: true,
   },
   {
@@ -366,7 +366,7 @@ export function getRouteByPathname(pathname: string) {
   return ERP_ROUTES.find((route) => matchesRoute(pathname, route.path));
 }
 
-export function getNavigationHref(route: ErpRouteDefinition, role: Role) {
+export function getNavigationHref(route: ErpRouteDefinition, role: string) {
   if (!route.path.includes("[")) return route.path;
   if (!route.parent) return null;
   const parent = getRouteDefinition(route.parent);
