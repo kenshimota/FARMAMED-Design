@@ -16,6 +16,7 @@ type RecordsTableProps<T> = {
   getRowKey: (row: T) => string | number;
   getRowLabel: (row: T) => string;
   rowActions?: (row: T) => ReactNode;
+  cardActions?: (row: T) => ReactNode;
   renderCard: (row: T) => ReactNode;
 };
 
@@ -26,8 +27,10 @@ export function RecordsTable<T>({
   getRowKey,
   getRowLabel,
   rowActions,
+  cardActions,
   renderCard,
 }: RecordsTableProps<T>) {
+  const cardActionsFor = cardActions ?? rowActions;
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -72,10 +75,7 @@ export function RecordsTable<T>({
                       {rowActions(row)}
                     </div>
                     <details className="xl:hidden">
-                      <summary
-                        aria-label={`Acciones para ${getRowLabel(row)}`}
-                        className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full border border-ink/15 bg-surface px-3.5 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand"
-                      >
+                      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full border border-ink/15 bg-surface px-3.5 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand">
                         Acciones
                         <Icon name="chevron-down" size={14} />
                       </summary>
@@ -99,13 +99,13 @@ export function RecordsTable<T>({
         {rows.map((row) => (
           <li className="rounded-2xl border border-line bg-surface p-4" key={getRowKey(row)}>
             {renderCard(row)}
-            {rowActions && (
+            {cardActionsFor && (
               <div
                 aria-label={`Acciones para ${getRowLabel(row)}`}
                 className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4"
                 role="group"
               >
-                {rowActions(row)}
+                {cardActionsFor(row)}
               </div>
             )}
           </li>

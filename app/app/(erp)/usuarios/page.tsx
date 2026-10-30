@@ -1,8 +1,12 @@
-import { ModulePlaceholder } from "@/components/erp/module-placeholder";
-import { NewUserLink } from "@/components/erp/new-user-link";
+import type { Metadata } from "next";
+import { UserListPage } from "@/components/erp/user-list";
 
-export const metadata = { title: "Usuarios" };
+export const metadata: Metadata = {
+  title: "Usuarios",
+  description:
+    "Consulta quién tiene acceso al ERP, bloquea cuentas y elimina usuarios registrados en Farmamed.",
+};
 
 export default function UsersPage() {
-  return <ModulePlaceholder actions={<NewUserLink />} routePath="/app/usuarios" />;
+  return <UserListPage />;
 }

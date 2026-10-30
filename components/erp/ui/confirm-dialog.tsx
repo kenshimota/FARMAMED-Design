@@ -20,6 +20,7 @@ export type ConfirmDialogProps = {
   confirmLabel: string;
   cancelLabel?: string;
   requireText?: { value: string; label: string };
+  confirmBusyLabel?: string;
   onConfirm: () => void | Promise<void>;
   onError: (error: UiError) => void;
   onClose: () => void;
@@ -35,6 +36,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancelar",
   requireText,
+  confirmBusyLabel = "Guardando…",
   onConfirm,
   onError,
   onClose,
@@ -43,6 +45,7 @@ export function ConfirmDialog({
   const descriptionId = useId();
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
@@ -71,8 +74,7 @@ export function ConfirmDialog({
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     const panel = panelRef.current;
-    const firstFocusable = panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-    (firstFocusable ?? panel)?.focus();
+    (cancelRef.current ?? panel)?.focus();
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -121,7 +123,8 @@ export function ConfirmDialog({
         if (previous === null) element.removeAttribute("inert");
         else element.setAttribute("inert", previous);
       }
-      returnFocusRef.current?.focus();
+      const returnFocus = returnFocusRef.current;
+      if (returnFocus?.isConnected) returnFocus.focus();
     };
   }, [open]);
 
@@ -198,12 +201,14 @@ export function ConfirmDialog({
             className="button-base button-primary disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[150px]"
             disabled={busy}
             onClick={handleClose}
+            ref={cancelRef}
             type="button"
           >
             {cancelLabel}
           </button>
           <BusyButton
             busy={busy}
+            busyLabel={confirmBusyLabel}
             className="sm:min-w-[150px]"
             disabled={!canConfirm}
             onClick={() => void handleConfirm()}
