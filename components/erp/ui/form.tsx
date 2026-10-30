@@ -43,7 +43,11 @@ export function FormField({ id, label, required = false, help, error, children }
       )}
       {children(aria)}
       {error && (
-        <p className="mt-2 text-[12px] font-semibold leading-5 text-alert-ink" id={errorId}>
+        <p
+          className="mt-2 text-[12px] font-semibold leading-5 text-alert-ink"
+          id={errorId}
+          role="alert"
+        >
           {error}
         </p>
       )}
