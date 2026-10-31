@@ -12,6 +12,10 @@ import {
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import {
+  CurrencyNonConversionNote,
+  CurrencySelect,
+} from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -104,12 +108,6 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
     () => currencyStatus?.currencies ?? [],
     [currencyStatus?.currencies],
   );
-  const currencyLoading =
-    currencyStatus?.status === "loading" || currencyStatus?.status === "idle";
-  const currencyError =
-    currencyStatus?.status === "error"
-      ? currencyStatus.errorMessage ?? "No pudimos cargar las monedas."
-      : null;
 
   const costLoader = useCallback(
     () =>
@@ -156,17 +154,6 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
         label: itemState.label,
       })),
     [itemStates],
-  );
-
-  const currencyOptions = useMemo(
-    () =>
-      currencies
-        .filter((currency) => currency.id !== null)
-        .map((currency) => ({
-          value: String(currency.id),
-          label: `${currency.code} — ${currency.name}`,
-        })),
-    [currencies],
   );
 
   function productFor(productId: CostRecord["product_id"]) {
@@ -434,34 +421,32 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
             placeholder="Todos los estados"
             value={filters.itemStateId}
           />
-          <SelectField
-            emptyLabel="No hay monedas activas registradas."
+          <CurrencySelect
+            allOptionLabel="Todas las monedas"
+            help="Busca por código o nombre."
             id="filtro-costo-moneda"
             label="Moneda"
-            loading={currencyLoading}
-            loadingLabel="Cargando monedas…"
-            loadError={currencyError}
             onChange={(value) => updateFilter("currencyId", value)}
-            onRetry={currencyStatus?.reload}
-            options={currencyOptions}
-            placeholder="Todas las monedas"
             value={filters.currencyId}
           />
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {countLabel}
-          </p>
-          {filtersActive && (
-            <button
-              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          )}
+        <div className="mt-4 space-y-3 border-t border-line pt-4">
+          <CurrencyNonConversionNote />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p aria-live="polite" className="text-[12px] font-semibold text-muted">
+              {countLabel}
+            </p>
+            {filtersActive && (
+              <button
+                className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                onClick={clearFilters}
+                type="button"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
       </section>
 

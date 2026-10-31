@@ -36,7 +36,7 @@ export function CurrencyNoticeBanner() {
           </Link>
         ) : undefined
       }
-      role="status"
+      role="alert"
       tone="warning"
     >
       {CURRENCY_NOT_CONFIGURED_DETAIL}

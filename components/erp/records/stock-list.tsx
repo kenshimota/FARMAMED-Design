@@ -767,7 +767,10 @@ function AvailableStocksPanel({
           </Link>
         ) : (
           <span className="font-semibold tabular-nums text-ink">
-            {formatMoney(stock.cost)}
+            {formatMoney(stock.cost, {
+              code: stock.currency?.code,
+              symbol: stock.currency?.symbol,
+            })}
           </span>
         ),
     },
@@ -834,7 +837,10 @@ function AvailableStocksPanel({
                   Sin costo registrado
                 </Link>
               ) : (
-                formatMoney(stock.cost)
+                formatMoney(stock.cost, {
+                  code: stock.currency?.code,
+                  symbol: stock.currency?.symbol,
+                })
               )}
             </dd>
           </div>
@@ -843,7 +849,16 @@ function AvailableStocksPanel({
               Moneda
             </dt>
             <dd className="mt-1 font-semibold text-ink">
-              {stock.currency?.code ?? "Sin moneda registrada"}
+              {stock.currency ? (
+                <>
+                  <span>{stock.currency.code}</span>
+                  <span className="ml-1 text-[11px] font-normal text-muted">
+                    {stock.currency.symbol}
+                  </span>
+                </>
+              ) : (
+                "Sin moneda registrada"
+              )}
             </dd>
           </div>
         </dl>

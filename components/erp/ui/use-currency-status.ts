@@ -10,7 +10,7 @@ import {
 import { getStoredToken } from "@/lib/session-store";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 
-const DEFAULT_TRANSACTION_CURRENCY_CODE = "USD_BCV";
+export const DEFAULT_TRANSACTION_CURRENCY_CODE = "USD_BCV";
 
 export type CurrencyRecord = {
   id: number | null;
@@ -18,6 +18,7 @@ export type CurrencyRecord = {
   name: string;
   symbol: string;
   rate: number | string | null;
+  isBase: boolean;
   isDefaultForTransactions: boolean;
 };
 
@@ -54,6 +55,7 @@ function parseCurrency(source: unknown): CurrencyRecord | null {
     name: readText(source.name) || code,
     symbol: readText(source.symbol),
     rate: typeof source.rate === "number" || typeof source.rate === "string" ? source.rate : null,
+    isBase: source.is_base === true,
     isDefaultForTransactions: source.is_default_for_transactions === true,
   };
 }
