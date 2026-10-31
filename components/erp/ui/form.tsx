@@ -59,6 +59,7 @@ export type FormErrorItem = {
   fieldId: string;
   label: string;
   message: string;
+  targetId?: string;
 };
 
 export function FormErrorSummary({
@@ -82,30 +83,51 @@ export function FormErrorSummary({
         {title}
       </p>
       <ul className="mt-2 space-y-1.5">
-        {errors.map((error) => (
-          <li className="text-[12px] leading-5 text-alert-ink" key={error.fieldId}>
-            <a
-              className="font-semibold underline underline-offset-4 hover:text-ink"
-              href={`#${error.fieldId}`}
-              onClick={(event) => {
-                event.preventDefault();
-                document.getElementById(error.fieldId)?.focus();
-              }}
-            >
-              {error.label}
-            </a>
-            <span>: {error.message}</span>
-          </li>
-        ))}
+        {errors.map((error) => {
+          const targetId = error.targetId ?? error.fieldId;
+          return (
+            <li className="text-[12px] leading-5 text-alert-ink" key={error.fieldId}>
+              <a
+                className="font-semibold underline underline-offset-4 hover:text-ink"
+                href={`#${targetId}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  const target = document.getElementById(targetId);
+                  if (!target) return;
+                  const details = target.closest("details");
+                  if (details instanceof HTMLDetailsElement) details.open = true;
+                  target.focus();
+                }}
+              >
+                {error.label}
+              </a>
+              <span>: {error.message}</span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 }
 
 export function focusFirstInvalidField(container: HTMLElement | Document = document) {
-  const field = container.querySelector<HTMLElement>("[aria-invalid='true']");
-  field?.focus();
-  return field;
+  const candidates = Array.from(
+    container.querySelectorAll<HTMLElement>("[aria-invalid='true']"),
+  );
+
+  for (const field of candidates) {
+    const details = field.closest("details");
+    const wasOpen = details instanceof HTMLDetailsElement ? details.open : true;
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    if (field.getClientRects().length === 0) {
+      if (details instanceof HTMLDetailsElement && !wasOpen) details.open = false;
+      continue;
+    }
+    field.focus();
+    return field;
+  }
+
+  return null;
 }
 
 // La navegación por enlaces y la recarga están cubiertas; router.push y el
