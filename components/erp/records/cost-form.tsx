@@ -225,15 +225,16 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     currencyStatus?.status === "error"
       ? currencyStatus.errorMessage ?? COPY.currenciesError
       : null;
-  const currencyBlockedReason =
-    currencyUnavailable ||
-    (currencyStatus?.status === "ready" && !defaultCurrency)
-      ? CURRENCY_NOT_CONFIGURED_DETAIL
+  const currencyBlockedReason = !values.currency_id
+    ? currencyStatus?.status === "error"
+      ? currencyError ?? COPY.currenciesError
       : currencyLoading
-        ? "Espera a que carguen las monedas para guardar."
-        : currencyError
-          ? "No pudimos cargar las monedas. Reintenta para guardar."
-          : null;
+        ? "Estamos consultando las monedas. Espera un momento antes de guardar."
+        : currencyUnavailable ||
+            (currencyStatus?.status === "ready" && !defaultCurrency)
+          ? CURRENCY_NOT_CONFIGURED_DETAIL
+          : null
+    : null;
 
   if (cost) {
     const key = String(cost.id);
@@ -740,9 +741,11 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
               onChange={(value) => updateField("currency_id", value)}
               optional={!editing}
               placeholder={
-                currentCurrency
-                  ? `Mantener moneda actual (${currentCurrency.code})`
-                  : "Mantener la moneda actual"
+                editing
+                  ? currentCurrency
+                    ? `Mantener moneda actual (${currentCurrency.code})`
+                    : "Mantener la moneda actual"
+                  : undefined
               }
               value={values.currency_id}
             />

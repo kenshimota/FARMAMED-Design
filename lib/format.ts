@@ -68,7 +68,14 @@ export function formatMoney(value: NumericValue, currency: CurrencyDisplay = {})
     maximumFractionDigits: 2,
   });
   if (amount === EMPTY_VALUE) return amount;
-  const suffix = currency.code?.trim() || currency.symbol?.trim();
+
+  const code = currency.code?.trim() ?? "";
+  const symbol = currency.symbol?.trim() ?? "";
+  if (code && symbol && symbol.toLowerCase() !== code.toLowerCase()) {
+    return `${amount} ${code} (${symbol})`;
+  }
+
+  const suffix = code || symbol;
   return suffix ? `${amount} ${suffix}` : amount;
 }
 

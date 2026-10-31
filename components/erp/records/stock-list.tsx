@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
+import { CurrencyChip } from "@/components/erp/ui/currency-select";
+import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import {
@@ -722,6 +724,7 @@ function AvailableStocksPanel({
     [productId],
   );
   const resource = useAsyncResource(loader);
+  const currencyStatus = useCurrencyStatusContext();
   const stocks = resource.data ?? NO_AVAILABLE_STOCKS;
 
   const countLabel = resource.data
@@ -729,6 +732,18 @@ function AvailableStocksPanel({
     : resource.status === "error"
       ? "No se pudo cargar la disponibilidad"
       : "Cargando disponibilidad…";
+
+  function currencyChipFor(stock: AvailableStockRecord) {
+    if (!stock.currency) return null;
+    return (
+      (currencyStatus?.currencies ?? []).find(
+        (item) =>
+          item.id !== null &&
+          (String(item.id) === String(stock.currency?.id) ||
+            item.code === stock.currency?.code),
+      ) ?? stock.currency
+    );
+  }
 
   const columns: RecordsTableColumn<AvailableStockRecord>[] = [
     {
@@ -780,12 +795,7 @@ function AvailableStocksPanel({
       className: "whitespace-nowrap",
       render: (stock) =>
         stock.currency ? (
-          <div>
-            <span className="font-semibold text-ink">{stock.currency.code}</span>
-            <span className="mt-0.5 block text-[11px] text-muted">
-              {stock.currency.symbol}
-            </span>
-          </div>
+          <CurrencyChip currency={currencyChipFor(stock)} />
         ) : (
           <span className="text-muted">Sin moneda registrada</span>
         ),
@@ -848,16 +858,13 @@ function AvailableStocksPanel({
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Moneda
             </dt>
-            <dd className="mt-1 font-semibold text-ink">
+            <dd className="mt-1">
               {stock.currency ? (
-                <>
-                  <span>{stock.currency.code}</span>
-                  <span className="ml-1 text-[11px] font-normal text-muted">
-                    {stock.currency.symbol}
-                  </span>
-                </>
+                <CurrencyChip currency={currencyChipFor(stock)} />
               ) : (
-                "Sin moneda registrada"
+                <span className="font-semibold text-ink">
+                  Sin moneda registrada
+                </span>
               )}
             </dd>
           </div>

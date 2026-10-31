@@ -8,6 +8,7 @@ import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { useActivityVisible } from "@/components/erp/ui/use-activity-visible";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
@@ -26,7 +27,6 @@ import {
 } from "@/components/erp/records/purchases-api";
 import {
   PurchaseStatusBadge,
-  purchaseCurrencyLabel,
   purchaseMoney,
   purchaseNumberLabel,
   PurchaseTotalsSummary,
@@ -148,7 +148,18 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
     purchase.currency,
     currencyCatalog,
     purchase.currency_id,
+    currencyStatus?.defaultCurrency ?? null,
   );
+  const currencyId = purchase.currency_id ?? purchase.currency?.id ?? null;
+  const catalogCurrency =
+    (currencyStatus?.currencies ?? []).find(
+      (item) => item.id !== null && String(item.id) === String(currencyId),
+    ) ??
+    (currencyStatus?.currencies ?? []).find(
+      (item) => item.code === currency?.code,
+    ) ??
+    null;
+  const currencyChip = catalogCurrency ?? purchase.currency ?? currency;
 
   function productNameFor(item: PurchaseItem) {
     return findById(products, item.product_id)?.name ?? `Producto #${item.product_id}`;
@@ -342,8 +353,8 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Moneda
             </dt>
-            <dd className="mt-1.5 font-semibold text-ink">
-              {purchaseCurrencyLabel(currency)}
+            <dd className="mt-1.5">
+              <CurrencyChip currency={currencyChip} />
             </dd>
           </div>
           <div>

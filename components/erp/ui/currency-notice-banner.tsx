@@ -24,17 +24,33 @@ export function CurrencyNoticeBanner() {
     currencyStatus?.status === "ready" && !currencyStatus.defaultCurrency;
   if (!flagged && !missingFromCheck) return null;
 
+  const canRetry =
+    currencyStatus !== null &&
+    currencyStatus.status !== "idle" &&
+    currencyStatus.status !== "loading";
+
   return (
     <NoticeBanner
       action={
-        user.role === "admin" ? (
-          <Link
-            className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-            href="/app/monedas"
-          >
-            Administrar monedas
-          </Link>
-        ) : undefined
+        <div className="flex flex-wrap items-center gap-4">
+          {canRetry && (
+            <button
+              className="min-h-11 font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+              onClick={currencyStatus.reload}
+              type="button"
+            >
+              Reintentar
+            </button>
+          )}
+          {user.role === "admin" && (
+            <Link
+              className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+              href="/app/monedas"
+            >
+              Administrar monedas
+            </Link>
+          )}
+        </div>
       }
       role="alert"
       tone="warning"

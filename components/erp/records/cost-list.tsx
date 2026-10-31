@@ -12,10 +12,7 @@ import {
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
-import {
-  CurrencyNonConversionNote,
-  CurrencySelect,
-} from "@/components/erp/ui/currency-select";
+import { CurrencyChip, CurrencySelect } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -180,6 +177,16 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
     };
   }
 
+  function currencyChipFor(cost: CostRecord) {
+    const currency = currencyFor(cost);
+    if (!currency) return null;
+    return (
+      currencies.find(
+        (item) => item.id !== null && String(item.id) === String(currency.id),
+      ) ?? currency
+    );
+  }
+
   function updateFilter(key: keyof CostListFilters, value: string) {
     const next = { ...filters, [key]: value };
     setFilters(next);
@@ -254,18 +261,11 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
       header: "Moneda",
       className: "whitespace-nowrap",
       render: (cost) => {
-        const currency = currencyFor(cost);
+        const currency = currencyChipFor(cost);
         if (!currency) {
           return <span className="text-muted">Sin moneda</span>;
         }
-        return (
-          <div>
-            <span className="font-semibold text-ink">{currency.code}</span>
-            <span className="mt-0.5 block text-[11px] text-muted">
-              {currency.symbol}
-            </span>
-          </div>
-        );
+        return <CurrencyChip currency={currency} />;
       },
     },
   ];
@@ -343,12 +343,11 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Moneda
             </dt>
-            <dd className="mt-1 font-semibold text-ink">
-              {currency?.code ?? "Sin moneda"}
-              {currency && (
-                <span className="ml-1 text-[11px] font-normal text-muted">
-                  {currency.symbol}
-                </span>
+            <dd className="mt-1">
+              {currency ? (
+                <CurrencyChip currency={currencyChipFor(cost) ?? currency} />
+              ) : (
+                <span className="font-semibold text-ink">Sin moneda</span>
               )}
             </dd>
           </div>
@@ -423,6 +422,7 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
           />
           <CurrencySelect
             allOptionLabel="Todas las monedas"
+            filter
             help="Busca por código o nombre."
             id="filtro-costo-moneda"
             label="Moneda"
@@ -431,22 +431,19 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
           />
         </div>
 
-        <div className="mt-4 space-y-3 border-t border-line pt-4">
-          <CurrencyNonConversionNote />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-              {countLabel}
-            </p>
-            {filtersActive && (
-              <button
-                className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                onClick={clearFilters}
-                type="button"
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
+            {countLabel}
+          </p>
+          {filtersActive && (
+            <button
+              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+              onClick={clearFilters}
+              type="button"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       </section>
 

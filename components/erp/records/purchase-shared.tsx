@@ -118,13 +118,18 @@ export type PurchaseDisplayCurrency = {
   symbol: string;
 };
 
-export const DEFAULT_CURRENCY_CODE = "USD_BCV";
+export type PurchaseDefaultCurrency = {
+  code: string;
+  name: string;
+  symbol: string;
+};
 
 export function resolvePurchaseCurrency(
   nested: PurchaseCurrency | null | undefined,
   catalog: readonly PurchaseCurrency[],
   currencyId: PurchaseCurrency["id"] | null | undefined,
-): PurchaseDisplayCurrency {
+  defaultCurrency?: PurchaseDefaultCurrency | null,
+): PurchaseDisplayCurrency | null {
   const source =
     nested && nested.code
       ? nested
@@ -140,20 +145,15 @@ export function resolvePurchaseCurrency(
     };
   }
 
-  const fallback = catalog.find(
-    (item) => item.code.toUpperCase() === DEFAULT_CURRENCY_CODE,
-  );
-  return fallback
-    ? {
-        code: fallback.code,
-        name: fallback.name.trim() || fallback.code,
-        symbol: fallback.symbol.trim() || fallback.code,
-      }
-    : {
-        code: DEFAULT_CURRENCY_CODE,
-        name: DEFAULT_CURRENCY_CODE,
-        symbol: DEFAULT_CURRENCY_CODE,
-      };
+  if (defaultCurrency) {
+    return {
+      code: defaultCurrency.code,
+      name: defaultCurrency.name.trim() || defaultCurrency.code,
+      symbol: defaultCurrency.symbol.trim() || defaultCurrency.code,
+    };
+  }
+
+  return null;
 }
 
 export function purchaseMoney(value: number, currency: PurchaseMoney | null) {
