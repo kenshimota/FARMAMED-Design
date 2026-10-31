@@ -116,9 +116,9 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
       : null,
     canReadModule(user.role, "existencias")
       ? {
-          href: "/app/existencias",
+          href: `/app/existencias/producto/${product.id}`,
           label: "Existencias",
-          description: "Módulo en preparación. Por ahora abre el módulo raíz.",
+          description: "Existencias de este producto por estado de ítem.",
           icon: "box" as const,
         }
       : null,
@@ -309,8 +309,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
             Accesos relacionados
           </h2>
           <p className="mt-1.5 text-[12px] leading-6 text-muted">
-            Costos abre la vista de este producto por estado de ítem. Existencias sigue
-            en preparación y por ahora abre el módulo raíz.
+            Costos y existencias abren la vista de este producto por estado de ítem.
           </p>
           <nav aria-label="Módulos relacionados" className="mt-4 grid gap-3 sm:grid-cols-2">
             {relatedModules.map((module) => (

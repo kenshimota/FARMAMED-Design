@@ -254,15 +254,15 @@ function ProductCostsContent({ productId }: { productId: string }) {
         action={
           <Link
             className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-            href="/app/existencias"
+            href={`/app/existencias/producto/${productId}`}
           >
-            Ir a existencias
+            Ir a existencias del producto
           </Link>
         }
         tone="info"
       >
-        Las existencias y los costos son fuentes independientes. El módulo de
-        existencias sigue en preparación y por ahora abre su vista principal;
+        Las existencias y los costos son fuentes independientes. Consulta las
+        existencias de este producto por estado de ítem en su vista dedicada;
         esta pantalla no duplica sus datos.
       </NoticeBanner>
 
