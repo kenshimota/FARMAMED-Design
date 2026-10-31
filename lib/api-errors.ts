@@ -50,7 +50,7 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "product is in use":
     "No puedes eliminar este producto porque tiene costos o existencias asociadas.",
   "image already exists": "Ya existe una imagen con esa referencia.",
-  "image is in use": "No puedes eliminarla porque un producto la usa.",
+  "image is in use": "No puedes eliminar esta imagen porque un producto la usa.",
   "item state already exists": "Ya existe un estado con ese nombre.",
   "item state is in use":
     "No puedes cambiar o eliminar este estado porque tiene costos, existencias o compras asociadas.",

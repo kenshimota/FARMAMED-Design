@@ -1,7 +1,12 @@
-import { ModulePlaceholder } from "@/components/erp/module-placeholder";
+import type { Metadata } from "next";
+import { ImageListPage } from "@/components/erp/records/image-list";
 
-export const metadata = { title: "Imágenes" };
+export const metadata: Metadata = {
+  title: "Imágenes",
+  description:
+    "Consulta las imágenes reutilizables del catálogo de Farmamed, registradas por URL y miniatura.",
+};
 
 export default function ImagesPage() {
-  return <ModulePlaceholder routePath="/app/imagenes" />;
+  return <ImageListPage />;
 }
