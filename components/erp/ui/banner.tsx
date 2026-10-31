@@ -31,7 +31,7 @@ type NoticeBannerProps = {
   title?: string;
   children: ReactNode;
   action?: ReactNode;
-  role?: "status" | "alert";
+  role?: "status" | "alert" | "note";
   className?: string;
 };
 
@@ -45,9 +45,11 @@ export function NoticeBanner({
 }: NoticeBannerProps) {
   const styles = TONE_STYLES[tone];
   const resolvedRole = role ?? (tone === "danger" ? "alert" : "status");
+  const live =
+    resolvedRole === "alert" ? "assertive" : resolvedRole === "status" ? "polite" : undefined;
   return (
     <div
-      aria-live={resolvedRole === "alert" ? "assertive" : "polite"}
+      aria-live={live}
       className={`flex items-start gap-3 rounded-2xl border px-4 py-3.5 text-[13px] leading-6 ${styles.shell} ${className}`}
       role={resolvedRole}
     >

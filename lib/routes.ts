@@ -374,6 +374,39 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     navigation: true,
   },
   {
+    path: "/app/existencias/disponibles",
+    title: "Existencias disponibles",
+    label: "Disponibles",
+    group: "Inventario",
+    module: "existencias",
+    icon: "box",
+    description:
+      "Disponibilidad vendible de un producto con su costo y moneda vigentes.",
+    parent: "/app/existencias",
+  },
+  {
+    path: "/app/existencias/[id]",
+    title: "Detalle de existencia",
+    label: "Detalle de existencia",
+    group: "Inventario",
+    module: "existencias",
+    icon: "box",
+    description:
+      "Detalle de una existencia agregada con su producto, estado y cantidad.",
+    parent: "/app/existencias",
+  },
+  {
+    path: "/app/existencias/producto/[product_id]",
+    title: "Existencias del producto",
+    label: "Existencias del producto",
+    group: "Inventario",
+    module: "existencias",
+    icon: "box",
+    description:
+      "Existencias de un producto por estado de ítem con enlaces a lotes y disponibilidad.",
+    parent: "/app/existencias",
+  },
+  {
     path: "/app/lotes",
     title: "Lotes",
     label: "Lotes",
