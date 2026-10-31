@@ -80,7 +80,7 @@ export function validateDetailField(
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return field.required ? METHOD_PAYMENT_COPY.detailRequired : null;
 
-  if (field.max_length !== null && text.length > field.max_length) {
+  if (field.max_length != null && text.length > field.max_length) {
     return `Usa máximo ${field.max_length} caracteres.`;
   }
   switch (field.type) {

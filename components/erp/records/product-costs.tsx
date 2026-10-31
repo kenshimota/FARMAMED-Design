@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -103,6 +104,16 @@ function ProductCostsContent({ productId }: { productId: string }) {
     };
   }
 
+  function currencyChipFor(cost: CostRecord) {
+    const currency = currencyFor(cost);
+    if (!currency) return null;
+    return (
+      currencies.find(
+        (item) => item.id !== null && String(item.id) === String(currency.id),
+      ) ?? currency
+    );
+  }
+
   function itemStateLabelFor(cost: CostRecord) {
     return cost.item_state?.label ?? `Estado #${cost.item_state_id}`;
   }
@@ -140,18 +151,11 @@ function ProductCostsContent({ productId }: { productId: string }) {
       header: "Moneda",
       className: "whitespace-nowrap",
       render: (cost) => {
-        const currency = currencyFor(cost);
+        const currency = currencyChipFor(cost);
         if (!currency) {
           return <span className="text-muted">Sin moneda</span>;
         }
-        return (
-          <div>
-            <span className="font-semibold text-ink">{currency.code}</span>
-            <span className="mt-0.5 block text-[11px] text-muted">
-              {currency.symbol}
-            </span>
-          </div>
-        );
+        return <CurrencyChip currency={currency} />;
       },
     },
   ];
@@ -203,12 +207,11 @@ function ProductCostsContent({ productId }: { productId: string }) {
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Moneda
             </dt>
-            <dd className="mt-1 font-semibold text-ink">
-              {currency?.code ?? "Sin moneda"}
-              {currency && (
-                <span className="ml-1 text-[11px] font-normal text-muted">
-                  {currency.symbol}
-                </span>
+            <dd className="mt-1">
+              {currency ? (
+                <CurrencyChip currency={currencyChipFor(cost) ?? currency} />
+              ) : (
+                <span className="font-semibold text-ink">Sin moneda</span>
               )}
             </dd>
           </div>

@@ -22,7 +22,7 @@ export function fieldHelp(field: MethodPaymentTypeField) {
   if (field.required) parts.push("Obligatorio.");
   switch (field.type) {
     case "text":
-      if (field.max_length !== null) parts.push(`Máximo ${field.max_length} caracteres.`);
+      if (field.max_length != null) parts.push(`Máximo ${field.max_length} caracteres.`);
       break;
     case "email":
       parts.push("Formato de correo electrónico.");

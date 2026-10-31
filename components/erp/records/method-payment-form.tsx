@@ -178,7 +178,6 @@ function MethodPaymentFormContent({
         (type) =>
           type.is_active &&
           type.currency !== null &&
-          type.currency_id !== null &&
           activeCurrencyIds.has(String(type.currency_id)),
       )
       .map((type) => ({
