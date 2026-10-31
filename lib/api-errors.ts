@@ -88,6 +88,8 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "admin already exists": "Ya existe un administrador. Inicia sesión.",
   "tax already exists": "Ya existe un impuesto con ese código.",
   "tax is in use": "No puedes eliminar este impuesto porque está en uso. Puedes desactivarlo.",
+  "payment method already exists": "Ya existe un método con esa etiqueta para el tipo.",
+  "payment method is in use": "No puedes eliminar este método porque está en uso.",
 };
 
 export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
@@ -98,6 +100,8 @@ const KNOWN_MESSAGES: Record<string, string> = {
   "default transaction currency is not configured": CURRENCY_NOT_CONFIGURED,
   "password must be at least 8 characters long": PASSWORD_MIN_MESSAGE,
   "invalid email": INVALID_EMAIL_MESSAGE,
+  "method_payment_type_id cannot be changed":
+    "El tipo de método no se puede cambiar.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;

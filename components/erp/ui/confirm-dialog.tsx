@@ -19,6 +19,7 @@ export type ConfirmDialogProps = {
   description?: ReactNode;
   confirmLabel: string;
   cancelLabel?: string;
+  confirmDisabled?: boolean;
   requireText?: { value: string; label: string };
   confirmBusyLabel?: string;
   onConfirm: () => void | Promise<void>;
@@ -35,6 +36,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   cancelLabel = "Cancelar",
+  confirmDisabled = false,
   requireText,
   confirmBusyLabel = "Guardando…",
   onConfirm,
@@ -210,7 +212,7 @@ export function ConfirmDialog({
             busy={busy}
             busyLabel={confirmBusyLabel}
             className="sm:min-w-[150px]"
-            disabled={!canConfirm}
+            disabled={!canConfirm || confirmDisabled}
             onClick={() => void handleConfirm()}
             type="button"
             variant="danger"
