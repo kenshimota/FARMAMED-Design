@@ -516,18 +516,42 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     group: "Inventario",
     module: "compras",
     icon: "clipboard",
-    description: "Consulta y administración del ciclo de compras.",
+    description:
+      "Consulta y administración de compras a proveedores con su moneda, líneas y estados.",
     navigation: true,
   },
   {
-    path: "/app/compras/[id]",
-    title: "Detalle de compra",
-    label: "Detalle de compra",
+    path: "/app/compras/nueva",
+    title: "Nueva compra",
+    label: "Nueva compra",
     group: "Inventario",
     module: "compras",
     icon: "clipboard",
-    description: "Detalle y edición de una compra según el rol asignado.",
+    description:
+      "Constructor de borradores de compra con proveedor, moneda y líneas con impuesto por monto.",
     parent: "/app/compras",
+  },
+  {
+    path: "/app/compras/[id]",
+    title: "Detalle de la compra",
+    label: "Detalle de la compra",
+    group: "Inventario",
+    module: "compras",
+    icon: "clipboard",
+    description:
+      "Cabecera, líneas, totales y acciones de una compra según su estado.",
+    parent: "/app/compras",
+  },
+  {
+    path: "/app/compras/[id]/editar",
+    title: "Editar compra",
+    label: "Editar compra",
+    group: "Inventario",
+    module: "compras",
+    icon: "clipboard",
+    description:
+      "Actualiza la cabecera y las líneas de un borrador de compra sin convertir montos.",
+    parent: "/app/compras/[id]",
   },
   {
     path: "/app/monedas",
