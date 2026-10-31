@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Icon } from "@/components/icons";
 import { FormField } from "@/components/erp/ui/form";
+import { formatDateOnly } from "@/lib/format";
 
 const CONTROL_CLASS =
   "w-full rounded-xl border border-ink/15 bg-surface px-4 text-[15px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand disabled:cursor-not-allowed disabled:opacity-60";
@@ -69,6 +70,67 @@ export function TextField({
           type="text"
           value={value}
         />
+      )}
+    </FormField>
+  );
+}
+
+type DateFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  help?: ReactNode;
+  required?: boolean;
+  disabled?: boolean;
+  min?: string;
+  max?: string;
+};
+
+export function DateField({
+  id,
+  label,
+  value,
+  onChange,
+  error,
+  help,
+  required = false,
+  disabled = false,
+  min,
+  max,
+}: DateFieldProps) {
+  const normalized = value.trim().slice(0, 10);
+  const displayValue = /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+    ? formatDateOnly(normalized)
+    : null;
+
+  return (
+    <FormField error={error} help={help} id={id} label={label} required={required}>
+      {(aria) => (
+        <div>
+          <input
+            {...aria}
+            aria-describedby={
+              [aria["aria-describedby"], `${id}-formato`]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
+            className={`${CONTROL_CLASS} h-12`}
+            disabled={disabled}
+            max={max}
+            min={min}
+            name={id}
+            onChange={(event) => onChange(event.target.value)}
+            type="date"
+            value={value}
+          />
+          <p className="mt-1.5 text-[12px] leading-5 text-muted" id={`${id}-formato`}>
+            {displayValue
+              ? `Se mostrará como ${displayValue}.`
+              : "Selecciona una fecha; se mostrará como dd/mm/aaaa."}
+          </p>
+        </div>
       )}
     </FormField>
   );

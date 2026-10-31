@@ -417,6 +417,39 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     navigation: true,
   },
   {
+    path: "/app/lotes/nuevo",
+    title: "Nuevo lote",
+    label: "Nuevo lote",
+    group: "Inventario",
+    module: "lotes",
+    icon: "layers",
+    description:
+      "Registra un lote con su número, vencimiento, cantidades y ubicación física coherente.",
+    parent: "/app/lotes",
+  },
+  {
+    path: "/app/lotes/[id]",
+    title: "Detalle del lote",
+    label: "Detalle del lote",
+    group: "Inventario",
+    module: "lotes",
+    icon: "layers",
+    description:
+      "Consulta el vencimiento, las cantidades y la ubicación física de un lote.",
+    parent: "/app/lotes",
+  },
+  {
+    path: "/app/lotes/[id]/editar",
+    title: "Editar lote",
+    label: "Editar lote",
+    group: "Inventario",
+    module: "lotes",
+    icon: "layers",
+    description:
+      "Actualiza el vencimiento, las cantidades y la ubicación física de un lote.",
+    parent: "/app/lotes/[id]",
+  },
+  {
     path: "/app/costos",
     title: "Costos",
     label: "Costos",
