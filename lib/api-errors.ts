@@ -45,7 +45,8 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "supplier is in use":
     "No puedes eliminar este proveedor porque tiene compras asociadas.",
   "category already exists": "Ya existe una categoría con ese nombre.",
-  "category is in use": "No puedes eliminarla porque está en uso.",
+  "category is in use":
+    "No puedes eliminar esta categoría porque tiene productos asociados.",
   "product already exists": "Ya existe un producto con esa referencia.",
   "product is in use":
     "No puedes eliminar este producto porque tiene costos o existencias asociadas.",

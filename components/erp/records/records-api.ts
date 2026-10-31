@@ -17,6 +17,10 @@ export type CategoryRecord = {
   name: string;
 };
 
+export type CategoryInput = {
+  name: string;
+};
+
 export type ImageRecord = {
   id: RecordId;
   url: string;
@@ -172,6 +176,38 @@ export async function fetchProduct(id: string) {
 export async function fetchCategories() {
   const payload = await apiFetch<unknown>("/categories", authOptions());
   return parseCategoryList(payload);
+}
+
+export async function createCategory(values: CategoryInput) {
+  const payload = await apiFetch<unknown>("/categories", {
+    ...authOptions(),
+    method: "POST",
+    body: JSON.stringify(values),
+  });
+  const category = parseCategory(payload);
+  if (!category) throw new ApiError(500, null);
+  return category;
+}
+
+export async function updateCategory(id: RecordId, values: CategoryInput) {
+  const payload = await apiFetch<unknown>(
+    `/categories/${encodeURIComponent(String(id))}`,
+    {
+      ...authOptions(),
+      method: "PUT",
+      body: JSON.stringify(values),
+    },
+  );
+  const category = parseCategory(payload);
+  if (!category) throw new ApiError(500, null);
+  return category;
+}
+
+export function deleteCategory(id: RecordId) {
+  return apiFetch<void>(`/categories/${encodeURIComponent(String(id))}`, {
+    ...authOptions(),
+    method: "DELETE",
+  });
 }
 
 export async function fetchImages() {
