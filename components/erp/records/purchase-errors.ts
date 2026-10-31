@@ -12,7 +12,6 @@ export const PURCHASE_COPY = {
   emptyFiltered: "No hay compras que coincidan con los filtros.",
   emptyFilteredHelp: "Ajusta los filtros para ver otros resultados.",
   noLines: "Agrega al menos una línea para confirmar.",
-  noConversion: "Cambiar la moneda no convierte los montos.",
   notEditable: "Esta compra ya no se puede editar.",
   alreadyConfirmed: "Esta compra ya fue confirmada.",
   itemRepeated: "Ese producto y estado ya están en la compra.",
@@ -38,7 +37,7 @@ export const PURCHASE_COPY = {
   unitCostFormat:
     "Usa un número mayor o igual a 0, con máximo 2 decimales y 9 dígitos enteros.",
   taxRequired: "Ingresa el impuesto (monto).",
-  currencyInvalid: "Selecciona una moneda válida.",
+  currencyInvalid: "Selecciona una moneda activa.",
   lineInvalid: "Revisa los datos de la línea.",
   purchaseNotFound: "No encontramos esta compra. Puede que haya sido eliminada.",
 } as const;
@@ -122,6 +121,7 @@ export function purchaseErrorMessage(caught: unknown): string {
 
     if (caught.status === 422) {
       if (normalized.includes("no items")) return PURCHASE_COPY.noLines;
+      if (normalized.includes("currency")) return PURCHASE_COPY.currencyInvalid;
       if (normalized.includes("tax")) return PURCHASE_COPY.taxInvalid;
     }
 
@@ -207,6 +207,14 @@ export function mapHeaderFieldErrors(error: unknown) {
         : key === "currency_id"
           ? PURCHASE_COPY.currencyInvalid
           : "Revisa las notas de la compra. Máximo 1000 caracteres.";
+  }
+
+  if (
+    Object.keys(mapped).length === 0 &&
+    error.status === 422 &&
+    readApiMessage(error).toLowerCase().includes("currency")
+  ) {
+    mapped.currency_id = PURCHASE_COPY.currencyInvalid;
   }
 
   return mapped;

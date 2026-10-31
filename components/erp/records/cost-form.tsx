@@ -15,6 +15,7 @@ import { useSession } from "@/components/erp/session-context";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import { CurrencyChip, CurrencySelect } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import {
   FormErrorSummary,
@@ -52,6 +53,11 @@ import {
 import { fetchItemStates } from "@/components/erp/records/item-states-api";
 import { ApiError } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
+import {
+  flagCurrencyNotConfigured,
+  getCurrencyNoticeSnapshot,
+  subscribeCurrencyNotice,
+} from "@/lib/currency-notice";
 import { CURRENCY_NOT_CONFIGURED_DETAIL } from "@/lib/feedback";
 import { canWriteModule } from "@/lib/permissions";
 
@@ -84,7 +90,7 @@ const COPY = {
   costRequired: "Ingresa el costo.",
   costFormat:
     "Usa un número mayor o igual a 0, con máximo 2 decimales y 9 dígitos enteros.",
-  currencyInvalid: "Selecciona una moneda válida.",
+  currencyInvalid: "Selecciona una moneda activa.",
   duplicate: "Ya existe un costo para ese producto y estado.",
   duplicateDetail: "Ya existe un costo para ese producto y estado.",
   duplicateHelp:
@@ -202,19 +208,33 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     readPreferredCurrency,
     () => "",
   );
+  const currencyUnavailable = useSyncExternalStore(
+    subscribeCurrencyNotice,
+    getCurrencyNoticeSnapshot,
+    getCurrencyNoticeSnapshot,
+  );
 
   const cost = costResource.data;
   const products = productsResource.data ?? [];
   const itemStates = itemStatesResource.data ?? [];
   const currencies = currencyStatus?.currencies ?? [];
   const defaultCurrency = currencyStatus?.defaultCurrency ?? null;
-  const defaultCurrencyCode = defaultCurrency?.code.trim() || "USD_BCV";
   const currencyLoading =
     currencyStatus?.status === "loading" || currencyStatus?.status === "idle";
   const currencyError =
     currencyStatus?.status === "error"
       ? currencyStatus.errorMessage ?? COPY.currenciesError
       : null;
+  const currencyBlockedReason = !values.currency_id
+    ? currencyStatus?.status === "error"
+      ? currencyError ?? COPY.currenciesError
+      : currencyLoading
+        ? "Estamos consultando las monedas. Espera un momento antes de guardar."
+        : currencyUnavailable ||
+            (currencyStatus?.status === "ready" && !defaultCurrency)
+          ? CURRENCY_NOT_CONFIGURED_DETAIL
+          : null
+    : null;
 
   if (cost) {
     const key = String(cost.id);
@@ -350,6 +370,11 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     event.preventDefault();
     if (submitting) return;
 
+    if (currencyBlockedReason) {
+      setMessage(currencyBlockedReason);
+      return;
+    }
+
     const nextErrors = validate();
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -467,6 +492,7 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
             setMessage(COPY.validation);
           }
         } else if (caught.status === 503) {
+          flagCurrencyNotConfigured();
           setMessage(CURRENCY_NOT_CONFIGURED_DETAIL);
         } else {
           setMessage(translateApiError(caught).message);
@@ -551,27 +577,19 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     label: itemState.label,
   }));
 
-  const currencyOptions = currencies
-    .filter((currency) => currency.id !== null)
-    .map((currency) => ({
-      value: String(currency.id),
-      label: `${currency.code} — ${currency.name}`,
-    }));
-
-  if (
-    cost?.currency &&
-    !currencyOptions.some((option) => option.value === String(cost.currency?.id))
-  ) {
-    currencyOptions.unshift({
-      value: String(cost.currency.id),
-      label: `${cost.currency.code} — ${cost.currency.name} (moneda actual)`,
-    });
-  }
-
   const selectedCurrency = findCurrency(values.currency_id);
   const currentCurrency = editing
     ? findCurrency(initialValues.currency_id)
     : null;
+  const summaryCurrency = values.currency_id
+    ? currencies.find(
+        (currency) =>
+          currency.id !== null && String(currency.id) === values.currency_id,
+      ) ?? selectedCurrency
+    : editing
+      ? currentCurrency
+      : defaultCurrency;
+
   let currencyPreview: string;
   if (selectedCurrency) {
     currencyPreview = editing
@@ -592,12 +610,6 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     currencyPreview =
       "No hay una moneda por defecto configurada. Contacta a un administrador antes de guardar el costo.";
   }
-
-  const currencyPlaceholder = editing
-    ? currentCurrency
-      ? `Mantener moneda actual (${currentCurrency.code})`
-      : "Mantener la moneda actual"
-    : `Moneda por defecto (${defaultCurrencyCode})`;
 
   const summaryItems = costSummaryItems(errors);
 
@@ -719,19 +731,22 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
               required
               value={values.cost}
             />
-            <SelectField
-              emptyLabel="No hay monedas activas registradas."
+            <CurrencySelect
+              currentCurrency={editing ? currentCurrency : null}
               error={errors.currency_id}
-              help="Cambiar la moneda no convierte el monto; solo cambia su interpretación."
+              help="Busca por código o nombre."
               id={COST_FIELD_IDS.currency_id}
               label="Moneda"
-              loading={currencyLoading}
-              loadingLabel="Cargando monedas…"
-              loadError={currencyError}
+              nonConversionNote
               onChange={(value) => updateField("currency_id", value)}
-              onRetry={currencyStatus?.reload}
-              options={currencyOptions}
-              placeholder={currencyPlaceholder}
+              optional={!editing}
+              placeholder={
+                editing
+                  ? currentCurrency
+                    ? `Mantener moneda actual (${currentCurrency.code})`
+                    : "Mantener la moneda actual"
+                  : undefined
+              }
               value={values.currency_id}
             />
           </div>
@@ -741,11 +756,23 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
             className="rounded-2xl border border-brand/15 bg-soft-blue p-4"
             role="status"
           >
-            <p className="text-[12px] font-semibold text-ink">Moneda resultante</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12px] font-semibold text-ink">Moneda resultante</p>
+              <CurrencyChip currency={summaryCurrency} />
+            </div>
             <p className="mt-1 text-[13px] leading-6 text-muted">
               {currencyPreview}
             </p>
           </div>
+
+          {currencyBlockedReason && (
+            <p
+              className="text-[12px] font-semibold leading-5 text-alert-ink"
+              role="status"
+            >
+              {currencyBlockedReason}
+            </p>
+          )}
 
           <div className="flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
             <Link
@@ -758,6 +785,7 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
               busy={submitting}
               busyLabel="Guardando…"
               className="sm:min-w-[180px]"
+              disabled={Boolean(currencyBlockedReason)}
               type="submit"
             >
               {editing ? "Guardar cambios" : "Crear costo"}

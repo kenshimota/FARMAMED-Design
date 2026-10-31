@@ -10,7 +10,7 @@ import {
 import { getStoredToken } from "@/lib/session-store";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 
-const DEFAULT_TRANSACTION_CURRENCY_CODE = "USD_BCV";
+export const DEFAULT_TRANSACTION_CURRENCY_CODE = "USD_BCV";
 
 export type CurrencyRecord = {
   id: number | null;
@@ -18,6 +18,7 @@ export type CurrencyRecord = {
   name: string;
   symbol: string;
   rate: number | string | null;
+  isBase: boolean;
   isDefaultForTransactions: boolean;
 };
 
@@ -44,6 +45,10 @@ function readId(value: unknown) {
   return null;
 }
 
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : value === 1 || value === "true";
+}
+
 function parseCurrency(source: unknown): CurrencyRecord | null {
   if (!isRecord(source)) return null;
   const code = readText(source.code);
@@ -54,7 +59,8 @@ function parseCurrency(source: unknown): CurrencyRecord | null {
     name: readText(source.name) || code,
     symbol: readText(source.symbol),
     rate: typeof source.rate === "number" || typeof source.rate === "string" ? source.rate : null,
-    isDefaultForTransactions: source.is_default_for_transactions === true,
+    isBase: readBoolean(source.is_base),
+    isDefaultForTransactions: readBoolean(source.is_default_for_transactions),
   };
 }
 
@@ -79,11 +85,7 @@ export function useCurrencyStatus(enabled: boolean): CurrencyStatus {
     if (list.length > 0 && currencies.length === 0) throw new ApiError(500, null);
 
     const defaultCurrency =
-      currencies.find((currency) => currency.isDefaultForTransactions) ??
-      currencies.find(
-        (currency) => currency.code.toUpperCase() === DEFAULT_TRANSACTION_CURRENCY_CODE,
-      ) ??
-      null;
+      currencies.find((currency) => currency.isDefaultForTransactions) ?? null;
     if (defaultCurrency) {
       clearCurrencyNotConfigured();
     } else {

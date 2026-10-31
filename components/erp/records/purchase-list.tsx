@@ -14,6 +14,7 @@ import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { useActivityVisible } from "@/components/erp/ui/use-activity-visible";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import { CurrencyChip, CurrencySelect } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -155,13 +156,6 @@ function PurchaseListContent({
         symbol: currency.symbol,
       }));
   }, [currencyStatus?.currencies]);
-  const currencyLoading =
-    currencyStatus?.status === "loading" || currencyStatus?.status === "idle";
-  const currencyError =
-    currencyStatus?.status === "error"
-      ? currencyStatus.errorMessage ?? "No pudimos cargar las monedas."
-      : null;
-
   const purchasesLoader = useCallback(
     () =>
       fetchPurchases({
@@ -217,15 +211,6 @@ function PurchaseListContent({
     [suppliers],
   );
 
-  const currencyOptions = useMemo(
-    () =>
-      currencies.map((currency) => ({
-        value: String(currency.id),
-        label: `${currency.code} — ${currency.name}`,
-      })),
-    [currencies],
-  );
-
   if (!activityVisible) return null;
 
   function supplierFor(purchase: PurchaseRecord) {
@@ -238,7 +223,25 @@ function PurchaseListContent({
   }
 
   function currencyFor(purchase: PurchaseRecord) {
-    return resolvePurchaseCurrency(purchase.currency, currencies, purchase.currency_id);
+    return resolvePurchaseCurrency(
+      purchase.currency,
+      currencies,
+      purchase.currency_id,
+      currencyStatus?.defaultCurrency ?? null,
+    );
+  }
+
+  function currencyChipFor(purchase: PurchaseRecord) {
+    const currency = currencyFor(purchase);
+    const currencyId = purchase.currency_id ?? purchase.currency?.id ?? null;
+    return (
+      (currencyStatus?.currencies ?? []).find(
+        (item) =>
+          item.id !== null &&
+          (String(item.id) === String(currencyId) ||
+            item.code === currency?.code),
+      ) ?? currency
+    );
   }
 
   function commitFilters(next: PurchaseListFilters) {
@@ -295,12 +298,9 @@ function PurchaseListContent({
       key: "moneda",
       header: "Moneda",
       className: "whitespace-nowrap",
-      render: (purchase) => {
-        const currency = currencyFor(purchase);
-        return (
-          <span className="font-semibold text-ink">{currency.code}</span>
-        );
-      },
+      render: (purchase) => (
+        <CurrencyChip currency={currencyChipFor(purchase)} />
+      ),
     },
     {
       key: "estado",
@@ -394,7 +394,9 @@ function PurchaseListContent({
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Moneda
             </dt>
-            <dd className="mt-1 font-semibold text-ink">{currency.code}</dd>
+            <dd className="mt-1">
+              <CurrencyChip currency={currencyChipFor(purchase)} />
+            </dd>
           </div>
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
@@ -496,17 +498,13 @@ function PurchaseListContent({
             placeholder="Ej. 12"
             value={numberDraft}
           />
-          <SelectField
-            emptyLabel="No hay monedas activas registradas."
+          <CurrencySelect
+            allOptionLabel="Todas las monedas"
+            filter
+            help="Busca por código o nombre."
             id="filtro-compra-moneda"
             label="Moneda"
-            loading={currencyLoading}
-            loadingLabel="Cargando monedas…"
-            loadError={currencyError}
             onChange={(value) => updateFilter("currencyId", value)}
-            onRetry={currencyStatus?.reload}
-            options={currencyOptions}
-            placeholder="Todas las monedas"
             value={filters.currencyId}
           />
         </div>

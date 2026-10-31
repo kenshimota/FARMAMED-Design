@@ -36,7 +36,7 @@ const FIELD_ALIASES: Record<string, CostFieldKey> = {
 const FIELD_MESSAGES: Partial<Record<CostFieldKey, string>> = {
   product_id: "Selecciona un producto válido.",
   item_state_id: "Selecciona un estado de ítem válido.",
-  currency_id: "Selecciona una moneda válida.",
+  currency_id: "Selecciona una moneda activa.",
 };
 
 function costFieldMessage(rawMessage: string) {
@@ -60,6 +60,13 @@ export function mapCostFieldErrors(error: unknown) {
     const key = FIELD_ALIASES[field.toLowerCase()];
     if (!key) continue;
     mapped[key] = key === "cost" ? costFieldMessage(rawMessage) : FIELD_MESSAGES[key]!;
+  }
+
+  if (
+    Object.keys(mapped).length === 0 &&
+    error.message.trim().toLowerCase().includes("currency")
+  ) {
+    mapped.currency_id = FIELD_MESSAGES.currency_id!;
   }
 
   return mapped;

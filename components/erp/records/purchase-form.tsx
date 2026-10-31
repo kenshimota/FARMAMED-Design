@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from "react";
 import { Icon } from "@/components/icons";
@@ -17,6 +18,11 @@ import { useActivityVisible } from "@/components/erp/ui/use-activity-visible";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
+import {
+  CurrencyChip,
+  CurrencySelect,
+  type CurrencyLike,
+} from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import {
   FormErrorSummary,
@@ -58,6 +64,7 @@ import {
   purchaseCurrencyLabel,
   PurchaseTotalsSummary,
   resolvePurchaseCurrency,
+  type PurchaseDisplayCurrency,
 } from "@/components/erp/records/purchase-shared";
 import {
   SelectField,
@@ -83,6 +90,11 @@ import {
   type SupplierRecord,
 } from "@/components/erp/records/suppliers-api";
 import { ApiError } from "@/lib/api";
+import {
+  flagCurrencyNotConfigured,
+  getCurrencyNoticeSnapshot,
+  subscribeCurrencyNotice,
+} from "@/lib/currency-notice";
 import { CURRENCY_NOT_CONFIGURED_DETAIL } from "@/lib/feedback";
 import { canWriteModule } from "@/lib/permissions";
 
@@ -159,9 +171,11 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<BulkLineError[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [createCurrencyBaseline, setCreateCurrencyBaseline] = useState<
-    string | null
-  >(null);
+  const currencyUnavailable = useSyncExternalStore(
+    subscribeCurrencyNotice,
+    getCurrencyNoticeSnapshot,
+    getCurrencyNoticeSnapshot,
+  );
   const shouldResetOnHideRef = useRef(false);
 
   const purchase = purchaseResource.data;
@@ -178,12 +192,23 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
         symbol: currency.symbol,
       }));
   }, [currencyStatus?.currencies]);
+  const defaultCurrency = currencyStatus?.defaultCurrency ?? null;
   const currencyLoading =
     currencyStatus?.status === "loading" || currencyStatus?.status === "idle";
   const currencyError =
     currencyStatus?.status === "error"
       ? currencyStatus.errorMessage ?? "No pudimos cargar las monedas."
       : null;
+  const currencyBlockedReason = !values.currency_id
+    ? currencyStatus?.status === "error"
+      ? currencyError ?? "No pudimos cargar las monedas."
+      : currencyLoading
+        ? "Estamos consultando las monedas. Espera un momento antes de guardar."
+        : currencyUnavailable ||
+            (currencyStatus?.status === "ready" && !defaultCurrency)
+          ? CURRENCY_NOT_CONFIGURED_DETAIL
+          : null
+    : null;
 
   if (purchase) {
     const key = String(purchase.id);
@@ -191,7 +216,11 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       const next: PurchaseFormValues = {
         supplier_id: String(purchase.supplier_id),
         currency_id:
-          purchase.currency_id !== null ? String(purchase.currency_id) : "",
+          purchase.currency_id !== null
+            ? String(purchase.currency_id)
+            : purchase.currency
+              ? String(purchase.currency.id)
+              : "",
         notes: purchase.notes,
       };
       setValues(next);
@@ -207,28 +236,67 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
   const currencyOf = useCallback(
     (currencyId: string): PurchaseCurrency | null => {
       if (!currencyId) return null;
-      return (
-        currencies.find((currency) => String(currency.id) === currencyId) ?? null
-      );
+      const activeCurrency =
+        currencies.find((currency) => String(currency.id) === currencyId) ??
+        null;
+      if (activeCurrency) return activeCurrency;
+      if (purchase?.currency && String(purchase.currency.id) === currencyId) {
+        return purchase.currency;
+      }
+      return null;
     },
-    [currencies],
+    [currencies, purchase],
   );
 
-  const appliedCurrency = useMemo(() => {
-    return resolvePurchaseCurrency(
-      currencyOf(values.currency_id),
-      currencies,
-      values.currency_id || purchase?.currency_id || null,
-    );
-  }, [currencyOf, currencies, purchase, values.currency_id]);
+  const appliedCurrency = useMemo<PurchaseDisplayCurrency | null>(() => {
+    const selectedCurrency = currencyOf(values.currency_id);
+    if (selectedCurrency) {
+      return {
+        code: selectedCurrency.code,
+        name: selectedCurrency.name.trim() || selectedCurrency.code,
+        symbol: selectedCurrency.symbol,
+      };
+    }
+    if (editing) {
+      const fallbackId =
+        values.currency_id ||
+        (purchase?.currency_id !== null && purchase?.currency_id !== undefined
+          ? String(purchase.currency_id)
+          : purchase?.currency
+            ? String(purchase.currency.id)
+            : null);
+      return resolvePurchaseCurrency(
+        purchase?.currency ?? null,
+        currencies,
+        fallbackId,
+        defaultCurrency,
+      );
+    }
+    if (defaultCurrency) {
+      return {
+        code: defaultCurrency.code,
+        name: defaultCurrency.name.trim() || defaultCurrency.code,
+        symbol: defaultCurrency.symbol,
+      };
+    }
+    return null;
+  }, [
+    currencyOf,
+    currencies,
+    defaultCurrency,
+    editing,
+    purchase,
+    values.currency_id,
+  ]);
 
   const currentCurrency = useMemo(() => {
     return resolvePurchaseCurrency(
       purchase?.currency ?? null,
       currencies,
       purchase?.currency_id ?? null,
+      defaultCurrency,
     );
-  }, [currencies, purchase]);
+  }, [currencies, defaultCurrency, purchase]);
 
   const totals = useMemo(() => computePurchaseTotals(rows), [rows]);
 
@@ -256,21 +324,12 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       setShowSummary(false);
       setMessage(null);
       setBulkErrors([]);
-      setCreateCurrencyBaseline(null);
     };
   }, []);
 
   if (!activityVisible) return null;
 
   function updateField(field: PurchaseHeaderFieldKey, value: string) {
-    if (
-      field === "currency_id" &&
-      !editing &&
-      value &&
-      createCurrencyBaseline === null
-    ) {
-      setCreateCurrencyBaseline(value);
-    }
     setValues((current) => ({ ...current, [field]: value }));
     setMessage(null);
     setBulkErrors([]);
@@ -421,6 +480,11 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     event.preventDefault();
     if (submitting) return;
 
+    if (currencyBlockedReason) {
+      setMessage(currencyBlockedReason);
+      return;
+    }
+
     const nextErrors = validateHeader();
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -460,7 +524,8 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
         await updatePurchase(toApiId(purchaseId), {
           supplier_id: toApiId(values.supplier_id),
           notes: values.notes.trim(),
-          ...(values.currency_id
+          ...(values.currency_id &&
+          values.currency_id !== initialValues.currency_id
             ? { currency_id: toApiId(values.currency_id) }
             : {}),
         });
@@ -496,6 +561,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       } else if (bulk.length > 0) {
         setBulkErrors(bulk);
       } else if (caught instanceof ApiError && caught.status === 503) {
+        flagCurrencyNotConfigured();
         setMessage(CURRENCY_NOT_CONFIGURED_DETAIL);
       } else {
         setMessage(purchaseErrorMessage(caught));
@@ -588,17 +654,24 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     value: String(supplier.id),
     label: supplier.name,
   }));
-  const currencyOptions = currencies.map((currency) => ({
-    value: String(currency.id),
-    label: `${currency.code} — ${currency.name}`,
-  }));
 
-  const currencyChanged = editing
-    ? Boolean(
-        values.currency_id && values.currency_id !== initialValues.currency_id,
+  const currentCurrencyRecord = editing
+    ? currencyOf(
+        String(purchase?.currency_id ?? purchase?.currency?.id ?? ""),
       )
-    : createCurrencyBaseline !== null &&
-      values.currency_id !== createCurrencyBaseline;
+    : null;
+  const selectedCatalogCurrency = values.currency_id
+    ? ((currencyStatus?.currencies ?? []).find(
+        (currency) =>
+          currency.id !== null &&
+          String(currency.id) === values.currency_id,
+      ) ?? null)
+    : null;
+  const summaryCurrency: CurrencyLike | null = selectedCatalogCurrency
+    ? selectedCatalogCurrency
+    : editing
+      ? (currentCurrencyRecord ?? currentCurrency)
+      : defaultCurrency;
 
   let currencyPreview: string;
   const selectedCurrency = currencyOf(values.currency_id);
@@ -612,16 +685,30 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       ? `Los montos registrados se interpretarán en ${label}.`
       : `Los montos se guardarán en ${label}.`;
   } else if (editing) {
-    currencyPreview = `Se conserva la moneda actual: ${purchaseCurrencyLabel(currentCurrency)}.`;
+    currencyPreview = currentCurrency
+      ? `Se conserva la moneda actual: ${purchaseCurrencyLabel(currentCurrency)}.`
+      : "Sin moneda: la compra no tiene una moneda registrada ni una predeterminada.";
+  } else if (defaultCurrency) {
+    currencyPreview = `Se usará ${purchaseCurrencyLabel({
+      code: defaultCurrency.code,
+      name: defaultCurrency.name,
+      symbol: defaultCurrency.symbol,
+    })}, la moneda por defecto.`;
   } else if (currencyLoading) {
     currencyPreview = "Consultando la moneda por defecto…";
+  } else if (currencyError) {
+    currencyPreview =
+      "No pudimos cargar las monedas. Reintenta la consulta para conocer la moneda por defecto antes de guardar.";
   } else {
-    currencyPreview = `Se usará ${purchaseCurrencyLabel(currentCurrency)}, la moneda por defecto.`;
+    currencyPreview =
+      "No hay una moneda por defecto configurada. Contacta a un administrador antes de guardar la compra.";
   }
 
   const currencyPlaceholder = editing
-    ? `Mantener moneda actual (${currentCurrency.code})`
-    : `Moneda por defecto (${currentCurrency.code})`;
+    ? currentCurrencyRecord
+      ? `Mantener moneda actual (${currentCurrencyRecord.code})`
+      : "Mantener la moneda actual"
+    : undefined;
 
   const summaryItems = headerSummaryItems(errors);
 
@@ -708,18 +795,15 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
               required
               value={values.supplier_id}
             />
-            <SelectField
-              emptyLabel="No hay monedas activas registradas."
+            <CurrencySelect
+              currentCurrency={editing ? currentCurrencyRecord : null}
               error={errors.currency_id}
               help="Opcional. Las líneas heredan esta moneda y no se convierten montos."
               id={PURCHASE_HEADER_FIELD_IDS.currency_id}
               label={PURCHASE_HEADER_LABELS.currency_id}
-              loading={currencyLoading}
-              loadingLabel="Cargando monedas…"
-              loadError={currencyError}
+              nonConversionNote
               onChange={(value) => updateField("currency_id", value)}
-              onRetry={currencyStatus?.reload}
-              options={currencyOptions}
+              optional={!editing}
               placeholder={currencyPlaceholder}
               value={values.currency_id}
             />
@@ -738,20 +822,26 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
             value={values.notes}
           />
 
-          {currencyChanged && (
-            <NoticeBanner role="status" tone="warning">
-              {PURCHASE_COPY.noConversion}
-            </NoticeBanner>
-          )}
-
           <div
             aria-live="polite"
             className="rounded-2xl border border-brand/15 bg-soft-blue p-4"
             role="status"
           >
-            <p className="text-[12px] font-semibold text-ink">Moneda aplicada</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12px] font-semibold text-ink">Moneda aplicada</p>
+              <CurrencyChip currency={summaryCurrency} />
+            </div>
             <p className="mt-1 text-[13px] leading-6 text-muted">{currencyPreview}</p>
           </div>
+
+          {currencyBlockedReason && (
+            <p
+              className="text-[12px] font-semibold leading-5 text-alert-ink"
+              role="status"
+            >
+              {currencyBlockedReason}
+            </p>
+          )}
         </form>
       </section>
 
@@ -811,6 +901,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
               busy={submitting}
               busyLabel="Guardando…"
               className="w-full"
+              disabled={Boolean(currencyBlockedReason)}
               form="compra-cabecera-form"
               type="submit"
             >
