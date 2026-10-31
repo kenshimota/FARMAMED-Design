@@ -88,6 +88,9 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "admin already exists": "Ya existe un administrador. Inicia sesión.",
   "tax already exists": "Ya existe un impuesto con ese código.",
   "tax is in use": "No puedes eliminar este impuesto porque está en uso. Puedes desactivarlo.",
+  "payment type already exists": "Ya existe un tipo con ese código.",
+  "payment type has methods":
+    "No puedes cambiar la moneda ni los campos porque el tipo ya tiene métodos.",
 };
 
 export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
@@ -98,13 +101,26 @@ const KNOWN_MESSAGES: Record<string, string> = {
   "default transaction currency is not configured": CURRENCY_NOT_CONFIGURED,
   "password must be at least 8 characters long": PASSWORD_MIN_MESSAGE,
   "invalid email": INVALID_EMAIL_MESSAGE,
+  "invalid currency": "Selecciona una moneda activa.",
+  "invalid fields definition":
+    "Revisa las definiciones de campos: clave, etiqueta, tipo y longitud.",
+  "name must be between 1 and 100 characters":
+    "El nombre debe tener entre 1 y 100 caracteres.",
+  "code must match ^[A-Z0-9_]{2,30}$":
+    "El código debe tener entre 2 y 30 caracteres y usar solo mayúsculas, números o guion bajo.",
+  "description must have at most 255 characters":
+    "La descripción no puede superar los 255 caracteres.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
 
 export function translateFieldMessage(message: string) {
-  const key = message.trim().toLowerCase();
-  return KNOWN_MESSAGES[key] ?? FIELD_MESSAGE_FALLBACK;
+  const key = message.trim();
+  return (
+    KNOWN_MESSAGES[key] ??
+    KNOWN_MESSAGES[key.toLowerCase()] ??
+    FIELD_MESSAGE_FALLBACK
+  );
 }
 
 function readApiMessage(error: ApiError) {
