@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -34,7 +35,20 @@ export function FormDialog({
   const descriptionId = useId();
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [wasOpen, setWasOpen] = useState(false);
+  const [returnFocus, setReturnFocus] = useState<HTMLElement | null>(null);
+
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setReturnFocus(
+        typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null,
+      );
+    }
+  }
 
   const handleClose = useCallback(() => {
     if (closeDisabled) return;
@@ -48,8 +62,6 @@ export function FormDialog({
 
   useEffect(() => {
     if (!open) return;
-    returnFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     const panel = panelRef.current;
     const preferred = panel?.querySelector<HTMLElement>("[data-autofocus]");
@@ -103,9 +115,15 @@ export function FormDialog({
         if (previous === null) element.removeAttribute("inert");
         else element.setAttribute("inert", previous);
       }
-      returnFocusRef.current?.focus();
+      const returnTarget = returnFocus;
+      if (returnTarget?.isConnected) returnTarget.focus();
     };
-  }, [open]);
+  }, [open, returnFocus]);
+
+  useEffect(() => {
+    if (!open || !closeDisabled) return;
+    closeRef.current?.focus();
+  }, [closeDisabled, open]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -116,6 +134,7 @@ export function FormDialog({
       ref={overlayRef}
     >
       <div
+        aria-busy={closeDisabled || undefined}
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
@@ -137,10 +156,15 @@ export function FormDialog({
             )}
           </div>
           <button
+            aria-disabled={closeDisabled || undefined}
             aria-label="Cerrar"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-background hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={closeDisabled}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition-colors ${
+              closeDisabled
+                ? "cursor-not-allowed opacity-60"
+                : "hover:bg-background hover:text-ink"
+            }`}
             onClick={handleClose}
+            ref={closeRef}
             type="button"
           >
             <Icon name="close" size={18} />
