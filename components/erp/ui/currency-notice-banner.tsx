@@ -9,7 +9,7 @@ import {
   getCurrencyNoticeSnapshot,
   subscribeCurrencyNotice,
 } from "@/lib/currency-notice";
-import { CURRENCY_NOT_CONFIGURED } from "@/lib/feedback";
+import { CURRENCY_NOT_CONFIGURED_DETAIL } from "@/lib/feedback";
 
 export function CurrencyNoticeBanner() {
   const { user } = useSession();
@@ -39,7 +39,7 @@ export function CurrencyNoticeBanner() {
       role="status"
       tone="warning"
     >
-      {CURRENCY_NOT_CONFIGURED}
+      {CURRENCY_NOT_CONFIGURED_DETAIL}
     </NoticeBanner>
   );
 }

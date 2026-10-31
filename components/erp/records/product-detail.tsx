@@ -108,9 +108,9 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const relatedCandidates = [
     canReadModule(user.role, "costos")
       ? {
-          href: "/app/costos",
+          href: `/app/costos/producto/${product.id}`,
           label: "Costos",
-          description: "Módulo en preparación. El acceso depende de tu rol.",
+          description: "Costo vigente de este producto por estado de ítem.",
           icon: "calculator" as const,
         }
       : null,
@@ -118,7 +118,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
       ? {
           href: "/app/existencias",
           label: "Existencias",
-          description: "Módulo en preparación. El acceso depende de tu rol.",
+          description: "Módulo en preparación. Por ahora abre el módulo raíz.",
           icon: "box" as const,
         }
       : null,
@@ -309,8 +309,8 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
             Accesos relacionados
           </h2>
           <p className="mt-1.5 text-[12px] leading-6 text-muted">
-            Estos accesos abren el módulo raíz. Los módulos siguen en preparación y esta
-            versión no filtra sus registros por producto.
+            Costos abre la vista de este producto por estado de ítem. Existencias sigue
+            en preparación y por ahora abre el módulo raíz.
           </p>
           <nav aria-label="Módulos relacionados" className="mt-4 grid gap-3 sm:grid-cols-2">
             {relatedModules.map((module) => (
