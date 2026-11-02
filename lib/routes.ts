@@ -871,6 +871,72 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/facturas",
   },
   {
+    path: "/app/pagos",
+    title: "Pagos recibidos",
+    label: "Pagos",
+    group: "Finanzas",
+    module: "pagos",
+    icon: "coins",
+    description:
+      "Registro de pagos recibidos, con su cliente, método, moneda y efecto en la billetera.",
+    navigation: true,
+  },
+  {
+    path: "/app/pagos/nuevo",
+    title: "Registrar pago",
+    label: "Registrar pago",
+    group: "Finanzas",
+    module: "pagos",
+    icon: "coins",
+    description:
+      "Registra un pago recibido y acredita la billetera del cliente en la moneda del método.",
+    parent: "/app/pagos",
+  },
+  {
+    path: "/app/pagos/[id]",
+    title: "Detalle del pago",
+    label: "Detalle del pago",
+    group: "Finanzas",
+    module: "pagos",
+    icon: "coins",
+    description:
+      "Consulta el pago recibido y el saldo actual de la billetera del cliente.",
+    parent: "/app/pagos",
+  },
+  {
+    path: "/app/pagos/[id]/editar",
+    title: "Editar pago",
+    label: "Editar pago",
+    group: "Finanzas",
+    module: "pagos",
+    icon: "coins",
+    description:
+      "Actualiza la referencia, las notas y la fecha de un pago recibido.",
+    parent: "/app/pagos/[id]",
+  },
+  {
+    path: "/app/billeteras",
+    title: "Billeteras de clientes",
+    label: "Billeteras",
+    group: "Finanzas",
+    module: "billeteras",
+    icon: "database",
+    description:
+      "Consulta el saldo por moneda de las billeteras de los clientes y sus movimientos.",
+    navigation: true,
+  },
+  {
+    path: "/app/billeteras/[id]",
+    title: "Detalle de la billetera",
+    label: "Detalle de la billetera",
+    group: "Finanzas",
+    module: "billeteras",
+    icon: "database",
+    description:
+      "Saldo y movimientos de una billetera de cliente en orden descendente.",
+    parent: "/app/billeteras",
+  },
+  {
     path: "/app/usuarios",
     title: "Usuarios",
     label: "Usuarios",

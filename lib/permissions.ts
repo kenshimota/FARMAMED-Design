@@ -29,6 +29,8 @@ export type ModuleKey =
   | "metodos_pago"
   | "terminos_pago"
   | "facturas"
+  | "pagos"
+  | "billeteras"
   | "usuarios"
   | "roles"
   | "cuenta";
@@ -114,6 +116,14 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
     read: ["admin", "seller"],
     write: ["admin", "seller"],
   },
+  pagos: {
+    read: ["admin", "seller"],
+    write: ["admin", "seller"],
+  },
+  billeteras: {
+    read: ["admin", "seller"],
+    write: [],
+  },
   usuarios: { read: ["admin"], write: ["admin"] },
   roles: { read: ["admin"], write: [] },
   cuenta: { read: ALL_ROLES, write: [] },
@@ -130,11 +140,11 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
-    "Administra usuarios, roles, catálogos, operación, pedidos, facturas, inventario, compras, monedas, impuestos, términos de pago, métodos de pago y listas de precios.",
+    "Administra usuarios, roles, catálogos, operación, pedidos, facturas, inventario, compras, monedas, impuestos, términos de pago, métodos de pago, pagos, billeteras y listas de precios.",
   customer:
     "Consulta el catálogo en modo lectura. La vista de pedidos del cliente se incorpora en otro módulo.",
   seller:
-    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, monedas, estantes, impuestos y métodos de pago.",
+    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, monedas, estantes, impuestos, métodos de pago y billeteras.",
   dispatcher:
     "Consulta clientes, bodegas, estantes, lotes, asignaciones, monedas, impuestos y métodos de pago.",
   manager_warehouse:
@@ -195,6 +205,8 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "metodos_pago",
   "terminos_pago",
   "facturas",
+  "pagos",
+  "billeteras",
   "usuarios",
   "roles",
 ];
@@ -233,6 +245,8 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Métodos de pago", module: "metodos_pago" },
   { label: "Términos de pago", module: "terminos_pago" },
   { label: "Facturas", module: "facturas" },
+  { label: "Pagos recibidos", module: "pagos" },
+  { label: "Billeteras", module: "billeteras" },
   { label: "Usuarios", module: "usuarios" },
   { label: "Roles", module: "roles" },
   { label: "Cuenta", module: "cuenta" },
