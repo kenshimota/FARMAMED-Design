@@ -1,10 +1,10 @@
 import { Suspense, type ReactNode } from "react";
-import { ErpLoading } from "@/components/erp/erp-loading";
 import { SessionGate } from "@/components/erp/session-gate";
+import { SessionLoading } from "@/components/erp/session-loading";
 
 export default function ErpLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<ErpLoading />}>
+    <Suspense fallback={<SessionLoading />}>
       <SessionGate>{children}</SessionGate>
     </Suspense>
   );

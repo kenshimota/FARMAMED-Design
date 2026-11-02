@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon } from "@/components/icons";
+import { CustomerAccountView } from "@/components/erp/customer-account";
 import {
   getRolePresentation,
   hasOperationalModules,
@@ -10,6 +11,9 @@ import { useSession } from "@/components/erp/session-context";
 
 export function AccountView() {
   const { user, logout } = useSession();
+
+  if (user.role === "customer") return <CustomerAccountView />;
+
   const role = getRolePresentation(user.role);
   const catalogOnly = isRole(user.role) && !hasOperationalModules(user.role);
 
