@@ -10,6 +10,7 @@ export type ProductRecord = {
   reference: string;
   category_id: RecordId;
   image_id: RecordId;
+  tax_id: RecordId | null;
 };
 
 export type CategoryRecord = {
@@ -64,6 +65,7 @@ export function parseProduct(source: unknown): ProductRecord | null {
   const id = readId(record.id);
   const categoryId = readId(record.category_id);
   const imageId = readId(record.image_id);
+  const taxId = readId(record.tax_id);
   const name = readText(record.name);
   const reference = readText(record.reference);
   if (id === null || categoryId === null || imageId === null || !name || !reference) {
@@ -77,6 +79,7 @@ export function parseProduct(source: unknown): ProductRecord | null {
     reference,
     category_id: categoryId,
     image_id: imageId,
+    tax_id: taxId,
   };
 }
 
@@ -174,6 +177,8 @@ function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
 }
 
+// El filtro por `tax_id` del listado se resuelve en el cliente: `GET /products`
+// todavía no acepta filtros. La consulta en servidor depende de FDN-04.
 export async function fetchProducts() {
   const payload = await apiFetch<unknown>("/products", authOptions());
   return parseProductList(payload);

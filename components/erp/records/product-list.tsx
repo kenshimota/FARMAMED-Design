@@ -24,8 +24,9 @@ import {
   getImageSource,
   type ProductRecord,
 } from "@/components/erp/records/records-api";
-import { canWriteModule } from "@/lib/permissions";
+import { canReadModule, canWriteModule } from "@/lib/permissions";
 import { formatInteger } from "@/lib/format";
+import { fetchTaxes, formatTaxRate } from "@/lib/finance/taxes-api";
 import { LARGE_LIST_NOTICE, LARGE_LIST_THRESHOLD } from "@/lib/feedback";
 
 function productCountLabel(count: number) {
@@ -38,56 +39,112 @@ export function ProductListPage() {
   const { user } = useSession();
   const toast = useToast();
   const canWrite = canWriteModule(user.role, "catalogo");
+  const canReadTaxes = canReadModule(user.role, "impuestos");
   const productsResource = useAsyncResource(fetchProducts);
   const categoriesResource = useAsyncResource(fetchCategories);
+  const taxesResource = useAsyncResource(fetchTaxes, { enabled: canReadTaxes });
   const imagesResource = useAsyncResource(fetchImages);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [taxFilter, setTaxFilter] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
 
   const products = productsResource.data ?? NO_PRODUCTS;
   const categories = categoriesResource.data ?? [];
+  const taxes = taxesResource.data ?? [];
   const images = imagesResource.data ?? [];
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return products.filter((product) => {
       if (categoryFilter && String(product.category_id) !== categoryFilter) return false;
+      if (
+        canReadTaxes &&
+        taxFilter &&
+        (product.tax_id === null || String(product.tax_id) !== taxFilter)
+      ) {
+        return false;
+      }
       if (!normalizedQuery) return true;
       return [product.name, product.reference, product.description].some((value) =>
         value.toLowerCase().includes(normalizedQuery),
       );
     });
-  }, [categoryFilter, products, query]);
+  }, [canReadTaxes, categoryFilter, products, query, taxFilter]);
 
   const hasQuery = query.trim().length > 0;
   const hasCategory = Boolean(categoryFilter);
-  const filtersActive = hasQuery || hasCategory;
+  const hasTax = canReadTaxes && Boolean(taxFilter);
+  const filtersActive = hasQuery || hasCategory || hasTax;
   const totalProductsLabel = productCountLabel(products.length);
   const countLabel = filtersActive
     ? `Mostrando ${formatInteger(filteredProducts.length)} de ${totalProductsLabel}`
     : totalProductsLabel;
   const imagesLoading = imagesResource.status === "loading";
+  const taxesLoading = taxesResource.status === "loading";
   const filteredEmptyDescription =
-    hasQuery && hasCategory
-      ? "No hay productos que coincidan con la búsqueda y la categoría seleccionada."
-      : hasCategory
-        ? "No hay productos en la categoría seleccionada."
-        : "No hay productos que coincidan con la búsqueda.";
+    hasQuery && (hasCategory || hasTax)
+      ? "No hay productos que coincidan con la búsqueda y los filtros seleccionados."
+      : hasCategory && hasTax
+        ? "No hay productos que coincidan con la categoría y el impuesto seleccionados."
+        : hasCategory
+          ? "No hay productos en la categoría seleccionada."
+          : hasTax
+            ? "No hay productos con el impuesto seleccionado."
+            : "No hay productos que coincidan con la búsqueda.";
 
   const categoryOptions = categories.map((category) => ({
     value: String(category.id),
     label: category.name,
   }));
 
+  const taxOptions = taxes.map((tax) => ({
+    value: String(tax.id),
+    label: `${tax.code} — ${tax.name} (${formatTaxRate(tax.rate)})`,
+  }));
+
   function categoryNameFor(id: ProductRecord["category_id"]) {
     return findById(categories, id)?.name ?? `Categoría #${id}`;
+  }
+
+  function taxLabelFor(product: ProductRecord) {
+    if (product.tax_id === null) return "Sin impuesto";
+    const tax = findById(taxes, product.tax_id);
+    if (tax) return `${tax.code} — ${tax.name} (${formatTaxRate(tax.rate)})`;
+    if (taxesLoading) return "Cargando impuesto…";
+    return `Impuesto #${product.tax_id}`;
   }
 
   function imageSourceFor(product: ProductRecord) {
     const image = findById(images, product.image_id);
     return getImageSource(image);
   }
+
+  const taxColumn: RecordsTableColumn<ProductRecord> = {
+    key: "impuesto",
+    header: "Impuesto",
+    render: (product) => {
+      if (product.tax_id === null) {
+        return <span className="text-muted">Sin impuesto</span>;
+      }
+      const tax = findById(taxes, product.tax_id);
+      if (!tax) {
+        return (
+          <span className="text-muted">
+            {taxesLoading ? "Cargando impuesto…" : `Impuesto #${product.tax_id}`}
+          </span>
+        );
+      }
+      return (
+        <span className="block">
+          <span className="block font-semibold text-ink">{tax.name}</span>
+          <span className="mt-1 block font-mono text-[11px] text-muted">
+            {tax.code} · {formatTaxRate(tax.rate)}
+          </span>
+        </span>
+      );
+    },
+  };
 
   const columns: RecordsTableColumn<ProductRecord>[] = [
     {
@@ -128,6 +185,7 @@ export function ProductListPage() {
       header: "Categoría",
       render: (product) => <span>{categoryNameFor(product.category_id)}</span>,
     },
+    ...(canReadTaxes ? [taxColumn] : []),
     {
       key: "descripcion",
       header: "Descripción",
@@ -196,6 +254,12 @@ export function ProductListPage() {
             <p className="mt-2 text-[12px] text-muted">
               {categoryNameFor(product.category_id)}
             </p>
+            {canReadTaxes && (
+              <p className="mt-1 text-[12px] text-muted">
+                <span className="font-semibold text-ink">Impuesto:</span>{" "}
+                {taxLabelFor(product)}
+              </p>
+            )}
           </div>
         </div>
         <p className="mt-3 line-clamp-3 text-[13px] leading-6 text-muted">
@@ -219,7 +283,11 @@ export function ProductListPage() {
             </Link>
           ) : undefined
         }
-        description="Consulta el catálogo de productos con su categoría e imagen."
+        description={
+          canReadTaxes
+            ? "Consulta el catálogo de productos con su categoría, impuesto e imagen."
+            : "Consulta el catálogo de productos con su categoría e imagen."
+        }
         eyebrow="Catálogo"
         title="Productos"
       />
@@ -240,8 +308,14 @@ export function ProductListPage() {
             <div aria-hidden="true" className="reload-bar" />
           )}
           <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(200px,260px)] sm:items-end">
-              <div>
+            <div
+              className={
+                canReadTaxes
+                  ? "grid gap-4 sm:grid-cols-2 sm:items-end lg:grid-cols-[minmax(0,1fr)_minmax(180px,220px)_minmax(180px,240px)]"
+                  : "grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(200px,260px)] sm:items-end"
+              }
+            >
+              <div className={canReadTaxes ? "sm:col-span-2 lg:col-span-1" : undefined}>
                 <label
                   className="mb-2 block text-[12px] font-semibold text-ink"
                   htmlFor="buscar-productos"
@@ -281,6 +355,26 @@ export function ProductListPage() {
                 placeholder="Todas las categorías"
                 value={categoryFilter}
               />
+
+              {canReadTaxes && (
+                <SelectField
+                  emptyLabel="No hay impuestos registrados."
+                  id="filtro-impuesto"
+                  label="Impuesto"
+                  loadError={
+                    taxesResource.status === "error"
+                      ? "No pudimos cargar los impuestos."
+                      : null
+                  }
+                  loading={taxesLoading}
+                  loadingLabel="Cargando impuestos…"
+                  onChange={setTaxFilter}
+                  onRetry={taxesResource.reload}
+                  options={taxOptions}
+                  placeholder="Todos los impuestos"
+                  value={taxFilter}
+                />
+              )}
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
@@ -293,6 +387,7 @@ export function ProductListPage() {
                   onClick={() => {
                     setQuery("");
                     setCategoryFilter("");
+                    setTaxFilter("");
                   }}
                   type="button"
                 >
@@ -348,6 +443,7 @@ export function ProductListPage() {
                   onClick={() => {
                     setQuery("");
                     setCategoryFilter("");
+                    setTaxFilter("");
                   }}
                   type="button"
                 >
@@ -359,7 +455,11 @@ export function ProductListPage() {
             />
           ) : (
             <RecordsTable
-              caption="Productos del catálogo con su referencia, categoría y descripción"
+              caption={
+                canReadTaxes
+                  ? "Productos del catálogo con su referencia, categoría, impuesto y descripción"
+                  : "Productos del catálogo con su referencia, categoría y descripción"
+              }
               columns={columns}
               getRowKey={(product) => String(product.id)}
               getRowLabel={(product) => product.name}

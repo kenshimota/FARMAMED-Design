@@ -7,6 +7,7 @@ export const PRODUCT_FIELD_IDS = {
   description: "producto-descripcion",
   reference: "producto-referencia",
   category_id: "producto-categoria",
+  tax_id: "producto-impuesto",
   image: "producto-imagen",
 } as const;
 
@@ -17,6 +18,7 @@ export const PRODUCT_FIELD_LABELS: Record<ProductFieldKey, string> = {
   description: "Descripción",
   reference: "Referencia",
   category_id: "Categoría",
+  tax_id: "Impuesto",
   image: "Imagen",
 };
 
@@ -26,6 +28,8 @@ const FIELD_ALIASES: Record<string, ProductFieldKey> = {
   reference: "reference",
   category_id: "category_id",
   categoryid: "category_id",
+  tax_id: "tax_id",
+  taxid: "tax_id",
   image: "image",
   image_id: "image",
   imageid: "image",
@@ -41,6 +45,7 @@ const MESSAGE_ALIASES: Record<string, string> = {
 
 const SPECIFIC_FIELD_MESSAGES: Partial<Record<ProductFieldKey, string>> = {
   category_id: "Selecciona una categoría válida.",
+  tax_id: "Selecciona un impuesto válido.",
   image: "Selecciona una imagen válida.",
 };
 
