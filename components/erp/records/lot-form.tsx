@@ -45,6 +45,7 @@ import {
   isValidIsoDate,
   lotSectionLabel,
   lotShelfLabel,
+  normalizeDateInput,
   LotSyncNotice,
 } from "@/components/erp/records/lot-shared";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
@@ -97,12 +98,6 @@ function parseQuantity(value: string) {
   if (!INTEGER_PATTERN.test(trimmed)) return null;
   const parsed = Number(trimmed);
   return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-function normalizeDateInput(value: string) {
-  const trimmed = value.trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
-  return "";
 }
 
 type LotFormPageProps = {

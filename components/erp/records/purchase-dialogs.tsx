@@ -30,12 +30,15 @@ export function PurchaseConfirmDialog({
 
   return (
     <ConfirmDialog
-      confirmBusyLabel="Guardando…"
+      confirmBusyLabel="Confirmando…"
       confirmLabel={PURCHASE_COPY.confirmPurchase}
       description={
-        purchase
-          ? "Se actualizarán costos y existencias y no se podrá editar."
-          : undefined
+        purchase ? (
+          <>
+            <span className="block">{PURCHASE_COPY.confirmIrreversible}</span>
+            <span className="mt-1 block">{PURCHASE_COPY.pendingLocation}</span>
+          </>
+        ) : undefined
       }
       onClose={onClose}
       onConfirm={async () => {
