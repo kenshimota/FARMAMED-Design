@@ -341,6 +341,15 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
             >
               Volver a pedidos
             </Link>
+            {order.invoice?.id !== null && order.invoice?.id !== undefined && (
+              <Link
+                className="button-base button-secondary min-h-11 px-5 text-[13px]"
+                href={`/app/facturas/${order.invoice.id}`}
+              >
+                Ver factura
+                <Icon name="arrow-up-right" size={16} />
+              </Link>
+            )}
             {canWrite && (
               <Link
                 className="button-base button-primary min-h-11 px-5 text-[13px]"

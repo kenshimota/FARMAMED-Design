@@ -849,6 +849,28 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/terminos-de-pago/[id]",
   },
   {
+    path: "/app/facturas",
+    title: "Facturas",
+    label: "Facturas",
+    group: "Finanzas",
+    module: "facturas",
+    icon: "coins",
+    description:
+      "Consulta de facturas emitidas con su estado de pago, saldo pendiente e historial de pagos.",
+    navigation: true,
+  },
+  {
+    path: "/app/facturas/[id]",
+    title: "Detalle de la factura",
+    label: "Detalle de la factura",
+    group: "Finanzas",
+    module: "facturas",
+    icon: "coins",
+    description:
+      "Encabezado, líneas snapshot, totales, saldo, vencimiento e historial de pagos de una factura.",
+    parent: "/app/facturas",
+  },
+  {
     path: "/app/usuarios",
     title: "Usuarios",
     label: "Usuarios",
