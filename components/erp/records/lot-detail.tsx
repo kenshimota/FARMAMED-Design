@@ -11,9 +11,12 @@ import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import { LotDeleteDialog } from "@/components/erp/records/lot-delete-dialog";
 import {
   getLotExpiryStatus,
+  lotActorLabel,
   LotExpiryBadge,
   lotItemStateLabel,
   lotLocationLabel,
+  lotLocationStatusLabel,
+  LotLocationStatusBadge,
   lotProductName,
   lotProductReference,
   lotSectionLabel,
@@ -29,8 +32,18 @@ import {
   RecordsLoadError,
 } from "@/components/erp/records/record-states";
 import { isPositiveRecordId } from "@/components/erp/records/records-api";
-import { formatDateOnly, formatInteger } from "@/lib/format";
+import { formatDateOnly, formatDateTime, formatInteger } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
+
+function locationMoment(
+  date: string | null,
+  actor: Parameters<typeof lotActorLabel>[0],
+) {
+  if (!date) return null;
+  const formatted = formatDateTime(date);
+  const actorLabel = lotActorLabel(actor);
+  return actorLabel ? `${formatted} · ${actorLabel}` : formatted;
+}
 
 export function LotDetailPage({ lotId }: { lotId: string }) {
   const { user } = useSession();
@@ -63,6 +76,7 @@ function LotDetailContent({ lotId }: { lotId: string }) {
   const canWrite = canWriteModule(user.role, "lotes");
   const canReadExistencias = canReadModule(user.role, "existencias");
   const canReadWarehouses = canReadModule(user.role, "bodegas");
+  const canWriteBandeja = canWriteModule(user.role, "bandeja_almacen");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConflict, setDeleteConflict] = useState(false);
 
@@ -116,8 +130,13 @@ function LotDetailContent({ lotId }: { lotId: string }) {
   const itemStateLabel = lotItemStateLabel(lot);
   const available = lotAvailable(lot);
   const expiryStatus = getLotExpiryStatus(lot.expiration_date);
-  const warehouseHref = `/app/bodegas/${lot.warehouse_id}`;
-  const shelfHref = `/app/bodegas/${lot.warehouse_id}/estantes/${lot.shelf_id}`;
+  const located = lot.location_status === "located";
+  const warehouseHref =
+    lot.warehouse_id !== null ? `/app/bodegas/${lot.warehouse_id}` : null;
+  const shelfHref =
+    lot.warehouse_id !== null && lot.shelf_id !== null
+      ? `/app/bodegas/${lot.warehouse_id}/estantes/${lot.shelf_id}`
+      : null;
   const stocksHref = `/app/existencias/producto/${lot.product_id}`;
 
   return (
@@ -138,6 +157,15 @@ function LotDetailContent({ lotId }: { lotId: string }) {
               >
                 Ver existencias del producto
                 <Icon name="box" size={16} />
+              </Link>
+            )}
+            {canWriteBandeja && !located && (
+              <Link
+                className="button-base button-primary min-h-11 px-5 text-[13px]"
+                href={`/app/almacen/bandeja?lot_number=${encodeURIComponent(lot.number)}`}
+              >
+                Ir a la bandeja de almacén
+                <Icon name="warehouse" size={17} />
               </Link>
             )}
             {canWrite && (
@@ -328,8 +356,9 @@ function LotDetailContent({ lotId }: { lotId: string }) {
         </div>
 
         <p className="mt-4 text-[12px] leading-6 text-muted">
-          El disponible se calcula como existencia − reservado. No se envía al
-          API y no modifica las existencias agregadas.
+          El disponible se calcula como existencia − reservado. En lotes
+          pendientes o en ubicación el disponible es 0. No se envía al API y no
+          modifica las existencias agregadas.
         </p>
       </section>
 
@@ -338,62 +367,121 @@ function LotDetailContent({ lotId }: { lotId: string }) {
         className="rounded-[28px] border border-line bg-surface p-5 shadow-[0_18px_60px_rgba(27,12,104,0.04)] sm:p-7"
       >
         <span className="eyebrow">Ubicación física</span>
-        <h2
-          className="mt-3 text-xl font-semibold tracking-[-0.03em] text-ink"
-          id="ubicacion-lote"
-        >
-          {lotLocationLabel(lot)}
-        </h2>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <h2
+            className="text-xl font-semibold tracking-[-0.03em] text-ink"
+            id="ubicacion-lote"
+          >
+            {lotLocationStatusLabel(lot, lot.location_started_by)}
+          </h2>
+          <LotLocationStatusBadge
+            label={lotLocationStatusLabel(lot, lot.location_started_by)}
+            lot={lot}
+          />
+        </div>
 
-        <dl className="mt-5 grid gap-5 sm:grid-cols-3">
+        {!located && (
+          <NoticeBanner className="mt-5" role="status" tone="warning">
+            {lot.location_status === "pending"
+              ? "Un lote pendiente no está disponible para la venta."
+              : "Mientras el lote no esté ubicado, no está disponible para la venta."}
+          </NoticeBanner>
+        )}
+
+        {located ? (
+          <dl className="mt-5 grid gap-5 sm:grid-cols-3">
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                Bodega
+              </dt>
+              <dd className="mt-1.5 text-[14px] text-ink">
+                {canReadWarehouses && warehouseHref ? (
+                  <Link
+                    className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
+                    href={warehouseHref}
+                  >
+                    {lotWarehouseName(lot)}
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-ink">
+                    {lotWarehouseName(lot)}
+                  </span>
+                )}
+                {lot.warehouse?.address && (
+                  <span className="mt-1 block text-[12px] leading-5 text-muted">
+                    {lot.warehouse.address}
+                  </span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                Estante
+              </dt>
+              <dd className="mt-1.5 text-[14px] text-ink">
+                {shelfHref ? (
+                  <Link
+                    className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
+                    href={shelfHref}
+                  >
+                    {lotShelfLabel(lot.shelf, lot.shelf_id)}
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-ink">
+                    {lotShelfLabel(lot.shelf, lot.shelf_id)}
+                  </span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                Sección
+              </dt>
+              <dd className="mt-1.5 text-[14px] text-ink">
+                {shelfHref ? (
+                  <Link
+                    className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
+                    href={shelfHref}
+                  >
+                    {lotSectionLabel(lot.section, lot.section_id)}
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-ink">
+                    {lotSectionLabel(lot.section, lot.section_id)}
+                  </span>
+                )}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="mt-5 text-[13px] leading-6 text-muted">
+            Este lote aún no tiene bodega, estante ni sección asignados.
+            {canWriteBandeja
+              ? " La ubicación se asigna desde la bandeja de almacén."
+              : canWrite
+                ? " Puedes completar la ubicación al editar el lote."
+                : ""}
+          </p>
+        )}
+
+        <dl className="mt-5 grid gap-5 border-t border-line pt-5 sm:grid-cols-2">
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Bodega
+              Inicio de ubicación
             </dt>
-            <dd className="mt-1.5 text-[14px] text-ink">
-              {canReadWarehouses ? (
-                <Link
-                  className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
-                  href={warehouseHref}
-                >
-                  {lotWarehouseName(lot)}
-                </Link>
-              ) : (
-                <span className="font-semibold text-ink">
-                  {lotWarehouseName(lot)}
-                </span>
-              )}
-              {lot.warehouse?.address && (
-                <span className="mt-1 block text-[12px] leading-5 text-muted">
-                  {lot.warehouse.address}
-                </span>
-              )}
+            <dd className="mt-1.5 text-[13px] leading-6 text-ink">
+              {locationMoment(
+                lot.location_started_at,
+                lot.location_started_by,
+              ) ?? "Aún no se inició."}
             </dd>
           </div>
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Estante
+              Ubicación asignada
             </dt>
-            <dd className="mt-1.5 text-[14px] text-ink">
-              <Link
-                className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
-                href={shelfHref}
-              >
-                {lotShelfLabel(lot.shelf, lot.shelf_id)}
-              </Link>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Sección
-            </dt>
-            <dd className="mt-1.5 text-[14px] text-ink">
-              <Link
-                className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
-                href={shelfHref}
-              >
-                {lotSectionLabel(lot.section, lot.section_id)}
-              </Link>
+            <dd className="mt-1.5 text-[13px] leading-6 text-ink">
+              {locationMoment(lot.located_at, lot.located_by) ?? "Pendiente."}
             </dd>
           </div>
         </dl>

@@ -48,6 +48,13 @@ export type LotShelf = {
   sections: LotShelfSection[];
 };
 
+export type LotLocationStatus = "pending" | "in_progress" | "located";
+
+export type LotActor = {
+  id: RecordId | null;
+  username: string;
+};
+
 export type LotRecord = {
   id: RecordId;
   number: string;
@@ -56,9 +63,14 @@ export type LotRecord = {
   expiration_date: string;
   stock: number;
   reserved: number;
-  warehouse_id: RecordId;
-  shelf_id: RecordId;
-  section_id: RecordId;
+  warehouse_id: RecordId | null;
+  shelf_id: RecordId | null;
+  section_id: RecordId | null;
+  location_status: LotLocationStatus;
+  location_started_at: string | null;
+  located_at: string | null;
+  location_started_by: LotActor | null;
+  located_by: LotActor | null;
   product: LotProduct | null;
   item_state: LotItemState | null;
   warehouse: LotWarehouse | null;
@@ -75,6 +87,7 @@ export type LotFilters = {
   number?: string;
   expired?: boolean;
   expiring_before?: string;
+  location_status?: LotLocationStatus;
 };
 
 export type LotInput = {
@@ -132,6 +145,25 @@ function unwrapRecord(payload: unknown) {
 function readNested(source: Record<string, unknown>, key: string) {
   const value = source[key];
   return isRecord(value) ? value : null;
+}
+
+function readTimestamp(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function parseLotLocationStatus(value: unknown): LotLocationStatus | null {
+  return value === "pending" || value === "in_progress" || value === "located"
+    ? value
+    : null;
+}
+
+export function parseLotActor(value: unknown): LotActor | null {
+  if (isRecord(value)) {
+    const id = readId(value.id);
+    return { id, username: readText(value.username) };
+  }
+  const id = readId(value);
+  return id === null ? null : { id, username: "" };
 }
 
 export function parseLotProduct(source: unknown): LotProduct | null {
@@ -248,13 +280,16 @@ export function parseLot(source: unknown): LotRecord | null {
     !number ||
     productId === null ||
     itemStateId === null ||
-    !expirationDate ||
-    warehouseId === null ||
-    shelfId === null ||
-    sectionId === null
+    !expirationDate
   ) {
     return null;
   }
+
+  const hasLocation =
+    warehouseId !== null && shelfId !== null && sectionId !== null;
+  const locationStatus =
+    parseLotLocationStatus(record.location_status) ??
+    (hasLocation ? "located" : "pending");
 
   return {
     id,
@@ -267,6 +302,13 @@ export function parseLot(source: unknown): LotRecord | null {
     warehouse_id: warehouseId,
     shelf_id: shelfId,
     section_id: sectionId,
+    location_status: locationStatus,
+    location_started_at: readTimestamp(record.location_started_at),
+    located_at: readTimestamp(record.located_at),
+    location_started_by:
+      parseLotActor(record.started_by) ??
+      parseLotActor(record.location_started_by),
+    located_by: parseLotActor(record.located_by),
     product: parseLotProduct(productNested),
     item_state: parseLotItemState(itemStateNested),
     warehouse: parseLotWarehouse(warehouseNested),
@@ -298,8 +340,10 @@ export function parseLotList(payload: unknown): LotRecord[] {
   );
 }
 
-export function lotAvailable(lot: Pick<LotRecord, "stock" | "reserved">) {
-  return lot.stock - lot.reserved;
+export function lotAvailable(
+  lot: Pick<LotRecord, "stock" | "reserved" | "location_status">,
+) {
+  return lot.location_status === "located" ? lot.stock - lot.reserved : 0;
 }
 
 function authOptions(): { token?: string } {
@@ -362,6 +406,9 @@ export async function fetchLots(filters: LotFilters = {}) {
   }
   const expiringBefore = filters.expiring_before?.trim();
   if (expiringBefore) query.set("expiring_before", expiringBefore);
+  if (filters.location_status) {
+    query.set("location_status", filters.location_status);
+  }
 
   const suffix = query.toString();
   const payload = await apiFetch<unknown>(

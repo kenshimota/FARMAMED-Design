@@ -29,17 +29,23 @@ import {
   type ProductRecord,
 } from "@/components/erp/records/records-api";
 import { fetchImagesByIds } from "@/components/erp/records/images-api";
-import { canWriteModule } from "@/lib/permissions";
+import { canReadModule, canWriteModule } from "@/lib/permissions";
 import { formatInteger } from "@/lib/format";
+import { fetchTaxes, formatTaxRate } from "@/lib/finance/taxes-api";
+
+const PRODUCT_FILTER_KEYS = ["category_id"] as const;
+const PRODUCT_FILTER_KEYS_WITH_TAX = ["category_id", "tax_id"] as const;
 
 export function ProductListPage() {
   const { user } = useSession();
   const toast = useToast();
   const canWrite = canWriteModule(user.role, "catalogo");
+  const canReadTaxes = canReadModule(user.role, "impuestos");
   const categoriesResource = useAsyncResource(fetchCategories);
+  const taxesResource = useAsyncResource(fetchTaxes, { enabled: canReadTaxes });
   const list = useServerList<ProductRecord>({
     loader: (request) => fetchProductPage(request),
-    filterKeys: ["category_id"],
+    filterKeys: canReadTaxes ? PRODUCT_FILTER_KEYS_WITH_TAX : PRODUCT_FILTER_KEYS,
     defaultSort: "id",
   });
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
@@ -50,10 +56,13 @@ export function ProductListPage() {
 
   const products = list.items;
   const categories = categoriesResource.data ?? [];
+  const taxes = taxesResource.data ?? [];
   const categoryFilter = list.filters.category_id ?? "";
+  const taxFilter = canReadTaxes ? list.filters.tax_id ?? "" : "";
   const hasQuery = Boolean(list.request.q);
   const hasCategory = Boolean(categoryFilter);
-  const filtersActive = hasQuery || hasCategory;
+  const hasTax = canReadTaxes && Boolean(taxFilter);
+  const filtersActive = hasQuery || hasCategory || hasTax;
 
   const imageIds = useMemo(
     () => [...new Set(products.map((product) => String(product.image_id)))],
@@ -93,6 +102,11 @@ export function ProductListPage() {
     label: category.name,
   }));
 
+  const taxOptions = taxes.map((tax) => ({
+    value: String(tax.id),
+    label: `${tax.code} — ${tax.name} (${formatTaxRate(tax.rate)})`,
+  }));
+
   const chips: FilterChip[] = [];
   if (hasQuery) {
     chips.push({
@@ -114,14 +128,71 @@ export function ProductListPage() {
       onRemove: () => list.setFilter("category_id", ""),
     });
   }
+  if (hasTax) {
+    chips.push({
+      id: "tax_id",
+      label: `Impuesto: ${
+        taxOptions.find((option) => option.value === taxFilter)?.label ??
+        `#${taxFilter}`
+      }`,
+      onRemove: () => list.setFilter("tax_id", ""),
+    });
+  }
+
+  const emptyFilterDescription =
+    hasQuery && (hasCategory || hasTax)
+      ? "No hay productos que coincidan con la búsqueda y los filtros seleccionados."
+      : hasCategory && hasTax
+        ? "No hay productos que coincidan con la categoría y el impuesto seleccionados."
+        : hasCategory
+          ? "No hay productos en la categoría seleccionada."
+          : hasTax
+            ? "No hay productos con el impuesto seleccionado."
+            : "No hay productos que coincidan con la búsqueda.";
 
   function categoryNameFor(id: ProductRecord["category_id"]) {
     return findById(categories, id)?.name ?? `Categoría #${id}`;
   }
 
+  function taxLabelFor(product: ProductRecord) {
+    if (product.tax_id === null) return "Sin impuesto";
+    const tax = findById(taxes, product.tax_id);
+    if (tax) return `${tax.code} — ${tax.name} (${formatTaxRate(tax.rate)})`;
+    if (taxesResource.status === "loading") return "Cargando impuesto…";
+    return `Impuesto #${product.tax_id}`;
+  }
+
   function imageSourceFor(product: ProductRecord) {
     return getImageSource(imagesById[String(product.image_id)]);
   }
+
+  const taxColumn: RecordsTableColumn<ProductRecord> = {
+    key: "impuesto",
+    header: "Impuesto",
+    render: (product) => {
+      if (product.tax_id === null) {
+        return <span className="text-muted">Sin impuesto</span>;
+      }
+      const tax = findById(taxes, product.tax_id);
+      if (!tax) {
+        return (
+          <span className="text-muted">
+            {taxesResource.status === "loading"
+              ? "Cargando impuesto…"
+              : `Impuesto #${product.tax_id}`}
+          </span>
+        );
+      }
+      return (
+        <span className="block">
+          <span className="block font-semibold text-ink">{tax.name}</span>
+          <span className="mt-1 block font-mono text-[11px] text-muted">
+            {tax.code} · {formatTaxRate(tax.rate)}
+          </span>
+        </span>
+      );
+    },
+  };
 
   const columns: RecordsTableColumn<ProductRecord>[] = [
     {
@@ -162,6 +233,7 @@ export function ProductListPage() {
       header: "Categoría",
       render: (product) => <span>{categoryNameFor(product.category_id)}</span>,
     },
+    ...(canReadTaxes ? [taxColumn] : []),
     {
       key: "descripcion",
       header: "Descripción",
@@ -230,6 +302,12 @@ export function ProductListPage() {
             <p className="mt-2 text-[12px] text-muted">
               {categoryNameFor(product.category_id)}
             </p>
+            {canReadTaxes && (
+              <p className="mt-1 text-[12px] text-muted">
+                <span className="font-semibold text-ink">Impuesto:</span>{" "}
+                {taxLabelFor(product)}
+              </p>
+            )}
           </div>
         </div>
         <p className="mt-3 line-clamp-3 text-[13px] leading-6 text-muted">
@@ -253,13 +331,17 @@ export function ProductListPage() {
             </Link>
           ) : undefined
         }
-        description="Consulta el catálogo de productos con su categoría e imagen."
+        description={
+          canReadTaxes
+            ? "Consulta el catálogo de productos con su categoría, impuesto e imagen."
+            : "Consulta el catálogo de productos con su categoría e imagen."
+        }
         eyebrow="Catálogo"
         title="Productos"
       />
 
       <FilterBar
-        activeCount={Number(hasQuery) + Number(hasCategory)}
+        activeCount={Number(hasQuery) + Number(hasCategory) + Number(hasTax)}
         chips={chips}
         id="productos-filtros"
         loading={list.status === "loading"}
@@ -314,6 +396,25 @@ export function ProductListPage() {
           placeholder="Todas las categorías"
           value={categoryFilter}
         />
+        {canReadTaxes && (
+          <SelectField
+            emptyLabel="No hay impuestos registrados."
+            id="filtro-impuesto"
+            label="Impuesto"
+            loadError={
+              taxesResource.status === "error"
+                ? "No pudimos cargar los impuestos."
+                : null
+            }
+            loading={taxesResource.status === "loading"}
+            loadingLabel="Cargando impuestos…"
+            onChange={(value) => list.setFilter("tax_id", value)}
+            onRetry={taxesResource.reload}
+            options={taxOptions}
+            placeholder="Todos los impuestos"
+            value={taxFilter}
+          />
+        )}
         <SelectField
           help="El orden se aplica en el servidor y vuelve a la primera página."
           id="orden-productos"
@@ -431,7 +532,7 @@ export function ProductListPage() {
                       ? `Hay ${formatInteger(
                           list.meta.total,
                         )} productos en total, pero esta página no tiene filas.`
-                      : "No hay resultados con estos filtros. Ajusta la búsqueda o la categoría."
+                      : emptyFilterDescription
                   }
                   title={
                     list.isPageOutOfRange
@@ -443,7 +544,11 @@ export function ProductListPage() {
             ) : (
               <RecordsTable
                 busy={list.status === "refreshing"}
-                caption="Productos del catálogo con su referencia, categoría y descripción"
+                caption={
+                  canReadTaxes
+                    ? "Productos del catálogo con su referencia, categoría, impuesto y descripción"
+                    : "Productos del catálogo con su referencia, categoría y descripción"
+                }
                 columns={columns}
                 getRowKey={(product) => String(product.id)}
                 getRowLabel={(product) => product.name}
