@@ -45,6 +45,9 @@ function StoreProductContent({
   );
   const [quantity, setQuantity] = useState(1);
   const [feedback, setFeedback] = useState<StoreFeedback | null>(null);
+  const [failedImageSource, setFailedImageSource] = useState<string | null>(
+    null,
+  );
 
   if (resource.status === "loading") {
     return <StoreDetailSkeleton />;
@@ -89,6 +92,8 @@ function StoreProductContent({
     product.variants.find((variant) => variant.available) ??
     product.variants[0];
   const canAdd = selectedVariant.available && selectedVariant.currency !== null;
+  const imageSource = product.imageOriginalUrl;
+  const imageBroken = Boolean(imageSource && failedImageSource === imageSource);
 
   function addToOrder() {
     if (!product || !canAdd || !selectedVariant.currency) return;
@@ -159,12 +164,16 @@ function StoreProductContent({
           <StoreImage
             className="h-72 w-full lg:h-[420px]"
             label={product.name}
-            src={product.imageUrl}
+            onError={() => setFailedImageSource(imageSource)}
+            priority
+            src={imageSource}
           />
           <p className="mt-3 text-[11px] leading-5 text-muted">
-            {product.imageUrl
-              ? "Imagen del producto."
-              : "Este producto no tiene una imagen disponible."}
+            {imageBroken
+              ? "No pudimos cargar la imagen."
+              : imageSource
+                ? "Imagen del producto."
+                : "Este producto no tiene una imagen disponible."}
           </p>
         </div>
 

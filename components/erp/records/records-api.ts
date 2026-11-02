@@ -146,6 +146,10 @@ export function getImageSource(image: ImageRecord | null | undefined) {
   return image?.thumbnail || image?.url || null;
 }
 
+export function getImageFullSource(image: ImageRecord | null | undefined) {
+  return image?.url || image?.thumbnail || null;
+}
+
 const UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
