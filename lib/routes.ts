@@ -395,6 +395,17 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/bodegas/[id]/estantes/[shelf_id]",
   },
   {
+    path: "/app/almacen/bandeja",
+    title: "Bandeja de almacén",
+    label: "Bandeja de almacén",
+    group: "Inventario",
+    module: "bandeja_almacen",
+    icon: "warehouse",
+    description:
+      "Lotes pendientes de ubicación con inicio de ubicación y asignación de bodega, estante y sección.",
+    navigation: true,
+  },
+  {
     path: "/app/asignaciones",
     title: "Asignaciones",
     label: "Asignaciones",

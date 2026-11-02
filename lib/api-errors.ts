@@ -80,6 +80,9 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "lot already exists": "Ya existe un lote con ese número para el producto.",
   "lot has stock or reservations":
     "Solo puedes eliminar lotes con existencia y reservado en cero.",
+  "lot is being located by another user":
+    "Otro usuario está ubicando este lote.",
+  "lot is already located": "Este lote ya fue ubicado.",
   "customer already exists": "Ya existe un cliente con ese correo.",
   "customer already has a seller": "Este cliente ya tiene un vendedor asignado.",
   "customer is already linked to a user": CUSTOMER_ALREADY_LINKED_MESSAGE,
@@ -193,6 +196,10 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El método de pago no se puede cambiar.",
   "currency_id cannot be changed": "La moneda del pago no se puede cambiar.",
   "amount cannot be changed": "El monto del pago no se puede cambiar.",
+  "shelf does not belong to the warehouse":
+    "El estante no pertenece a la bodega.",
+  "section does not belong to the shelf":
+    "La sección no pertenece al estante.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
