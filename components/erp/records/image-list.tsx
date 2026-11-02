@@ -20,6 +20,7 @@ import { RecordsLoadError } from "@/components/erp/records/record-states";
 import {
   fetchImages,
   getImageDisplayName,
+  getImageSource,
   isOpaqueImageReference,
   type ImageRecord,
 } from "@/components/erp/records/records-api";
@@ -84,19 +85,28 @@ function ImageCard({
   displayName,
   image,
   onDelete,
+  priority,
 }: {
   canWrite: boolean;
   displayName: string;
   image: ImageRecord;
   onDelete: (image: ImageRecord, displayName: string) => void;
+  priority: boolean;
 }) {
   const local = Boolean(image.pathname);
   const generated = isOpaqueImageReference(image.reference);
+  const source = getImageSource(image);
+  const usesOriginal = Boolean(image.url) && source === image.url;
 
   return (
     <li className="flex flex-col overflow-hidden rounded-[24px] border border-line bg-surface shadow-[0_12px_36px_rgba(27,12,104,0.04)] transition-colors hover:border-brand/35 motion-reduce:transition-none">
       <div className="aspect-[4/3] border-b border-line">
-        <ImagePreview reference={displayName} src={image.thumbnail} />
+        <ImagePreview
+          original={usesOriginal}
+          priority={priority}
+          reference={displayName}
+          src={source}
+        />
       </div>
 
       <div className="flex flex-1 flex-col p-4 sm:p-5">
@@ -377,7 +387,7 @@ export function ImageListPage() {
               />
             ) : (
               <ul className={CARD_GRID}>
-                {filteredImages.map((image) => (
+                {filteredImages.map((image, index) => (
                   <ImageCard
                     canWrite={canWrite}
                     displayName={displayNameFor(image)}
@@ -386,6 +396,7 @@ export function ImageListPage() {
                     onDelete={(target, displayName) =>
                       setDeleteTarget({ displayName, image: target })
                     }
+                    priority={index < 4}
                   />
                 ))}
               </ul>

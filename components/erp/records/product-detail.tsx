@@ -16,13 +16,13 @@ import { RecordsDetailSkeleton, RecordsLoadError } from "@/components/erp/record
 import {
   deleteProduct,
   fetchCategories,
-  fetchImages,
   fetchProduct,
   findById,
   getImageDisplayName,
-  getImageSource,
+  getImageFullSource,
   isPositiveRecordId,
 } from "@/components/erp/records/records-api";
+import { fetchImage } from "@/components/erp/records/images-api";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 
 type ProductDetailPageProps = {
@@ -35,12 +35,22 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const toast = useToast();
   const canWrite = canWriteModule(user.role, "catalogo");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [failedImageSource, setFailedImageSource] = useState<string | null>(
+    null,
+  );
 
   const validId = isPositiveRecordId(productId);
   const productLoader = useCallback(() => fetchProduct(productId), [productId]);
   const productResource = useAsyncResource(productLoader, { enabled: validId });
   const categoriesResource = useAsyncResource(fetchCategories, { enabled: validId });
-  const imagesResource = useAsyncResource(fetchImages, { enabled: validId });
+  const imageId = productResource.data?.image_id ?? null;
+  const imageLoader = useCallback(
+    () => fetchImage(String(imageId ?? "")),
+    [imageId],
+  );
+  const imageResource = useAsyncResource(imageLoader, {
+    enabled: validId && imageId !== null,
+  });
 
   if (!validId) {
     return (
@@ -95,11 +105,19 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
   const product = productResource.data;
   const category = findById(categoriesResource.data ?? [], product.category_id);
-  const image = findById(imagesResource.data ?? [], product.image_id);
-  const imageSource = getImageSource(image);
+  const image = imageResource.data;
+  const imageLoading =
+    imageId !== null &&
+    (imageResource.status === "idle" || imageResource.status === "loading");
+  const imageFailed = imageResource.status === "error";
+  const imageSource = getImageFullSource(image);
   const imageName = getImageDisplayName(image);
+  const imageBroken = Boolean(
+    imageSource && failedImageSource === imageSource,
+  );
+  const imageUnavailable = imageFailed || imageBroken;
   const relatedError =
-    categoriesResource.status === "error" || imagesResource.status === "error";
+    categoriesResource.status === "error" || imageFailed;
 
   type RelatedModule = {
     href: string;
@@ -173,7 +191,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
               onClick={() => {
                 if (categoriesResource.status === "error") categoriesResource.reload();
-                if (imagesResource.status === "error") imagesResource.reload();
+                if (imageFailed) imageResource.reload();
               }}
               type="button"
             >
@@ -195,17 +213,19 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           <RecordThumbnail
             className="h-64 w-full"
             label={product.name}
-            loading={imagesResource.status === "loading"}
+            loading={imageLoading}
+            onError={() => setFailedImageSource(imageSource)}
+            priority
             size="lg"
             src={imageSource}
           />
           <p className="mt-3 text-[11px] leading-5 text-muted">
-            {image
-              ? `${imageName} · Miniatura del producto`
-              : imagesResource.status === "loading"
-                ? "Cargando imagen…"
-                : imagesResource.status === "error"
-                  ? "No pudimos cargar la imagen."
+            {imageUnavailable
+              ? "No pudimos cargar la imagen."
+              : image
+                ? `${imageName} · Imagen del producto`
+                : imageLoading
+                  ? "Cargando imagen…"
                   : "Este producto no tiene una imagen disponible."}
           </p>
         </div>
@@ -266,11 +286,13 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               </dt>
               <dd className="mt-1.5 text-[14px] text-ink">
                 <span>
-                  {image
-                    ? imageName
-                    : imagesResource.status === "loading"
-                      ? "Cargando imagen…"
-                      : "Imagen del catálogo"}
+                  {imageUnavailable
+                    ? "No pudimos cargar la imagen."
+                    : image
+                      ? imageName
+                      : imageLoading
+                        ? "Cargando imagen…"
+                        : "Imagen del catálogo"}
                 </span>
                 <Link
                   aria-label="Ir al módulo de imágenes"

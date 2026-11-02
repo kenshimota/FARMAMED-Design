@@ -9,6 +9,8 @@ type RecordThumbnailProps = {
   size?: "sm" | "md" | "lg";
   className?: string;
   loading?: boolean;
+  priority?: boolean;
+  onError?: () => void;
 };
 
 const SIZE_STYLES = {
@@ -23,10 +25,16 @@ export function RecordThumbnail({
   size = "md",
   className = "",
   loading = false,
+  priority = false,
+  onError,
 }: RecordThumbnailProps) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
-  const unavailable = !src || failedSource === src;
+  const failed = Boolean(src && failedSource === src);
+  const unavailable = !src || failed;
   const dimensionClass = className || SIZE_STYLES[size];
+  const unavailableLabel = failed
+    ? `No pudimos cargar la imagen de ${label}`
+    : `Sin imagen para ${label}`;
 
   if (loading) {
     return (
@@ -44,7 +52,7 @@ export function RecordThumbnail({
   if (unavailable) {
     return (
       <span
-        aria-label={`Sin imagen para ${label}`}
+        aria-label={unavailableLabel}
         className={`inline-flex shrink-0 items-center justify-center rounded-xl border border-dashed border-line bg-background text-muted ${dimensionClass}`}
         role="img"
       >
@@ -61,8 +69,13 @@ export function RecordThumbnail({
       <img
         alt={`Imagen de ${label}`}
         className="h-full w-full object-contain"
-        loading="lazy"
-        onError={() => setFailedSource(src)}
+        decoding="async"
+        fetchPriority={priority ? "high" : "auto"}
+        loading={priority ? "eager" : "lazy"}
+        onError={() => {
+          setFailedSource(src);
+          onError?.();
+        }}
         referrerPolicy="no-referrer"
         src={src}
       />

@@ -60,6 +60,9 @@ export function ProductListPage() {
     });
   }, [categoryFilter, products, query]);
 
+  const priorityProductIds = new Set(
+    filteredProducts.slice(0, 4).map((product) => String(product.id)),
+  );
   const hasQuery = query.trim().length > 0;
   const hasCategory = Boolean(categoryFilter);
   const filtersActive = hasQuery || hasCategory;
@@ -97,6 +100,7 @@ export function ProductListPage() {
         <RecordThumbnail
           label={product.name}
           loading={imagesLoading}
+          priority={priorityProductIds.has(String(product.id))}
           size="md"
           src={imageSourceFor(product)}
         />
@@ -180,6 +184,7 @@ export function ProductListPage() {
           <RecordThumbnail
             label={product.name}
             loading={imagesLoading}
+            priority={priorityProductIds.has(String(product.id))}
             size="lg"
             src={imageSourceFor(product)}
           />
@@ -355,7 +360,7 @@ export function ProductListPage() {
                 </button>
               }
               description={filteredEmptyDescription}
-              title="Sin resultados"
+              title="No hay productos con estos filtros."
             />
           ) : (
             <RecordsTable

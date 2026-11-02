@@ -43,6 +43,7 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `components/product-showcase.tsx`: panel demostrativo interactivo.
 - `public/assets/image.png`: recurso original del logo; no sobrescribirlo.
 - `DESIGN.md`: referencia oficial de la paleta de marca.
+- `docs/validacion-catalogo-demo.md`: criterios reproducibles para validar catálogo, tienda, imágenes y carrito con la semilla demo de 100+ productos.
 
 ### Diseño y contenido
 

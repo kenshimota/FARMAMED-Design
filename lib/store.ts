@@ -36,6 +36,7 @@ export type StoreProduct = {
   category: StoreCategory | null;
   imageId: number | null;
   imageUrl: string | null;
+  imageOriginalUrl: string | null;
   itemState: StoreItemState;
   price: number;
   currencyId: number | null;
@@ -139,14 +140,17 @@ function parseStoreCategory(value: unknown): StoreCategory | null {
 function parseStoreImage(value: unknown): {
   id: number | null;
   url: string | null;
+  thumbnail: string | null;
 } {
   if (typeof value === "string") {
-    return { id: null, url: readText(value) || null };
+    const url = readText(value) || null;
+    return { id: null, url, thumbnail: null };
   }
-  if (!isRecord(value)) return { id: null, url: null };
+  if (!isRecord(value)) return { id: null, url: null, thumbnail: null };
   return {
     id: readPositiveInteger(value.id),
-    url: readText(value.thumbnail) || readText(value.url) || null,
+    url: readText(value.url) || null,
+    thumbnail: readText(value.thumbnail) || null,
   };
 }
 
@@ -166,7 +170,8 @@ function parseBaseFields(record: Record<string, unknown>) {
     categoryId: readPositiveInteger(record.category_id) ?? category?.id ?? null,
     category,
     imageId: readPositiveInteger(record.image_id) ?? image.id,
-    imageUrl: image.url,
+    imageUrl: image.thumbnail || image.url,
+    imageOriginalUrl: image.url || image.thumbnail,
   };
 }
 
