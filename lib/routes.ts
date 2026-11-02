@@ -490,7 +490,6 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
       "Actualiza el nombre, la descripción, el orden y el siguiente estado.",
     parent: "/app/pedidos/estados",
   },
-  },
   {
     path: "/app/existencias",
     title: "Existencias",
