@@ -7,7 +7,7 @@ import {
 export const metadata: Metadata = {
   title: "Lotes",
   description:
-    "Consulta los lotes de Farmamed con su número, producto, vencimiento, cantidades y ubicación física.",
+    "Consulta los lotes de Farmamed con su número, producto, vencimiento, cantidades, estado de ubicación y ubicación física.",
 };
 
 type LotsRouteProps = {
@@ -18,6 +18,7 @@ type LotsRouteProps = {
     shelf_id?: string | string[];
     section_id?: string | string[];
     number?: string | string[];
+    location_status?: string | string[];
     expired?: string | string[];
     expiring_before?: string | string[];
   }>;
@@ -34,6 +35,13 @@ function readId(value: string | string[] | undefined) {
 
 function readNumber(value: string | string[] | undefined) {
   return readValue(value).slice(0, 100);
+}
+
+function readLocationStatus(value: string | string[] | undefined) {
+  const raw = readValue(value);
+  return raw === "pending" || raw === "in_progress" || raw === "located"
+    ? raw
+    : "";
 }
 
 function readExpired(value: string | string[] | undefined) {
@@ -58,6 +66,7 @@ export default async function LotsPage({ searchParams }: LotsRouteProps) {
     shelfId,
     sectionId,
     number: readNumber(filters.number),
+    locationStatus: readLocationStatus(filters.location_status),
     expired: readExpired(filters.expired),
     expiringBefore: readExpiringBefore(filters.expiring_before),
   };

@@ -15,6 +15,7 @@ export type ModuleKey =
   | "clientes"
   | "bodegas"
   | "estantes"
+  | "bandeja_almacen"
   | "asignaciones"
   | "existencias"
   | "lotes"
@@ -57,6 +58,10 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
   },
   estantes: {
     read: ["admin", "seller", "manager_warehouse", "dispatcher"],
+    write: ["admin", "manager_warehouse"],
+  },
+  bandeja_almacen: {
+    read: ["admin", "seller", "manager_warehouse"],
     write: ["admin", "manager_warehouse"],
   },
   asignaciones: {
@@ -144,11 +149,11 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   customer:
     "Consulta el catálogo en modo lectura, revisa los pedidos de su cuenta y consulta sus facturas y billetera.",
   seller:
-    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, monedas, estantes, impuestos, métodos de pago y billeteras.",
+    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, bandeja de almacén, monedas, estantes, impuestos, métodos de pago y billeteras.",
   dispatcher:
     "Consulta clientes, bodegas, estantes, lotes, asignaciones, monedas, impuestos y métodos de pago.",
   manager_warehouse:
-    "Gestiona bodegas, estantes, lotes, existencias, costos y compras; consulta monedas e impuestos.",
+    "Gestiona bodegas, estantes, lotes, la bandeja de ubicación, existencias, costos y compras; consulta monedas e impuestos.",
   support:
     "Consulta catálogo. No accede a operación, inventario, compras, finanzas ni administración.",
 };
@@ -191,6 +196,7 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "clientes",
   "bodegas",
   "estantes",
+  "bandeja_almacen",
   "asignaciones",
   "existencias",
   "lotes",
@@ -231,6 +237,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Clientes", module: "clientes" },
   { label: "Bodegas", module: "bodegas" },
   { label: "Estantes y secciones", module: "estantes" },
+  { label: "Bandeja de almacén", module: "bandeja_almacen" },
   { label: "Asignaciones", module: "asignaciones" },
   { label: "Existencias", module: "existencias" },
   { label: "Lotes", module: "lotes" },

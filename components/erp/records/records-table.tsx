@@ -25,6 +25,7 @@ type RecordsTableProps<T> = {
   rowActions?: (row: T) => ReactNode;
   cardActions?: (row: T) => ReactNode;
   renderCard: (row: T) => ReactNode;
+  busy?: boolean;
 };
 
 export function RecordsTable<T>({
@@ -37,10 +38,11 @@ export function RecordsTable<T>({
   rowActions,
   cardActions,
   renderCard,
+  busy = false,
 }: RecordsTableProps<T>) {
   const cardActionsFor = cardActions ?? rowActions;
   return (
-    <>
+    <div aria-busy={busy || undefined}>
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[760px] border-collapse text-left">
           <caption className="sr-only">{caption}</caption>
@@ -135,6 +137,6 @@ export function RecordsTable<T>({
           );
         })}
       </ul>
-    </>
+    </div>
   );
 }

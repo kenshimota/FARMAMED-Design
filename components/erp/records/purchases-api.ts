@@ -1,6 +1,13 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
 import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
+import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
@@ -259,6 +266,31 @@ function appendFilter(
   if (value === undefined || value === null) return;
   const normalized = String(value).trim();
   if (normalized) query.set(key, normalized);
+}
+
+const PURCHASE_FILTERS = [
+  "supplier_id",
+  "status",
+  "number",
+  "currency_id",
+  "from",
+  "to",
+] as const;
+
+export async function fetchPurchasePage(
+  query: ListQuery = {},
+): Promise<Paginated<PurchaseRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/purchases${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, PURCHASE_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parsePurchase, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchPurchases(filters: PurchaseFilters = {}) {

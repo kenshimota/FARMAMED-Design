@@ -80,9 +80,7 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
   const currencyStatus = useCurrencyStatusContext();
   const activityVisible = useActivityVisible();
   const canWrite = canWriteModule(user.role, "compras");
-  // TODO(INV-06 #98): cambiar a "bandeja_almacen" cuando el módulo exista en
-  // lib/permissions.ts. La ruta /app/almacen/bandeja también depende de #98.
-  const canOpenInbox = canReadModule(user.role, "compras");
+  const canOpenInbox = canReadModule(user.role, "bandeja_almacen");
   const [dialog, setDialog] = useState<PurchaseDialog>(null);
 
   const loader = useCallback(() => fetchPurchase(purchaseId), [purchaseId]);

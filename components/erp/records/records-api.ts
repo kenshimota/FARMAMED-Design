@@ -1,5 +1,12 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type RecordId = number | string;
 
@@ -10,6 +17,7 @@ export type ProductRecord = {
   reference: string;
   category_id: RecordId;
   image_id: RecordId;
+  tax_id: RecordId | null;
 };
 
 export type CategoryRecord = {
@@ -64,6 +72,7 @@ export function parseProduct(source: unknown): ProductRecord | null {
   const id = readId(record.id);
   const categoryId = readId(record.category_id);
   const imageId = readId(record.image_id);
+  const taxId = readId(record.tax_id);
   const name = readText(record.name);
   const reference = readText(record.reference);
   if (id === null || categoryId === null || imageId === null || !name || !reference) {
@@ -77,6 +86,7 @@ export function parseProduct(source: unknown): ProductRecord | null {
     reference,
     category_id: categoryId,
     image_id: imageId,
+    tax_id: taxId,
   };
 }
 
@@ -174,9 +184,32 @@ function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
 }
 
+const PRODUCT_FILTERS = [
+  "category_id",
+  "tax_id",
+  "image_id",
+  "reference",
+] as const;
+
 export async function fetchProducts() {
   const payload = await apiFetch<unknown>("/products", authOptions());
   return parseProductList(payload);
+}
+
+export async function fetchProductPage(
+  query: ListQuery = {},
+): Promise<Paginated<ProductRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/products${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, PRODUCT_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseProduct, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchProduct(id: string) {
@@ -229,6 +262,19 @@ export function deleteCategory(id: RecordId) {
 export async function fetchImages() {
   const payload = await apiFetch<unknown>("/images", authOptions());
   return parseImageList(payload);
+}
+
+export async function fetchImagePage(
+  query: ListQuery = {},
+): Promise<Paginated<ImageRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/images${buildListQuery(query)}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseImage, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export function deleteProduct(id: RecordId) {

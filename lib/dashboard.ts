@@ -1,5 +1,4 @@
 import { ApiError, apiFetch } from "@/lib/api";
-import { LARGE_LIST_THRESHOLD } from "@/lib/feedback";
 import { formatInteger } from "@/lib/format";
 import { getStoredToken } from "@/lib/session";
 
@@ -93,21 +92,23 @@ export function expiringBeforeDate(days = EXPIRING_SOON_DAYS) {
 }
 
 export function formatCount(value: number) {
-  return value > LARGE_LIST_THRESHOLD
-    ? `${formatInteger(value)}+`
-    : formatInteger(value);
+  return formatInteger(value);
 }
 
-export function isApproximateCount(value: number) {
-  return value > LARGE_LIST_THRESHOLD;
+function readTotal(payload: unknown) {
+  if (isRecord(payload) && isRecord(payload.meta)) {
+    const total = payload.meta.total;
+    if (typeof total === "number" && Number.isFinite(total)) return total;
+  }
+  return readListPayload(payload).length;
 }
 
 export async function fetchProductCount() {
-  return readListPayload(await authFetch<unknown>("/products")).length;
+  return readTotal(await authFetch<unknown>("/products?page=1&page_size=1"));
 }
 
 export async function fetchCustomerCount() {
-  return readListPayload(await authFetch<unknown>("/customers")).length;
+  return readTotal(await authFetch<unknown>("/customers?page=1&page_size=1"));
 }
 
 function parsePurchase(source: unknown): DraftPurchase | null {
@@ -131,10 +132,26 @@ function parsePurchase(source: unknown): DraftPurchase | null {
   };
 }
 
+async function fetchCount(path: string) {
+  const separator = path.includes("?") ? "&" : "?";
+  return readTotal(
+    await authFetch<unknown>(`${path}${separator}page=1&page_size=1`),
+  );
+}
+
+export async function fetchDraftPurchaseCount() {
+  return fetchCount("/purchases?status=draft");
+}
+
+export async function fetchInStockCount() {
+  return fetchCount("/stocks?in_stock=true");
+}
+
 export async function fetchDraftPurchases(): Promise<CountedRows<DraftPurchase>> {
-  const rows = readListPayload(await authFetch<unknown>("/purchases?status=draft"));
+  const payload = await authFetch<unknown>("/purchases?status=draft");
+  const rows = readListPayload(payload);
   return {
-    count: rows.length,
+    count: readTotal(payload),
     items: rows
       .map(parsePurchase)
       .filter((purchase): purchase is DraftPurchase => purchase !== null)
@@ -194,28 +211,14 @@ function parseStock(source: unknown): StockRow | null {
 }
 
 export async function fetchStocksInStock(): Promise<CountedRows<StockRow>> {
-  const rows = readListPayload(await authFetch<unknown>("/stocks?in_stock=true"));
+  const payload = await authFetch<unknown>("/stocks?in_stock=true");
+  const rows = readListPayload(payload);
   return {
-    count: rows.length,
+    count: readTotal(payload),
     items: rows
       .map(parseStock)
       .filter((stock): stock is StockRow => stock !== null),
   };
-}
-
-function parseSupplier(source: unknown): SupplierRow | null {
-  if (!isRecord(source)) return null;
-  const id = readId(source.id);
-  const name = readText(source.name);
-  if (id === null || name === null) return null;
-  return { id, name };
-}
-
-export async function fetchSuppliers() {
-  const rows = readListPayload(await authFetch<unknown>("/suppliers"));
-  return rows
-    .map(parseSupplier)
-    .filter((supplier): supplier is SupplierRow => supplier !== null);
 }
 
 export async function confirmDraftPurchase(purchaseId: number) {
