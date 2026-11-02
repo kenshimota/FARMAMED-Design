@@ -25,6 +25,9 @@ export type UiError = {
   retryAfterSeconds: number | null;
 };
 
+export const CUSTOMER_ALREADY_LINKED_MESSAGE =
+  "Ese cliente ya está vinculado a otra cuenta.";
+
 export const COPY = {
   network: "No pudimos conectar con el servidor. Revisa tu conexión e intenta de nuevo.",
   badRequest: "Faltan datos obligatorios. Revisa el formulario.",
@@ -78,6 +81,7 @@ const CONFLICT_MESSAGES: Record<string, string> = {
     "Solo puedes eliminar lotes con existencia y reservado en cero.",
   "customer already exists": "Ya existe un cliente con ese correo.",
   "customer already has a seller": "Este cliente ya tiene un vendedor asignado.",
+  "customer is already linked to a user": CUSTOMER_ALREADY_LINKED_MESSAGE,
   "user already exists": "Ya existe un usuario con ese identificador.",
   "you cannot block your own account": "No puedes bloquear tu propia cuenta.",
   "cannot block the last administrator":
@@ -143,6 +147,14 @@ function readApiMessage(error: ApiError) {
     if (typeof message === "string") return message.trim();
   }
   return error.message.trim();
+}
+
+export function customerAlreadyLinkedMessage(error: unknown) {
+  const translated = translateApiError(error);
+  return translated.kind === "conflict" &&
+    translated.message === CUSTOMER_ALREADY_LINKED_MESSAGE
+    ? CUSTOMER_ALREADY_LINKED_MESSAGE
+    : null;
 }
 
 export function translateApiError(error: unknown): UiError {
