@@ -28,17 +28,24 @@ type SessionState =
   | { status: "forbidden" }
   | { status: "error" };
 
-// CLI-03 y CLI-05 agregarán "/app/tienda" y "/app/mis-pedidos" cuando existan.
+// CLI-03 agregará "/app/tienda" cuando exista.
 const CUSTOMER_ROUTES = new Set([
   "/app",
   "/app/cuenta",
   "/app/cuenta-incompleta",
 ]);
 
+const CUSTOMER_ROUTE_PREFIXES = ["/app/mis-pedidos"];
+
 function isCustomerRoute(pathname: string) {
   const normalized =
     pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  return CUSTOMER_ROUTES.has(normalized);
+  return (
+    CUSTOMER_ROUTES.has(normalized) ||
+    CUSTOMER_ROUTE_PREFIXES.some(
+      (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+    )
+  );
 }
 
 export function SessionGate({ children }: { children: ReactNode }) {
