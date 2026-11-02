@@ -4,7 +4,7 @@ import { PaymentFormPage } from "@/components/erp/records/payment-form";
 export const metadata: Metadata = {
   title: "Registrar pago",
   description:
-    "Registra un pago recibido de un cliente de Farmamed y acredita su billetera en la moneda del método de pago.",
+    "Registra un pago recibido de un cliente de Farmamed con comprobante opcional. El pago queda pendiente hasta conciliarse.",
 };
 
 type NewPaymentRouteProps = {

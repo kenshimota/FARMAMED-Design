@@ -152,7 +152,7 @@ function WalletListContent({
             </Link>
           ) : undefined
         }
-        description="Consulta el saldo por moneda de cada cliente. Cada pago recibido acredita la billetera de la moneda del método de pago."
+        description="Consulta el saldo por moneda de cada cliente. Cada pago conciliado acredita la billetera de la moneda del método de pago."
         eyebrow="Finanzas"
         title="Billeteras de clientes"
       />
@@ -286,7 +286,7 @@ function WalletListContent({
                     </Link>
                   ) : undefined
                 }
-                description="Las billeteras se crean al registrar el primer pago del cliente en una moneda."
+                description="Las billeteras se crean al conciliar el primer pago del cliente en una moneda."
                 title="Este cliente aún no tiene billeteras"
               />
             ) : (

@@ -878,7 +878,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     module: "pagos",
     icon: "coins",
     description:
-      "Registro de pagos recibidos, con su cliente, método, moneda y efecto en la billetera.",
+      "Pagos recibidos con su estado, comprobante, método, moneda y efecto en la billetera.",
     navigation: true,
   },
   {
@@ -889,7 +889,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     module: "pagos",
     icon: "coins",
     description:
-      "Registra un pago recibido y acredita la billetera del cliente en la moneda del método.",
+      "Registra un pago recibido con comprobante opcional; queda pendiente de conciliación.",
     parent: "/app/pagos",
   },
   {
@@ -900,7 +900,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     module: "pagos",
     icon: "coins",
     description:
-      "Consulta el pago recibido y el saldo actual de la billetera del cliente.",
+      "Estado, motivo de rechazo, comprobante e historial de conciliación de un pago.",
     parent: "/app/pagos",
   },
   {
@@ -911,7 +911,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     module: "pagos",
     icon: "coins",
     description:
-      "Actualiza la referencia, las notas y la fecha de un pago recibido.",
+      "Actualiza la referencia, las notas, la fecha y el comprobante de un pago recibido.",
     parent: "/app/pagos/[id]",
   },
   {
@@ -922,7 +922,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     module: "billeteras",
     icon: "database",
     description:
-      "Consulta el saldo por moneda de las billeteras de los clientes y sus movimientos.",
+      "Saldo por moneda de las billeteras de los clientes y sus movimientos; solo los pagos conciliados generan depósito.",
     navigation: true,
   },
   {

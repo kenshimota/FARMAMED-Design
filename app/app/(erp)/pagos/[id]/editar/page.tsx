@@ -4,7 +4,7 @@ import { PaymentFormPage } from "@/components/erp/records/payment-form";
 export const metadata: Metadata = {
   title: "Editar pago",
   description:
-    "Actualiza la referencia, las notas y la fecha de un pago recibido en Farmamed.",
+    "Actualiza la referencia, las notas, la fecha y el comprobante de un pago recibido en Farmamed.",
 };
 
 type EditPaymentRouteProps = {

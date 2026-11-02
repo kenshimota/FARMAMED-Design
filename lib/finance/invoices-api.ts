@@ -114,6 +114,7 @@ export type CustomerPayment = {
   paidAt: string | null;
   reference: string;
   notes: string;
+  status: "pending" | "conciliated" | "rejected" | null;
 };
 
 export type InvoiceFilters = {
@@ -201,6 +202,15 @@ function parsePaymentStatus(value: unknown): InvoicePaymentStatus | null {
   const text = readText(value).toLowerCase();
   return (INVOICE_PAYMENT_STATUSES as readonly string[]).includes(text)
     ? (text as InvoicePaymentStatus)
+    : null;
+}
+
+function parseCustomerPaymentStatus(
+  value: unknown,
+): "pending" | "conciliated" | "rejected" | null {
+  const text = readText(value).toLowerCase();
+  return text === "pending" || text === "conciliated" || text === "rejected"
+    ? text
     : null;
 }
 
@@ -456,6 +466,7 @@ export function parseCustomerPayment(source: unknown): CustomerPayment | null {
     paidAt: readTimestamp(record.paid_at),
     reference: readText(record.reference),
     notes: readText(record.notes),
+    status: parseCustomerPaymentStatus(record.status),
   };
 }
 

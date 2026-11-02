@@ -47,12 +47,17 @@ function isCustomerInvoiceDetail(pathname: string) {
   return /^\/app\/facturas\/[^/]+$/.test(pathname);
 }
 
+function isCustomerPaymentDetail(pathname: string) {
+  return /^\/app\/pagos\/[1-9]\d*$/.test(pathname);
+}
+
 function isCustomerRoute(pathname: string) {
   const normalized =
     pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   return (
     CUSTOMER_ROUTES.has(normalized) ||
     isCustomerInvoiceDetail(normalized) ||
+    isCustomerPaymentDetail(normalized) ||
     CUSTOMER_ROUTE_PREFIXES.some(
       (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
     )
@@ -148,25 +153,25 @@ export function SessionGate({ children }: { children: ReactNode }) {
 
   return (
     <SessionProvider logout={logout} user={state.user}>
-      {isCustomer ? (
-        hasCustomerLink(state.user) ? (
-          <CustomerShell>
-            {isCustomerRoute(pathname) ? (
-              children
-            ) : (
-              <AccessState description="El portal del cliente solo incluye el inicio de tienda, la cuenta y las secciones habilitadas. Usa la navegación para continuar." />
-            )}
-          </CustomerShell>
+      <ToastProvider>
+        {isCustomer ? (
+          hasCustomerLink(state.user) ? (
+            <CustomerShell>
+              {isCustomerRoute(pathname) ? (
+                children
+              ) : (
+                <AccessState description="El portal del cliente solo incluye el inicio de tienda, la cuenta y las secciones habilitadas. Usa la navegación para continuar." />
+              )}
+            </CustomerShell>
+          ) : (
+            <CustomerIncompleteScreen reason="vinculo" />
+          )
         ) : (
-          <CustomerIncompleteScreen reason="vinculo" />
-        )
-      ) : (
-        <CurrencyStatusProvider>
-          <ToastProvider>
+          <CurrencyStatusProvider>
             <ErpShell>{children}</ErpShell>
-          </ToastProvider>
-        </CurrencyStatusProvider>
-      )}
+          </CurrencyStatusProvider>
+        )}
+      </ToastProvider>
     </SessionProvider>
   );
 }

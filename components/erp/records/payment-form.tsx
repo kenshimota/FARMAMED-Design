@@ -52,12 +52,13 @@ import {
   type PaymentRecord,
   type PaymentUpdateInput,
 } from "@/components/erp/records/payments-api";
+import { PaymentReferenceImageField } from "@/components/erp/records/payment-reference-image-field";
 import {
   currencyInputValue,
   paymentMethodLabel,
 } from "@/components/erp/records/payment-shared";
 import { translateApiError } from "@/lib/api-errors";
-import { formatDateInputValue, formatMoney } from "@/lib/format";
+import { formatDateInputValue } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 
 type FieldKey =
@@ -66,7 +67,8 @@ type FieldKey =
   | "amount"
   | "paidAt"
   | "reference"
-  | "notes";
+  | "notes"
+  | "image";
 
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
@@ -77,6 +79,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   paidAt: "Fecha del pago",
   reference: "Referencia",
   notes: "Notas",
+  image: "Comprobante",
 };
 
 const AMOUNT_PATTERN = /^\d{1,12}([.,]\d{1,2})?$/;
@@ -105,7 +108,8 @@ const COPY = {
     "No encontramos el cliente o el método de pago seleccionado. Actualiza la lista e intenta de nuevo.",
   generic:
     "No pudimos guardar el pago. Revisa tu conexión e intenta de nuevo.",
-  createSuccess: "Pago registrado. La billetera del cliente se actualizó.",
+  createSuccess:
+    "Pago registrado. Queda pendiente de conciliación y el saldo aún no está disponible.",
   updateSuccess: "Pago actualizado.",
 } as const;
 
@@ -134,6 +138,7 @@ function mapServerFieldErrors(
     paid_at: "paidAt",
     reference: "reference",
     notes: "notes",
+    image: "image",
   };
   for (const [field, message] of Object.entries(fieldErrors)) {
     const key = entries[field];
@@ -280,6 +285,7 @@ function PaymentFormContent({
   const paidAtFieldId = useId();
   const referenceFieldId = useId();
   const notesFieldId = useId();
+  const imageFieldId = useId();
 
   const initialCustomer = payment
     ? String(payment.customer_id)
@@ -298,6 +304,8 @@ function PaymentFormContent({
   const [paidAt, setPaidAt] = useState(initialPaidAt);
   const [reference, setReference] = useState(initialReference);
   const [notes, setNotes] = useState(initialNotes);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -352,8 +360,18 @@ function PaymentFormContent({
     if (notes.trim().length > NOTES_MAX_LENGTH) {
       errors.notes = COPY.notesLength;
     }
+    if (imageError) errors.image = imageError;
     return errors;
-  }, [amount, customerId, editing, methodPaymentId, notes, paidAt, reference]);
+  }, [
+    amount,
+    customerId,
+    editing,
+    imageError,
+    methodPaymentId,
+    notes,
+    paidAt,
+    reference,
+  ]);
 
   const visibleError = (key: FieldKey) =>
     serverErrors[key] ?? (attempted || touched[key] ? clientErrors[key] : undefined);
@@ -364,9 +382,11 @@ function PaymentFormContent({
       amount !== initialAmount ||
       paidAt !== initialPaidAt ||
       reference !== initialReference ||
-      notes !== initialNotes
+      notes !== initialNotes ||
+      imageFile !== null
     : customerId !== initialCustomer ||
-      Boolean(methodPaymentId || amount || paidAt || reference || notes);
+      Boolean(methodPaymentId || amount || paidAt || reference || notes) ||
+      imageFile !== null;
 
   useUnsavedChangesWarning(dirty && !submitting);
 
@@ -401,6 +421,7 @@ function PaymentFormContent({
     "paidAt",
     "reference",
     "notes",
+    "image",
   ];
   const fieldIds: Record<FieldKey, string> = {
     customer: customerFieldId,
@@ -409,6 +430,7 @@ function PaymentFormContent({
     paidAt: paidAtFieldId,
     reference: referenceFieldId,
     notes: notesFieldId,
+    image: `${imageFieldId}-archivo`,
   };
   for (const key of fieldKeys) {
     const message = visibleError(key);
@@ -449,27 +471,24 @@ function PaymentFormContent({
         if (paidAt && paidAt !== initialPaidAt) {
           input.paid_at = paymentPaidAtTimestamp(paidAt);
         }
-        await updatePayment(String(payment.id), input);
+        await updatePayment(String(payment.id), input, imageFile);
         toast.success(COPY.updateSuccess);
         router.push(`/app/pagos/${payment.id}`);
         return;
       }
 
-      const created = await createPayment({
-        customer_id: customerId,
-        method_payment_id: methodPaymentId,
-        amount: parseAmount(amount) ?? 0,
-        paid_at: paidAt ? paymentPaidAtTimestamp(paidAt) : undefined,
-        reference: reference.trim() || null,
-        notes: notes.trim() || null,
-      });
-      const balance = created.wallet
-        ? ` Saldo actual: ${formatMoney(
-            created.wallet.balance,
-            created.currency ?? created.wallet.currency ?? {},
-          )}`
-        : "";
-      toast.success(`${COPY.createSuccess}${balance}`);
+      const created = await createPayment(
+        {
+          customer_id: customerId,
+          method_payment_id: methodPaymentId,
+          amount: parseAmount(amount) ?? 0,
+          paid_at: paidAt ? paymentPaidAtTimestamp(paidAt) : undefined,
+          reference: reference.trim() || null,
+          notes: notes.trim() || null,
+        },
+        imageFile,
+      );
+      toast.success(COPY.createSuccess);
       router.push(`/app/pagos/${created.id}`);
     } catch (caught) {
       const ui = translateApiError(caught);
@@ -480,7 +499,12 @@ function PaymentFormContent({
           editing ? COPY.notFoundPayment : COPY.notFoundReference,
         );
       } else if (ui.kind === "validation") {
-        setServerErrors(mapServerFieldErrors(ui.fieldErrors));
+        const mapped = mapServerFieldErrors(ui.fieldErrors);
+        if (ui.status === 413) {
+          mapped.image = ui.message;
+          setImageError(ui.message);
+        }
+        setServerErrors(mapped);
         setSubmitError(ui.message);
         window.requestAnimationFrame(() => {
           focusFirstInvalidField(formRef.current ?? document);
@@ -514,8 +538,8 @@ function PaymentFormContent({
         }
         description={
           editing
-            ? "Solo puedes actualizar la referencia, las notas y la fecha. El cliente, el método, la moneda y el monto son inmutables."
-            : "Registra el dinero recibido del cliente. El depósito acredita su billetera en la moneda del método de pago."
+            ? "Puedes actualizar la referencia, las notas, la fecha y reemplazar el comprobante. El cliente, el método, la moneda y el monto son inmutables."
+            : "Registra el dinero recibido y adjunta el comprobante si lo tienes. El pago queda pendiente hasta que se concilie."
         }
         eyebrow="Finanzas"
         title={editing ? "Editar pago" : "Registrar pago"}
@@ -537,7 +561,7 @@ function PaymentFormContent({
           <p className="max-w-2xl text-[13px] leading-6 text-muted">
             {editing
               ? "Los campos bloqueados se muestran solo para consulta. Los montos de pagos aplicados no se alteran."
-              : "El pago acredita la billetera del cliente. El registro es manual y no ejecuta cobros en línea."}
+              : "El pago se registra como pendiente y no acredita la billetera hasta que un administrador o vendedor lo concilie. El registro es manual y no ejecuta cobros en línea."}
           </p>
         </div>
 
@@ -584,7 +608,7 @@ function PaymentFormContent({
                 createLabel={canCreateCustomers ? "Registrar cliente" : undefined}
                 emptyLabel="No hay clientes registrados."
                 error={visibleError("customer")}
-                help="El pago se acredita a la billetera de este cliente."
+                help="El saldo se acredita a la billetera de este cliente cuando el pago se concilia."
                 id={customerFieldId}
                 label="Cliente"
                 loading={customersResource.status === "loading"}
@@ -720,10 +744,54 @@ function PaymentFormContent({
           />
         </div>
 
+        <div className="mt-5">
+          <PaymentReferenceImageField
+            currentImage={payment?.reference_image ?? null}
+            disabled={submitting}
+            editing={editing}
+            error={visibleError("image")}
+            file={imageFile}
+            id={imageFieldId}
+            onFileSelected={(file, error) => {
+              setImageFile(file);
+              setImageError(error);
+              touch("image");
+              setServerErrors((current) => {
+                if (!current.image) return current;
+                const next = { ...current };
+                delete next.image;
+                return next;
+              });
+            }}
+            referenceLabel={reference.trim() || (payment ? `#${payment.id}` : "nuevo")}
+          />
+        </div>
+
         <div className="mt-6 space-y-3 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
           <p>
-            El pago genera un movimiento <strong>Depósito</strong> en la
-            billetera del cliente con el saldo resultante.
+            {!editing || payment?.status === "pending" ? (
+              <>
+                El pago queda <strong>pendiente de conciliación</strong>. El
+                saldo se acredita solo cuando se concilia y se crea el
+                movimiento <strong>Depósito</strong> en la billetera del
+                cliente.
+              </>
+            ) : payment?.status === "conciliated" ? (
+              <>
+                Este pago está <strong>conciliado</strong>. Puedes actualizar
+                sus datos y el comprobante sin modificar el saldo ya acreditado.
+              </>
+            ) : payment?.status === "rejected" ? (
+              <>
+                Este pago está <strong>rechazado</strong>. No acredita saldo en
+                la billetera del cliente.
+              </>
+            ) : (
+              <>
+                No pudimos identificar el estado de este pago. Actualiza la
+                información antes de continuar.
+              </>
+            )}
           </p>
           <p>
             No hay conversión de moneda: el monto se acredita en la moneda del
@@ -740,7 +808,13 @@ function PaymentFormContent({
           </Link>
           <BusyButton
             busy={submitting}
-            busyLabel={editing ? "Guardando…" : "Registrando…"}
+            busyLabel={
+              imageFile
+                ? "Subiendo comprobante…"
+                : editing
+                  ? "Guardando…"
+                  : "Registrando…"
+            }
             className="min-h-11 px-5 text-[13px]"
             type="submit"
           >

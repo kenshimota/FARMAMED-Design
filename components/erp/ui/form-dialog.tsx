@@ -167,7 +167,7 @@ export function FormDialog({
           <button
             aria-disabled={closeDisabled || undefined}
             aria-label="Cerrar"
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition-colors ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition-colors motion-reduce:transition-none ${
               closeDisabled
                 ? "cursor-not-allowed opacity-60"
                 : "hover:bg-background hover:text-ink"

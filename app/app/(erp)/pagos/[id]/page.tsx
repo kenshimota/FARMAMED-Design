@@ -4,7 +4,7 @@ import { PaymentDetailPage } from "@/components/erp/records/payment-detail";
 export const metadata: Metadata = {
   title: "Detalle del pago",
   description:
-    "Consulta el pago recibido, su método, moneda y el saldo de la billetera del cliente en Farmamed.",
+    "Consulta el estado, el motivo, el comprobante y el historial de conciliación de un pago en Farmamed.",
 };
 
 type PaymentDetailRouteProps = {

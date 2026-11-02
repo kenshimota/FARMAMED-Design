@@ -182,6 +182,13 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El método de pago no se puede cambiar.",
   "currency_id cannot be changed": "La moneda del pago no se puede cambiar.",
   "amount cannot be changed": "El monto del pago no se puede cambiar.",
+  "reason is required when the payment is rejected":
+    "Escribe el motivo del rechazo.",
+  "reason must be between 3 and 500 characters":
+    "El motivo debe tener entre 3 y 500 caracteres.",
+  "invalid image": "El comprobante debe ser JPG, PNG o WebP.",
+  "image too large": "El archivo no puede superar 5 MB.",
+  "invalid payment status": "El estado del pago no es válido.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
@@ -297,6 +304,15 @@ export function translateApiError(error: unknown): UiError {
         fieldErrors,
         canRetry: false,
         status: 422,
+        retryAfterSeconds: null,
+      };
+    case 413:
+      return {
+        kind: "validation",
+        message: "El archivo no puede superar 5 MB.",
+        fieldErrors,
+        canRetry: false,
+        status: 413,
         retryAfterSeconds: null,
       };
     case 429: {

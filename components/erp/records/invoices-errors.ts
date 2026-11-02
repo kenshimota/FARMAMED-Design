@@ -8,10 +8,14 @@ export const INVOICE_COPY = {
     "Ajusta el pedido, el cliente, el número o el estado de pago para ver otros resultados.",
   notFound: "No encontramos esa factura.",
   noPayments: "Esta factura no tiene pagos aplicados.",
-  applyHelp: "Solo se pueden aplicar pagos del mismo cliente.",
+  applyHelp: "Solo se pueden aplicar pagos conciliados del mismo cliente.",
   noCustomerPayments: "Este cliente no tiene pagos registrados.",
+  noConciliatedPayments:
+    "Este cliente no tiene pagos conciliados disponibles para aplicar.",
+  unconciliatedNote:
+    "Los pagos pendientes o rechazados no se pueden aplicar hasta que se concilien.",
   allPaymentsApplied:
-    "Los pagos de este cliente ya fueron aplicados a esta factura.",
+    "Los pagos conciliados de este cliente ya fueron aplicados a esta factura.",
   paymentAlreadyApplied: "Este pago ya fue aplicado a esta factura.",
   invoicePaid: "Esta factura ya está pagada.",
   insufficientWallet:

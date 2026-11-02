@@ -128,6 +128,13 @@ function CustomerInvoiceHistory({
             </dd>
           </div>
         </dl>
+        <Link
+          className="mt-3 inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+          href={`/app/pagos/${allocation.paymentId}`}
+        >
+          Ver pago #{allocation.paymentId}
+          <Icon aria-hidden="true" name="arrow-up-right" size={14} />
+        </Link>
       </div>
     );
   }
@@ -244,6 +251,13 @@ function CustomerInvoiceHistory({
                       <span className="block break-words font-semibold">
                         {invoicePaymentMethodLabel(allocation)}
                       </span>
+                      <Link
+                        className="mt-1 inline-flex min-h-11 items-center gap-1 text-[11px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                        href={`/app/pagos/${allocation.paymentId}`}
+                      >
+                        Ver pago #{allocation.paymentId}
+                        <Icon aria-hidden="true" name="arrow-up-right" size={12} />
+                      </Link>
                     </td>
                     <td className="py-3 pr-2 text-right text-[12px] tabular-nums text-ink">
                       <span className="block break-words">

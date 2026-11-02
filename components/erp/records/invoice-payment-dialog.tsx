@@ -97,12 +97,20 @@ export function InvoicePaymentDialog({
   );
 
   const payments = useMemo(() => resource.data ?? [], [resource.data]);
+  const conciliatedPayments = useMemo(
+    () => payments.filter((payment) => payment.status === "conciliated"),
+    [payments],
+  );
   const availablePayments = useMemo(
     () =>
-      payments.filter(
+      conciliatedPayments.filter(
         (payment) => !appliedPaymentIds.has(String(payment.id)),
       ),
-    [appliedPaymentIds, payments],
+    [appliedPaymentIds, conciliatedPayments],
+  );
+  const hasUnconciliatedPayments = useMemo(
+    () => payments.some((payment) => payment.status !== "conciliated"),
+    [payments],
   );
 
   const selectedPayment =
@@ -244,6 +252,12 @@ export function InvoicePaymentDialog({
   const noAvailablePayments =
     (resource.status === "ready" || resource.status === "refreshing") &&
     availablePayments.length === 0;
+  const emptyPaymentsMessage =
+    payments.length === 0
+      ? INVOICE_COPY.noCustomerPayments
+      : conciliatedPayments.length === 0
+        ? INVOICE_COPY.noConciliatedPayments
+        : INVOICE_COPY.allPaymentsApplied;
 
   return (
     <FormDialog
@@ -271,11 +285,7 @@ export function InvoicePaymentDialog({
         </div>
 
         <SelectField
-          emptyLabel={
-            payments.length === 0
-              ? INVOICE_COPY.noCustomerPayments
-              : INVOICE_COPY.allPaymentsApplied
-          }
+          emptyLabel={emptyPaymentsMessage}
           error={paymentError ?? undefined}
           help={INVOICE_COPY.applyHelp}
           id="pago-factura-seleccion"
@@ -376,9 +386,10 @@ export function InvoicePaymentDialog({
 
         {noAvailablePayments && (
           <NoticeBanner role="status" tone="info">
-            {payments.length === 0
-              ? INVOICE_COPY.noCustomerPayments
-              : INVOICE_COPY.allPaymentsApplied}
+            <p>{emptyPaymentsMessage}</p>
+            {hasUnconciliatedPayments && (
+              <p className="mt-1">{INVOICE_COPY.unconciliatedNote}</p>
+            )}
           </NoticeBanner>
         )}
 

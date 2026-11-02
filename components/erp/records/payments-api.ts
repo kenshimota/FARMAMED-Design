@@ -1,7 +1,9 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
 import {
+  parseImage,
   readCollection,
+  type ImageRecord,
   type RecordId,
 } from "@/components/erp/records/records-api";
 import {
@@ -11,9 +13,28 @@ import {
   type WalletCurrency,
 } from "@/components/erp/records/wallets-api";
 
+export const PAYMENT_STATUSES = ["pending", "conciliated", "rejected"] as const;
+
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number] | "unknown";
+
 export type PaymentMethodSummary = {
   id: RecordId;
   label: string;
+};
+
+export type PaymentStatusActor = {
+  id: RecordId;
+  username: string;
+  email: string;
+};
+
+export type PaymentHistoryEntry = {
+  id: RecordId;
+  from_status: PaymentStatus | null;
+  to_status: PaymentStatus;
+  reason: string;
+  created_at: string | null;
+  actor: PaymentStatusActor | null;
 };
 
 export type PaymentRecord = {
@@ -27,7 +48,13 @@ export type PaymentRecord = {
   paid_at: string | null;
   reference: string;
   notes: string;
+  status: PaymentStatus;
+  status_name: string;
+  rejection_reason: string;
+  reference_image_id: RecordId | null;
+  reference_image: ImageRecord | null;
   wallet?: CustomerWallet | null;
+  history?: PaymentHistoryEntry[];
 };
 
 export type PaymentFilters = {
@@ -36,6 +63,7 @@ export type PaymentFilters = {
   currencyId?: string;
   paidFrom?: string;
   paidTo?: string;
+  status?: string;
 };
 
 export type PaymentCreateInput = {
@@ -51,6 +79,19 @@ export type PaymentUpdateInput = {
   reference?: string | null;
   notes?: string | null;
   paid_at?: string;
+};
+
+export type PaymentStatusInput = {
+  status: "conciliated" | "rejected";
+  reason?: string | null;
+};
+
+export type PaymentStatusResult = {
+  id: RecordId;
+  status: PaymentStatus;
+  status_name: string;
+  rejection_reason: string;
+  wallet: CustomerWallet | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,6 +138,72 @@ function parseMethodPaymentSummary(source: unknown): PaymentMethodSummary | null
   return { id, label };
 }
 
+export function parsePaymentStatus(value: unknown): PaymentStatus | null {
+  const text = readText(value).toLowerCase();
+  return (PAYMENT_STATUSES as readonly string[]).includes(text)
+    ? (text as PaymentStatus)
+    : null;
+}
+
+function parsePaymentActor(source: unknown): PaymentStatusActor | null {
+  if (!isRecord(source)) return null;
+  const id = readId(source.id);
+  const username = readText(source.username) || readText(source.email);
+  if (id === null || !username) return null;
+  return {
+    id,
+    username,
+    email: readText(source.email),
+  };
+}
+
+function parsePaymentHistoryEntry(source: unknown): PaymentHistoryEntry | null {
+  if (!isRecord(source)) return null;
+  const id = readId(source.id);
+  const toStatus = parsePaymentStatus(source.to_status);
+  if (id === null || !toStatus) return null;
+  return {
+    id,
+    from_status: parsePaymentStatus(source.from_status),
+    to_status: toStatus,
+    reason: readText(source.reason),
+    created_at: readTimestamp(source.created_at),
+    actor: parsePaymentActor(source.actor),
+  };
+}
+
+function sortHistory(history: PaymentHistoryEntry[]) {
+  return history.sort((first, second) => {
+    const firstTime = first.created_at ? Date.parse(first.created_at) : 0;
+    const secondTime = second.created_at ? Date.parse(second.created_at) : 0;
+    if (firstTime !== secondTime) return firstTime - secondTime;
+    const firstId = Number(first.id);
+    const secondId = Number(second.id);
+    if (Number.isFinite(firstId) && Number.isFinite(secondId)) {
+      return firstId - secondId;
+    }
+    return String(first.id).localeCompare(String(second.id), "es");
+  });
+}
+
+function parseHistoryArray(value: unknown): PaymentHistoryEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return sortHistory(
+    value
+      .map(parsePaymentHistoryEntry)
+      .filter((entry): entry is PaymentHistoryEntry => entry !== null),
+  );
+}
+
+export function parsePaymentHistoryList(payload: unknown): PaymentHistoryEntry[] {
+  const list = readCollection(payload);
+  const history = list
+    .map(parsePaymentHistoryEntry)
+    .filter((entry): entry is PaymentHistoryEntry => entry !== null);
+  if (list.length > 0 && history.length === 0) throw new ApiError(500, null);
+  return sortHistory(history);
+}
+
 export function parsePayment(source: unknown): PaymentRecord | null {
   const record = unwrapRecord(source);
   if (!isRecord(record)) return null;
@@ -116,6 +223,8 @@ export function parsePayment(source: unknown): PaymentRecord | null {
     return null;
   }
 
+  const status = parsePaymentStatus(record.status) ?? "unknown";
+
   return {
     id,
     customer_id: customerId,
@@ -127,7 +236,30 @@ export function parsePayment(source: unknown): PaymentRecord | null {
     paid_at: readTimestamp(record.paid_at),
     reference: readText(record.reference),
     notes: readText(record.notes),
+    status,
+    status_name: readText(record.status_name),
+    rejection_reason: readText(record.rejection_reason),
+    reference_image_id: readId(record.reference_image_id),
+    reference_image: parseImage(record.reference_image),
     wallet: record.wallet === undefined ? undefined : parseWallet(record.wallet),
+    history: parseHistoryArray(record.history),
+  };
+}
+
+export function parsePaymentStatusResult(
+  payload: unknown,
+): PaymentStatusResult | null {
+  const record = unwrapRecord(payload);
+  if (!isRecord(record)) return null;
+  const id = readId(record.id);
+  const status = parsePaymentStatus(record.status);
+  if (id === null || !status) return null;
+  return {
+    id,
+    status,
+    status_name: readText(record.status_name),
+    rejection_reason: readText(record.rejection_reason),
+    wallet: record.wallet === undefined ? null : parseWallet(record.wallet),
   };
 }
 
@@ -154,6 +286,36 @@ function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
 }
 
+function appendPaymentField(
+  formData: FormData,
+  key: string,
+  value: string | number | null | undefined,
+) {
+  if (value === undefined) return;
+  formData.set(key, value === null ? "" : String(value));
+}
+
+function buildPaymentFormData(
+  input: PaymentCreateInput | PaymentUpdateInput,
+  image?: File | null,
+) {
+  const formData = new FormData();
+  appendPaymentField(formData, "reference", input.reference);
+  appendPaymentField(formData, "notes", input.notes);
+  appendPaymentField(formData, "paid_at", input.paid_at);
+  if ("customer_id" in input) {
+    appendPaymentField(formData, "customer_id", input.customer_id);
+  }
+  if ("method_payment_id" in input) {
+    appendPaymentField(formData, "method_payment_id", input.method_payment_id);
+  }
+  if ("amount" in input) {
+    appendPaymentField(formData, "amount", input.amount);
+  }
+  if (image) formData.set("image", image);
+  return formData;
+}
+
 export async function fetchPayments(filters: PaymentFilters = {}) {
   const query = new URLSearchParams();
   if (filters.customerId) query.set("customer_id", filters.customerId);
@@ -163,6 +325,7 @@ export async function fetchPayments(filters: PaymentFilters = {}) {
   if (filters.currencyId) query.set("currency_id", filters.currencyId);
   if (filters.paidFrom) query.set("paid_from", filters.paidFrom);
   if (filters.paidTo) query.set("paid_to", filters.paidTo);
+  if (filters.status) query.set("status", filters.status);
   const search = query.toString();
   const payload = await apiFetch<unknown>(
     `/payments${search ? `?${search}` : ""}`,
@@ -181,29 +344,61 @@ export async function fetchPayment(id: string) {
   return payment;
 }
 
-export async function createPayment(input: PaymentCreateInput) {
+export async function fetchPaymentHistory(id: string) {
+  const payload = await apiFetch<unknown>(
+    `/payments/${encodeURIComponent(id)}/history`,
+    authOptions(),
+  );
+  return parsePaymentHistoryList(payload);
+}
+
+export async function createPayment(
+  input: PaymentCreateInput,
+  image?: File | null,
+) {
   const payload = await apiFetch<unknown>("/payments", {
     ...authOptions(),
     method: "POST",
-    body: JSON.stringify(input),
+    body: image ? buildPaymentFormData(input, image) : JSON.stringify(input),
   });
   const payment = parsePayment(payload);
   if (!payment) throw new ApiError(500, null);
   return payment;
 }
 
-export async function updatePayment(id: string, input: PaymentUpdateInput) {
+export async function updatePayment(
+  id: string,
+  input: PaymentUpdateInput,
+  image?: File | null,
+) {
   const payload = await apiFetch<unknown>(
     `/payments/${encodeURIComponent(id)}`,
+    {
+      ...authOptions(),
+      method: "PUT",
+      body: buildPaymentFormData(input, image),
+    },
+  );
+  const payment = parsePayment(payload);
+  if (!payment) throw new ApiError(500, null);
+  return payment;
+}
+
+export async function changePaymentStatus(
+  id: string,
+  input: PaymentStatusInput,
+) {
+  const payload = await apiFetch<unknown>(
+    `/payments/${encodeURIComponent(id)}/status`,
     {
       ...authOptions(),
       method: "PUT",
       body: JSON.stringify(input),
     },
   );
-  const payment = parsePayment(payload);
-  if (!payment) throw new ApiError(500, null);
-  return payment;
+  const result = parsePaymentStatusResult(payload);
+  if (!result) throw new ApiError(500, null);
+  return result;
 }
 
 export function deletePayment(id: string) {

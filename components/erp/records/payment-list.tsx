@@ -49,15 +49,24 @@ import {
   deletePayment,
   fetchPayments,
   type PaymentRecord,
+  type PaymentStatusResult,
 } from "@/components/erp/records/payments-api";
 import {
+  PaymentAmount,
   paymentCountLabel,
   paymentMethodLabel,
   paymentMoney,
-  SignedMoney,
+  paymentReferenceLabel,
+  paymentStatusOptions,
 } from "@/components/erp/records/payment-shared";
+import { PaymentReferenceImage } from "@/components/erp/records/payment-reference-image";
+import { PaymentStatusBadge } from "@/components/erp/records/payment-status-badge";
+import {
+  PaymentStatusDialog,
+  type PaymentStatusDialogMode,
+} from "@/components/erp/records/payment-status-dialog";
 import type { WalletCurrency } from "@/components/erp/records/wallets-api";
-import { formatDateOnly } from "@/lib/format";
+import { formatDateOnly, formatMoney } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import type { UiError } from "@/lib/api-errors";
 
@@ -67,6 +76,7 @@ export type PaymentListFilters = {
   currencyId: string;
   paidFrom: string;
   paidTo: string;
+  status: string;
 };
 
 export const EMPTY_PAYMENT_FILTERS: PaymentListFilters = {
@@ -75,11 +85,14 @@ export const EMPTY_PAYMENT_FILTERS: PaymentListFilters = {
   currencyId: "",
   paidFrom: "",
   paidTo: "",
+  status: "",
 };
 
 const NO_PAYMENTS: PaymentRecord[] = [];
 const NO_CUSTOMERS: CustomerRecord[] = [];
 const NO_METHODS: MethodPayment[] = [];
+
+const PAYMENT_STATUS_FILTER_OPTIONS = paymentStatusOptions();
 
 function filtersKey(filters: PaymentListFilters) {
   return [
@@ -88,6 +101,7 @@ function filtersKey(filters: PaymentListFilters) {
     filters.currencyId,
     filters.paidFrom,
     filters.paidTo,
+    filters.status,
   ].join("|");
 }
 
@@ -97,7 +111,8 @@ function hasActiveFilters(filters: PaymentListFilters) {
       filters.methodPaymentId ||
       filters.currencyId ||
       filters.paidFrom ||
-      filters.paidTo,
+      filters.paidTo ||
+      filters.status,
   );
 }
 
@@ -140,6 +155,13 @@ function PaymentListContent({
 
   const [filters, setFilters] = useState<PaymentListFilters>(initialFilters);
   const [deleteTarget, setDeleteTarget] = useState<PaymentRecord | null>(null);
+  const [statusTarget, setStatusTarget] = useState<{
+    payment: PaymentRecord;
+    mode: PaymentStatusDialogMode;
+  } | null>(null);
+  const [statusUpdates, setStatusUpdates] = useState<
+    Record<string, PaymentStatusResult>
+  >({});
 
   const initialKey = filtersKey(initialFilters);
   const [appliedInitialKey, setAppliedInitialKey] = useState(initialKey);
@@ -161,6 +183,7 @@ function PaymentListContent({
         currencyId: filters.currencyId || undefined,
         paidFrom: filters.paidFrom || undefined,
         paidTo: filters.paidTo || undefined,
+        status: filters.status || undefined,
       }),
     [
       filters.customerId,
@@ -168,11 +191,24 @@ function PaymentListContent({
       filters.methodPaymentId,
       filters.paidFrom,
       filters.paidTo,
+      filters.status,
     ],
   );
   const resource = useAsyncResource(loader);
   const reload = resource.reload;
-  const payments = resource.data ?? NO_PAYMENTS;
+  const payments = useMemo(() => {
+    const list = resource.data ?? NO_PAYMENTS;
+    return list.map((payment) => {
+      const update = statusUpdates[String(payment.id)];
+      if (!update) return payment;
+      return {
+        ...payment,
+        status: update.status,
+        rejection_reason: update.rejection_reason,
+        wallet: update.wallet ?? payment.wallet,
+      };
+    });
+  }, [resource.data, statusUpdates]);
 
   const activeKey = filtersKey(filters);
   const appliedKey = useRef(activeKey);
@@ -221,6 +257,7 @@ function PaymentListContent({
     if (next.currencyId) params.set("currency_id", next.currencyId);
     if (next.paidFrom) params.set("paid_from", next.paidFrom);
     if (next.paidTo) params.set("paid_to", next.paidTo);
+    if (next.status) params.set("status", next.status);
     const search = params.toString();
     router.replace(search ? `${pathname}?${search}` : pathname, {
       scroll: false,
@@ -259,8 +296,36 @@ function PaymentListContent({
 
   async function handleDelete() {
     if (!deleteTarget) return;
+    const conciliated = deleteTarget.status === "conciliated";
     await deletePayment(String(deleteTarget.id));
-    toast.success("Pago eliminado. El saldo de la billetera se actualizó.");
+    toast.success(
+      conciliated
+        ? "Pago eliminado. El saldo de la billetera se actualizó."
+        : "Pago eliminado. El saldo de la billetera no cambia.",
+    );
+    reload();
+  }
+
+  function handleStatusSuccess(
+    result: PaymentStatusResult,
+    mode: PaymentStatusDialogMode,
+  ) {
+    setStatusUpdates((current) => ({
+      ...current,
+      [String(result.id)]: result,
+    }));
+    const creditedWallet = mode === "conciliate" ? result.wallet : null;
+    toast.success(
+      mode === "reject"
+        ? "Pago rechazado."
+        : creditedWallet
+          ? `Pago conciliado. Nuevo saldo: ${formatMoney(
+              creditedWallet.balance,
+              creditedWallet.currency ?? {},
+            )}.`
+          : "Pago conciliado. El saldo fue acreditado.",
+    );
+    setStatusTarget(null);
     reload();
   }
 
@@ -275,6 +340,27 @@ function PaymentListContent({
         >
           Ver
         </RecordActionLink>
+        {canWrite && payment.status === "pending" && (
+          <>
+            <RecordActionButton
+              aria-label={`Conciliar el pago de ${customerName}`}
+              icon="check"
+              onClick={() =>
+                setStatusTarget({ payment, mode: "conciliate" })
+              }
+            >
+              Conciliar
+            </RecordActionButton>
+            <RecordActionButton
+              aria-label={`Rechazar el pago de ${customerName}`}
+              danger
+              icon="close"
+              onClick={() => setStatusTarget({ payment, mode: "reject" })}
+            >
+              Rechazar
+            </RecordActionButton>
+          </>
+        )}
         {canWrite && (
           <RecordActionLink
             ariaLabel={`Editar el pago de ${customerName}`}
@@ -322,6 +408,12 @@ function PaymentListContent({
       ),
     },
     {
+      key: "estado",
+      header: "Estado",
+      className: "whitespace-nowrap",
+      render: (payment) => <PaymentStatusBadge status={payment.status} />,
+    },
+    {
       key: "metodo",
       header: "Método",
       render: (payment) => (
@@ -341,7 +433,18 @@ function PaymentListContent({
       header: "Monto",
       className: "whitespace-nowrap",
       render: (payment) => (
-        <SignedMoney currency={currencyFor(payment)} value={payment.amount} />
+        <PaymentAmount currency={currencyFor(payment)} payment={payment} />
+      ),
+    },
+    {
+      key: "comprobante",
+      header: "Comprobante",
+      className: "whitespace-nowrap",
+      render: (payment) => (
+        <PaymentReferenceImage
+          image={payment.reference_image}
+          referenceLabel={paymentReferenceLabel(payment)}
+        />
       ),
     },
     {
@@ -366,13 +469,30 @@ function PaymentListContent({
               {paymentMethodLabel(payment.method_payment, payment.method_payment_id)}
             </p>
           </div>
-          <CurrencyChip currency={currency} />
+          <div className="flex flex-col items-end gap-2">
+            <PaymentStatusBadge status={payment.status} />
+            <CurrencyChip currency={currency} />
+          </div>
         </div>
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-          <SignedMoney currency={currency} value={payment.amount} />
+          <PaymentAmount currency={currency} payment={payment} />
           <span className="text-[12px] tabular-nums text-muted">
             {payment.paid_at ? formatDateOnly(payment.paid_at) : "Sin fecha"}
           </span>
+        </div>
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-line bg-background p-2">
+          <PaymentReferenceImage
+            image={payment.reference_image}
+            referenceLabel={paymentReferenceLabel(payment)}
+          />
+          <div className="min-w-0 text-[12px]">
+            <p className="font-semibold text-ink">Comprobante</p>
+            <p className="truncate text-muted">
+              {payment.reference_image
+                ? "Imagen de referencia adjunta"
+                : "Sin comprobante"}
+            </p>
+          </div>
         </div>
         <dl className="mt-3 space-y-2 text-[12px]">
           <div className="flex items-start justify-between gap-3">
@@ -381,6 +501,14 @@ function PaymentListContent({
             </dt>
             <dd className="text-right text-ink">{payment.reference || "—"}</dd>
           </div>
+          {payment.status === "rejected" && payment.rejection_reason && (
+            <div className="flex items-start justify-between gap-3">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                Motivo
+              </dt>
+              <dd className="text-right text-ink">{payment.rejection_reason}</dd>
+            </div>
+          )}
         </dl>
       </div>
     );
@@ -400,7 +528,7 @@ function PaymentListContent({
             </Link>
           ) : undefined
         }
-        description="Registra los pagos recibidos y consulta cómo acreditan la billetera del cliente. La moneda se toma del método de pago seleccionado."
+        description="Registra los pagos recibidos, adjunta el comprobante y concilia o rechaza cada pago. El saldo se acredita solo cuando el pago se concilia."
         eyebrow="Finanzas"
         title="Pagos recibidos"
       />
@@ -411,7 +539,7 @@ function PaymentListContent({
         aria-label="Filtros de pagos"
         className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <SelectField
             emptyLabel="No hay clientes registrados."
             id="filtro-pago-cliente"
@@ -429,6 +557,15 @@ function PaymentListContent({
             options={customerOptions}
             placeholder="Todos los clientes"
             value={filters.customerId}
+          />
+          <SelectField
+            emptyLabel="No hay estados de pago."
+            id="filtro-pago-estado"
+            label="Estado"
+            onChange={(value) => updateFilter("status", value)}
+            options={PAYMENT_STATUS_FILTER_OPTIONS}
+            placeholder="Todos los estados"
+            value={filters.status}
           />
           <SelectField
             emptyLabel="No hay métodos registrados."
@@ -501,7 +638,7 @@ function PaymentListContent({
       )}
 
       {resource.status === "loading" && (
-        <RecordsTableSkeleton columns={7} label="Cargando pagos…" rows={6} />
+        <RecordsTableSkeleton columns={8} label="Cargando pagos…" rows={6} />
       )}
 
       {resource.status === "error" && payments.length === 0 && (
@@ -563,7 +700,7 @@ function PaymentListContent({
                 description={
                   filtersActive
                     ? "No hay pagos que coincidan con los filtros seleccionados."
-                    : "Registra el primer pago recibido para acreditar la billetera del cliente."
+                    : "Registra el primer pago recibido. El saldo se acredita cuando el pago se concilia."
                 }
                 title={
                   filtersActive ? "Sin resultados" : "Aún no hay pagos registrados."
@@ -572,7 +709,7 @@ function PaymentListContent({
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
-                  caption="Pagos recibidos con su fecha, cliente, método, moneda, monto y referencia"
+                  caption="Pagos recibidos con su fecha, cliente, estado, método, moneda, monto, comprobante y referencia"
                   columns={columns}
                   getRowKey={(payment) => String(payment.id)}
                   getRowLabel={(payment) => `pago de ${customerNameFor(payment)}`}
@@ -596,9 +733,11 @@ function PaymentListContent({
               <strong className="font-semibold text-ink">
                 {paymentMoney(deleteTarget.amount, currencyFor(deleteTarget))}
               </strong>{" "}
-              de {customerNameFor(deleteTarget)} y se ajustará el saldo de su
-              billetera. Si el pago ya está aplicado a una factura, no se puede
-              eliminar.
+              de {customerNameFor(deleteTarget)}.{" "}
+              {deleteTarget.status === "conciliated"
+                ? "Se ajustará el saldo de su billetera."
+                : "No se ajusta el saldo porque el pago no está conciliado."}{" "}
+              Si el pago ya está aplicado a una factura, no se puede eliminar.
             </span>
           ) : undefined
         }
@@ -613,6 +752,20 @@ function PaymentListContent({
         }
         open={deleteTarget !== null}
         title="Eliminar pago"
+      />
+
+      <PaymentStatusDialog
+        currency={
+          statusTarget ? currencyFor(statusTarget.payment) : null
+        }
+        customerName={
+          statusTarget ? customerNameFor(statusTarget.payment) : ""
+        }
+        mode={statusTarget?.mode ?? "conciliate"}
+        onClose={() => setStatusTarget(null)}
+        onSuccess={handleStatusSuccess}
+        open={statusTarget !== null}
+        payment={statusTarget?.payment ?? null}
       />
     </div>
   );
