@@ -4,6 +4,10 @@ import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
+import {
+  parsePaymentTermSummary,
+  type PaymentTermSummary,
+} from "@/lib/finance/payment-terms-api";
 
 export type CustomerPriceList = {
   id: RecordId;
@@ -19,6 +23,8 @@ export type CustomerRecord = {
   longitude: number | null;
   price_list_id: RecordId | null;
   price_list: CustomerPriceList | null;
+  payment_term_id: RecordId | null;
+  payment_term: PaymentTermSummary | null;
 };
 
 export type CustomerInput = {
@@ -28,6 +34,7 @@ export type CustomerInput = {
   latitude: number;
   longitude: number;
   price_list_id?: RecordId | null;
+  payment_term_id?: RecordId | null;
 };
 
 export const LATITUDE_RANGE = { min: -90, max: 90 } as const;
@@ -85,6 +92,9 @@ export function parseCustomer(source: unknown): CustomerRecord | null {
 
   const priceList = parseCustomerPriceList(record.price_list);
   const priceListId = readId(record.price_list_id) ?? priceList?.id ?? null;
+  const paymentTerm = parsePaymentTermSummary(record.payment_term);
+  const paymentTermId =
+    readId(record.payment_term_id) ?? paymentTerm?.id ?? null;
 
   return {
     id,
@@ -95,6 +105,8 @@ export function parseCustomer(source: unknown): CustomerRecord | null {
     longitude: readCoordinate(record.longitude, LONGITUDE_RANGE),
     price_list_id: priceListId,
     price_list: priceList,
+    payment_term_id: paymentTermId,
+    payment_term: paymentTerm,
   };
 }
 

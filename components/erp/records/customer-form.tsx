@@ -51,6 +51,7 @@ import {
   toApiId,
 } from "@/components/erp/records/records-api";
 import { fetchPriceLists } from "@/components/erp/records/price-lists-api";
+import { fetchPaymentTerms } from "@/lib/finance/payment-terms-api";
 import { ApiError } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
@@ -63,6 +64,7 @@ type CustomerFormValues = {
   latitude: string;
   longitude: string;
   priceListId: string;
+  paymentTermId: string;
 };
 
 const EMPTY_VALUES: CustomerFormValues = {
@@ -72,6 +74,7 @@ const EMPTY_VALUES: CustomerFormValues = {
   latitude: "",
   longitude: "",
   priceListId: "",
+  paymentTermId: "",
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -87,10 +90,11 @@ const COPY = {
   longitudeInvalid: "Usa un número entre -180 y 180.",
   missingData: "Faltan datos obligatorios. Revisa el formulario.",
   duplicate: "Ya existe un cliente con ese correo.",
+  paymentTermInactive:
+    "El término de pago seleccionado no está activo. Selecciona otro o deja «Sin término».",
   forbidden: "No tienes permisos para guardar clientes.",
   notFound: "No encontramos este cliente. Puede que haya sido eliminado.",
   session: "Tu sesión expiró. Inicia sesión de nuevo.",
-  validation: "Revisa los datos del formulario.",
   generic:
     "No pudimos guardar el cliente. Revisa tu conexión e intenta de nuevo.",
   geoDenied:
@@ -166,6 +170,12 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
   const priceListsResource = useAsyncResource(fetchPriceLists, {
     enabled: canReadPriceLists,
   });
+  const canReadPaymentTerms = canReadModule(user.role, "terminos_pago");
+  const canWritePaymentTerms = canWriteModule(user.role, "terminos_pago");
+  const paymentTermsResource = useAsyncResource(
+    () => fetchPaymentTerms(true),
+    { enabled: canReadPaymentTerms },
+  );
 
   const [values, setValues] = useState<CustomerFormValues>(EMPTY_VALUES);
   const [initialValues, setInitialValues] =
@@ -204,6 +214,12 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
             : customer.price_list
               ? String(customer.price_list.id)
               : "",
+        paymentTermId:
+          customer.payment_term_id !== null
+            ? String(customer.payment_term_id)
+            : customer.payment_term
+              ? String(customer.payment_term.id)
+              : "",
       };
       setValues(next);
       setInitialValues(next);
@@ -219,6 +235,17 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
 
   const latitudeValue = parseCoordinateText(values.latitude);
   const longitudeValue = parseCoordinateText(values.longitude);
+
+  const paymentTermsReady = paymentTermsResource.status === "ready";
+  const activePaymentTermIds = new Set(
+    (paymentTermsResource.data ?? []).map((term) => String(term.id)),
+  );
+  const currentPaymentTermInactive =
+    Boolean(initialValues.paymentTermId) &&
+    paymentTermsReady &&
+    !activePaymentTermIds.has(initialValues.paymentTermId);
+  const paymentTermUnchanged =
+    editing && values.paymentTermId === initialValues.paymentTermId;
 
   function clearFieldError(field: CustomerFieldKey) {
     setErrors((current) => {
@@ -300,6 +327,16 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
       next.longitude = COPY.longitudeInvalid;
     }
 
+    if (
+      canReadPaymentTerms &&
+      paymentTermsReady &&
+      values.paymentTermId &&
+      values.paymentTermId !== initialValues.paymentTermId &&
+      !activePaymentTermIds.has(values.paymentTermId)
+    ) {
+      next.paymentTermId = COPY.paymentTermInactive;
+    }
+
     return next;
   }
 
@@ -333,6 +370,11 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
         ? toApiId(values.priceListId)
         : null,
     };
+    if (!paymentTermUnchanged) {
+      payload.payment_term_id = values.paymentTermId
+        ? toApiId(values.paymentTermId)
+        : null;
+    }
 
     try {
       const saved = editing
@@ -366,7 +408,7 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
             setShowSummary(true);
             window.requestAnimationFrame(() => focusFirstInvalidField());
           } else {
-            setMessage(COPY.validation);
+            setMessage(translateApiError(caught).message);
           }
         } else {
           setMessage(translateApiError(caught).message);
@@ -457,6 +499,28 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
     priceListOptions.unshift({
       value: values.priceListId,
       label: currentPriceList?.name ?? `Lista #${values.priceListId}`,
+    });
+  }
+
+  const paymentTermOptions = (paymentTermsResource.data ?? []).map((term) => ({
+    value: String(term.id),
+    label: `${term.code} — ${term.name}`,
+  }));
+  if (
+    values.paymentTermId &&
+    paymentTermsReady &&
+    !activePaymentTermIds.has(values.paymentTermId)
+  ) {
+    const currentPaymentTerm =
+      customer?.payment_term &&
+      String(customer.payment_term.id) === values.paymentTermId
+        ? customer.payment_term
+        : null;
+    paymentTermOptions.unshift({
+      value: values.paymentTermId,
+      label: currentPaymentTerm
+        ? `${currentPaymentTerm.code} — ${currentPaymentTerm.name} (inactivo)`
+        : `Término #${values.paymentTermId} (no disponible)`,
     });
   }
 
@@ -591,6 +655,46 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
                 options={priceListOptions}
                 placeholder="Sin lista"
                 value={values.priceListId}
+              />
+            </div>
+          )}
+
+          {canReadPaymentTerms && (
+            <div className="rounded-2xl border border-line bg-background/60 p-4">
+              {currentPaymentTermInactive && paymentTermUnchanged && (
+                <div className="mb-4">
+                  <NoticeBanner tone="warning">
+                    El término de pago asignado a este cliente está inactivo.
+                    Puedes guardar los demás datos sin cambiarlo, o seleccionar
+                    un término activo o «Sin término».
+                  </NoticeBanner>
+                </div>
+              )}
+              <SelectField
+                createHref={
+                  canWritePaymentTerms
+                    ? "/app/terminos-de-pago"
+                    : undefined
+                }
+                createLabel="Administrar términos de pago"
+                disabled={submitting}
+                emptyLabel="No hay términos de pago activos."
+                error={errors.paymentTermId}
+                help="Opcional. Es el término por defecto del cliente; los pedidos nuevos lo copian. Contado usa 0 días y crédito usa los días indicados."
+                id={CUSTOMER_FIELD_IDS.paymentTermId}
+                label="Término de pago"
+                loadError={
+                  paymentTermsResource.status === "error"
+                    ? "No pudimos cargar los términos de pago."
+                    : null
+                }
+                loading={paymentTermsResource.status === "loading"}
+                loadingLabel="Cargando términos de pago…"
+                onChange={(value) => updateField("paymentTermId", value)}
+                onRetry={paymentTermsResource.reload}
+                options={paymentTermOptions}
+                placeholder="Sin término"
+                value={values.paymentTermId}
               />
             </div>
           )}
