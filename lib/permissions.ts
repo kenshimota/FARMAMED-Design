@@ -22,6 +22,7 @@ export type ModuleKey =
   | "compras"
   | "monedas"
   | "impuestos"
+  | "listas_precios"
   | "tipos_metodos_pago"
   | "metodos_pago"
   | "usuarios"
@@ -81,6 +82,10 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
     read: ["admin", "seller", "dispatcher", "manager_warehouse"],
     write: ["admin"],
   },
+  listas_precios: {
+    read: ["admin", "seller"],
+    write: ["admin", "seller"],
+  },
   tipos_metodos_pago: {
     read: ["admin", "seller", "dispatcher"],
     write: ["admin"],
@@ -104,11 +109,12 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
-  admin: "Administra usuarios, roles, catálogos, operación, inventario, compras, monedas, impuestos y métodos de pago.",
+  admin:
+    "Administra usuarios, roles, catálogos, operación, inventario, compras, monedas, impuestos, métodos de pago y listas de precios.",
   customer:
     "Consulta el catálogo en modo lectura. No tiene pedidos ni checkout en esta versión.",
   seller:
-    "Gestiona catálogo, clientes, costos y compras; consulta existencias, lotes, monedas, estantes, impuestos y métodos de pago.",
+    "Gestiona catálogo, clientes, costos, compras y listas de precios; consulta existencias, lotes, monedas, estantes, impuestos y métodos de pago.",
   dispatcher:
     "Consulta clientes, bodegas, estantes, lotes, asignaciones, monedas, impuestos y métodos de pago.",
   manager_warehouse:
@@ -162,6 +168,7 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "compras",
   "monedas",
   "impuestos",
+  "listas_precios",
   "tipos_metodos_pago",
   "metodos_pago",
   "usuarios",
@@ -195,6 +202,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Compras", module: "compras" },
   { label: "Monedas", module: "monedas" },
   { label: "Impuestos", module: "impuestos" },
+  { label: "Listas de precios", module: "listas_precios" },
   { label: "Tipos de métodos de pago", module: "tipos_metodos_pago" },
   { label: "Métodos de pago", module: "metodos_pago" },
   { label: "Usuarios", module: "usuarios" },
