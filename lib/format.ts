@@ -98,6 +98,25 @@ export function formatDateOnly(value: string | number | Date) {
   }).format(date);
 }
 
+export function formatDateInputValue(value: string | number | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: TIME_ZONE,
+  }).formatToParts(date);
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const year = read("year");
+  const month = read("month");
+  const day = read("day");
+  if (!year || !month || !day) return "";
+  return `${year}-${month}-${day}`;
+}
+
 export function formatDateTime(value: string | number | Date) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return EMPTY_VALUE;

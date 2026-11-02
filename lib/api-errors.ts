@@ -107,6 +107,12 @@ const CONFLICT_MESSAGES: Record<string, string> = {
     "Los estados del sistema no se pueden eliminar.",
   "order status is in use": "Un estado en uso no se puede eliminar.",
   "order status already exists": "Ya existe un estado con ese código.",
+  "payment has allocations":
+    "Este pago ya está aplicado a una factura y no se puede eliminar.",
+  "wallet balance would become negative":
+    "No puedes eliminar este pago porque el saldo de la billetera quedaría negativo.",
+  "payment deposit not found":
+    "No encontramos el depósito asociado a este pago. Actualiza la lista e intenta de nuevo.",
 };
 
 export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
@@ -146,6 +152,24 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El siguiente estado no puede ser el mismo ni generar un ciclo.",
   "next status code does not exist":
     "El siguiente estado indicado no existe.",
+  "amount must be a positive number with two decimals":
+    "El monto debe ser mayor que cero y tener máximo dos decimales.",
+  "customer_id must be a positive integer": "Selecciona un cliente válido.",
+  "method_payment_id must be a positive integer":
+    "Selecciona un método de pago válido.",
+  "currency_id must be a positive integer": "Selecciona una moneda válida.",
+  "paid_at must be a valid date": "Ingresa una fecha válida para el pago.",
+  "reference must be at most 100 characters":
+    "La referencia no puede superar los 100 caracteres.",
+  "notes must be at most 1000 characters":
+    "Las notas no pueden superar los 1000 caracteres.",
+  "invalid payment method":
+    "El método de pago no está activo o su moneda no está disponible.",
+  "customer_id cannot be changed": "El cliente del pago no se puede cambiar.",
+  "method_payment_id cannot be changed":
+    "El método de pago no se puede cambiar.",
+  "currency_id cannot be changed": "La moneda del pago no se puede cambiar.",
+  "amount cannot be changed": "El monto del pago no se puede cambiar.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
