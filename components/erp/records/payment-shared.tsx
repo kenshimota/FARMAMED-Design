@@ -1,13 +1,53 @@
 import { Icon, type IconName } from "@/components/icons";
-import type {
-  PaymentRecord,
-  PaymentMethodSummary,
+import {
+  PAYMENT_STATUSES,
+  type PaymentRecord,
+  type PaymentMethodSummary,
+  type PaymentStatus,
 } from "@/components/erp/records/payments-api";
 import type {
   WalletCurrency,
   WalletTransactionType,
 } from "@/components/erp/records/wallets-api";
 import { formatInteger, formatMoney } from "@/lib/format";
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  pending: "Pendiente",
+  conciliated: "Conciliado",
+  rejected: "Rechazado",
+  unknown: "Desconocido",
+};
+
+export const PAYMENT_STATUS_DETAILS: Record<PaymentStatus, string> = {
+  pending:
+    "Pendiente de conciliación. El saldo aún no está disponible.",
+  conciliated: "Conciliado. El saldo fue acreditado.",
+  rejected: "Rechazado. El saldo no fue acreditado.",
+  unknown:
+    "No pudimos identificar el estado del pago. Actualiza la información para volver a consultarlo.",
+};
+
+export const PAYMENT_REJECTION_SUGGESTIONS = [
+  "El monto no coincide con el comprobante.",
+  "No se encontró el pago en el banco.",
+  "El comprobante no es legible.",
+  "El pago fue duplicado.",
+] as const;
+
+export function paymentStatusLabel(status: PaymentStatus) {
+  return PAYMENT_STATUS_LABELS[status];
+}
+
+export function paymentStatusOptions() {
+  return PAYMENT_STATUSES.map((status) => ({
+    value: status,
+    label: PAYMENT_STATUS_LABELS[status],
+  }));
+}
+
+export function paymentReferenceLabel(payment: PaymentRecord) {
+  return payment.reference || `#${payment.id}`;
+}
 
 const TRANSACTION_PRESENTATION: Record<
   WalletTransactionType,
@@ -61,6 +101,27 @@ export function SignedMoney({
       <span aria-hidden="true">{negative ? "−" : "+"} </span>
       <span className="sr-only">{negative ? "Monto negativo, " : "Monto positivo, "}</span>
       {formatMoney(Math.abs(value), currency ?? {})}
+    </span>
+  );
+}
+
+export function PaymentAmount({
+  payment,
+  currency,
+}: {
+  payment: PaymentRecord;
+  currency: WalletCurrency | null | undefined;
+}) {
+  if (payment.status === "conciliated") {
+    return <SignedMoney currency={currency} value={payment.amount} />;
+  }
+  return (
+    <span className="inline-flex flex-col font-semibold tabular-nums text-muted">
+      <span>{paymentMoney(payment.amount, currency)}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.08em]">
+        No acreditado
+      </span>
+      <span className="sr-only">Monto no acreditado.</span>
     </span>
   );
 }

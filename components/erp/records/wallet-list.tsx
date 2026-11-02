@@ -146,7 +146,7 @@ function WalletListContent({
             </Link>
           ) : undefined
         }
-        description="Consulta el saldo por moneda de las billeteras de tus clientes. Usa la búsqueda para limitar el listado a un cliente."
+        description="Consulta el saldo por moneda de cada cliente. Cada pago conciliado acredita la billetera de la moneda del método de pago; usa la búsqueda para limitar el listado a un cliente."
         eyebrow="Finanzas"
         title="Billeteras de clientes"
       />
@@ -167,6 +167,19 @@ function WalletListContent({
                 : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
                     list.range.to,
                   )} de ${formatInteger(list.meta.total)}`
+        }
+        extra={
+          customerId ? (
+            <div className="mt-4 border-t border-line pt-4">
+              <Link
+                className="inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                href={`/app/pagos?customer_id=${customerId}`}
+              >
+                Ver pagos del cliente
+                <Icon name="arrow-up-right" size={14} />
+              </Link>
+            </div>
+          ) : undefined
         }
         search={
           <AutocompleteField
@@ -252,7 +265,7 @@ function WalletListContent({
                       </Link>
                     ) : undefined
                   }
-                  description="Las billeteras se crean al registrar el primer pago del cliente en una moneda."
+                  description="Las billeteras se crean al conciliar el primer pago del cliente en una moneda."
                   title="Todavía no hay billeteras"
                 />
               ) : (
@@ -277,7 +290,7 @@ function WalletListContent({
                       ? `Hay ${formatInteger(
                           list.meta.total,
                         )} billeteras en total, pero esta página no tiene filas.`
-                      : "No hay billeteras con este filtro. Prueba con otro cliente."
+                      : "No hay billeteras con este filtro. Las billeteras se crean al conciliar el primer pago del cliente en una moneda."
                   }
                   title={
                     list.isPageOutOfRange

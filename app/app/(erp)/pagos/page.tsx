@@ -8,8 +8,10 @@ import {
 export const metadata: Metadata = {
   title: "Pagos recibidos",
   description:
-    "Registra y consulta los pagos recibidos de los clientes de Farmamed, con su método, moneda y efecto en la billetera.",
+    "Registra, concilia y consulta los pagos recibidos de los clientes de Farmamed, con su estado, comprobante y efecto en la billetera.",
 };
+
+const PAYMENT_STATUS_VALUES = new Set(["pending", "conciliated", "rejected"]);
 
 type PaymentsRouteProps = {
   searchParams: Promise<{
@@ -18,6 +20,7 @@ type PaymentsRouteProps = {
     currency_id?: string | string[];
     paid_from?: string | string[];
     paid_to?: string | string[];
+    status?: string | string[];
   }>;
 };
 
@@ -35,6 +38,11 @@ function readDateFilter(value: string | string[] | undefined) {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
 }
 
+function readStatusFilter(value: string | string[] | undefined) {
+  const trimmed = firstValue(value).toLowerCase();
+  return PAYMENT_STATUS_VALUES.has(trimmed) ? trimmed : "";
+}
+
 export default async function PaymentsRoute({
   searchParams,
 }: PaymentsRouteProps) {
@@ -46,6 +54,7 @@ export default async function PaymentsRoute({
     currencyId: readIdFilter(params.currency_id),
     paidFrom: readDateFilter(params.paid_from),
     paidTo: readDateFilter(params.paid_to),
+    status: readStatusFilter(params.status),
   };
   return <PaymentListPage initialFilters={initialFilters} />;
 }

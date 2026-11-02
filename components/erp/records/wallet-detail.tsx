@@ -114,7 +114,7 @@ export function WalletDetailPage({ walletId }: { walletId: string }) {
               Volver a billeteras
             </Link>
           }
-          description="Consulta el saldo actual y los movimientos de la billetera."
+          description="Consulta el saldo actual y los movimientos de la billetera. Solo los pagos conciliados generan depósito."
           eyebrow="Finanzas"
           title="Detalle de la billetera"
         />
@@ -282,7 +282,7 @@ export function WalletDetailPage({ walletId }: { walletId: string }) {
             </Link>
           ) : undefined
         }
-        description="Los depósitos suman saldo y los pagos de factura lo descuentan. Cada movimiento conserva el saldo resultante."
+        description="Los depósitos de pagos conciliados suman saldo y los pagos de factura lo descuentan. Cada movimiento conserva el saldo resultante."
         eyebrow="Billetera"
         title={customerName}
       >
@@ -359,7 +359,7 @@ export function WalletDetailPage({ walletId }: { walletId: string }) {
 
         {transactions.length === 0 ? (
           <EmptyState
-            description="Los depósitos y los pagos de factura aparecerán aquí con su saldo resultante."
+            description="Los depósitos de pagos conciliados y los pagos de factura aparecerán aquí con su saldo resultante."
             title="Esta billetera no tiene movimientos."
           />
         ) : (

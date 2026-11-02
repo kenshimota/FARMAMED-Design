@@ -104,15 +104,26 @@ function WalletTransactionsSection({ wallet }: { wallet: CustomerWallet }) {
           <p className="break-words text-ink">
             {transactionDescription(transaction)}
           </p>
-          {transaction.invoice_id !== null && (
-            <Link
-              className="inline-flex min-h-11 items-center gap-1 text-[11px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              href={`/app/facturas/${transaction.invoice_id}`}
-            >
-              Ver factura #{transaction.invoice_id}
-              <Icon name="arrow-up-right" size={12} />
-            </Link>
-          )}
+          <div className="flex flex-wrap gap-x-4">
+            {transaction.payment_id !== null && (
+              <Link
+                className="inline-flex min-h-11 items-center gap-1 text-[11px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                href={`/app/pagos/${transaction.payment_id}`}
+              >
+                Ver pago #{transaction.payment_id}
+                <Icon name="arrow-up-right" size={12} />
+              </Link>
+            )}
+            {transaction.invoice_id !== null && (
+              <Link
+                className="inline-flex min-h-11 items-center gap-1 text-[11px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                href={`/app/facturas/${transaction.invoice_id}`}
+              >
+                Ver factura #{transaction.invoice_id}
+                <Icon name="arrow-up-right" size={12} />
+              </Link>
+            )}
+          </div>
         </div>
       ),
     },
@@ -180,15 +191,26 @@ function WalletTransactionsSection({ wallet }: { wallet: CustomerWallet }) {
             </dd>
           </div>
         </dl>
-        {transaction.invoice_id !== null && (
-          <Link
-            className="mt-3 inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-            href={`/app/facturas/${transaction.invoice_id}`}
-          >
-            Ver factura #{transaction.invoice_id}
-            <Icon name="arrow-up-right" size={14} />
-          </Link>
-        )}
+        <div className="mt-3 flex flex-wrap gap-x-4">
+          {transaction.payment_id !== null && (
+            <Link
+              className="inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+              href={`/app/pagos/${transaction.payment_id}`}
+            >
+              Ver pago #{transaction.payment_id}
+              <Icon name="arrow-up-right" size={14} />
+            </Link>
+          )}
+          {transaction.invoice_id !== null && (
+            <Link
+              className="inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+              href={`/app/facturas/${transaction.invoice_id}`}
+            >
+              Ver factura #{transaction.invoice_id}
+              <Icon name="arrow-up-right" size={14} />
+            </Link>
+          )}
+        </div>
       </div>
     );
   }
@@ -238,7 +260,7 @@ function WalletTransactionsSection({ wallet }: { wallet: CustomerWallet }) {
         />
       ) : transactions.length === 0 ? (
         <EmptyState
-          description="Los depósitos y los pagos de factura aparecerán aquí con su saldo resultante."
+          description="Los depósitos de pagos conciliados y los pagos de factura aparecerán aquí con su saldo resultante."
           title="Aún no hay movimientos en tu billetera."
         />
       ) : (
@@ -324,7 +346,7 @@ export function CustomerWalletPage() {
     return (
       <div className="space-y-5">
         <RecordsPageHeader
-          description="Consulta el saldo disponible por moneda y los movimientos de tu billetera."
+          description="Consulta el saldo disponible por moneda y los movimientos de tu billetera. El saldo se acredita cuando un pago se concilia."
           eyebrow="Mi billetera"
           title="Mi billetera"
         />
@@ -373,7 +395,7 @@ export function CustomerWalletPage() {
             <Icon name="arrow-right" size={16} />
           </Link>
         }
-        description="Este saldo es informativo. No puedes registrar pagos ni aplicar saldo desde el portal del cliente."
+        description="Este saldo es informativo. Solo los pagos conciliados generan un depósito. No puedes registrar pagos ni aplicar saldo desde el portal del cliente."
         eyebrow="Mi billetera"
         title="Mi billetera"
       >
@@ -405,7 +427,7 @@ export function CustomerWalletPage() {
 
       {wallets.length === 0 ? (
         <EmptyState
-          description="Cuando se registre un depósito o un pago de factura, tu saldo aparecerá aquí por moneda."
+          description="Cuando se concilie un pago o se aplique un pago a una factura, tu saldo aparecerá aquí por moneda."
           headingLevel={2}
           title="Aún no tienes una billetera."
         />
