@@ -13,12 +13,19 @@ type CustomerNavItem = {
   href?: string;
   icon: IconName;
   hint?: string;
+  activeWhen?: readonly string[];
 };
 
 // CLI-05 habilitará "Mis pedidos": reemplazar el hint por href.
 const NAV_ITEMS: readonly CustomerNavItem[] = [
   { label: "Inicio", href: "/app", icon: "home" },
   { label: "Tienda", href: "/app/tienda", icon: "cart" },
+  {
+    label: "Carrito",
+    href: "/app/carrito",
+    icon: "cart",
+    activeWhen: ["/app/finalizar-pedido"],
+  },
   {
     label: "Mis pedidos",
     icon: "clipboard",
@@ -43,7 +50,9 @@ function CustomerNavigation() {
   return (
     <ul className="grid grid-cols-2 gap-1 md:flex md:flex-wrap md:items-center md:gap-1">
       {NAV_ITEMS.map((item) => {
-        const active = isItemActive(item, pathname);
+        const active =
+          isItemActive(item, pathname) ||
+          item.activeWhen?.includes(pathname) === true;
 
         return (
           <li className="min-w-0" key={item.label}>
