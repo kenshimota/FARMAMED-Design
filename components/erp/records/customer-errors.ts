@@ -11,6 +11,7 @@ export const CUSTOMER_FIELD_IDS = {
   direction: "cliente-direccion",
   latitude: "cliente-latitud",
   longitude: "cliente-longitud",
+  priceListId: "cliente-lista-precios",
 } as const;
 
 export type CustomerFieldKey = keyof typeof CUSTOMER_FIELD_IDS;
@@ -21,6 +22,7 @@ export const CUSTOMER_FIELD_LABELS: Record<CustomerFieldKey, string> = {
   direction: "Dirección",
   latitude: "Latitud",
   longitude: "Longitud",
+  priceListId: "Lista de precios",
 };
 
 const FIELD_ALIASES: Record<string, CustomerFieldKey> = {
@@ -35,6 +37,8 @@ const FIELD_ALIASES: Record<string, CustomerFieldKey> = {
   longitude: "longitude",
   lng: "longitude",
   lon: "longitude",
+  price_list_id: "priceListId",
+  price_list: "priceListId",
 };
 
 const FIELD_MESSAGES: Record<CustomerFieldKey, string> = {
@@ -43,6 +47,7 @@ const FIELD_MESSAGES: Record<CustomerFieldKey, string> = {
   direction: "Ingresa la dirección del cliente.",
   latitude: `La latitud debe estar entre ${LATITUDE_RANGE.min} y ${LATITUDE_RANGE.max}.`,
   longitude: `La longitud debe estar entre ${LONGITUDE_RANGE.min} y ${LONGITUDE_RANGE.max}.`,
+  priceListId: "Selecciona una lista de precios válida.",
 };
 
 export function mapCustomerFieldErrors(error: unknown) {

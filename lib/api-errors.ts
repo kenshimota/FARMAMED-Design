@@ -92,6 +92,9 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "admin already exists": "Ya existe un administrador. Inicia sesión.",
   "tax already exists": "Ya existe un impuesto con ese código.",
   "tax is in use": "No puedes eliminar este impuesto porque está en uso. Puedes desactivarlo.",
+  "price list already exists": "Ya existe una lista con ese nombre.",
+  "price list is in use":
+    "No puedes eliminar una lista asignada a clientes.",
   "payment method already exists": "Ya existe un método con esa etiqueta para el tipo.",
   "payment method is in use": "No puedes eliminar este método porque está en uso.",
   "payment type already exists": "Ya existe un tipo con ese código.",
@@ -110,6 +113,12 @@ const KNOWN_MESSAGES: Record<string, string> = {
   "method_payment_type_id cannot be changed":
     "El tipo de método no se puede cambiar.",
   "invalid currency": "Selecciona una moneda activa.",
+  "invalid percentage":
+    "El porcentaje debe ser un número entre 0 y 99,99 con máximo dos decimales.",
+  "percentage must be < 100": "El porcentaje debe ser menor que 100.",
+  "invalid price list": "Selecciona una lista de precios válida.",
+  "nombre inválido": "Ingresa el nombre de la lista.",
+  "descripción inválida": "Revisa la descripción de la lista.",
   "invalid fields definition":
     "Revisa las definiciones de campos: clave, etiqueta, tipo y longitud.",
   "name must be between 1 and 100 characters":

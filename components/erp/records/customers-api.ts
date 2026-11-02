@@ -5,6 +5,11 @@ import {
   type RecordId,
 } from "@/components/erp/records/records-api";
 
+export type CustomerPriceList = {
+  id: RecordId;
+  name: string;
+};
+
 export type CustomerRecord = {
   id: RecordId;
   fullName: string;
@@ -12,6 +17,8 @@ export type CustomerRecord = {
   direction: string;
   latitude: number | null;
   longitude: number | null;
+  price_list_id: RecordId | null;
+  price_list: CustomerPriceList | null;
 };
 
 export type CustomerInput = {
@@ -20,6 +27,7 @@ export type CustomerInput = {
   direction: string;
   latitude: number;
   longitude: number;
+  price_list_id?: RecordId | null;
 };
 
 export const LATITUDE_RANGE = { min: -90, max: 90 } as const;
@@ -59,6 +67,14 @@ function unwrapRecord(payload: unknown) {
   return payload;
 }
 
+function parseCustomerPriceList(source: unknown): CustomerPriceList | null {
+  if (!isRecord(source)) return null;
+  const id = readId(source.id);
+  const name = readText(source.name);
+  if (id === null || !name) return null;
+  return { id, name };
+}
+
 export function parseCustomer(source: unknown): CustomerRecord | null {
   const record = unwrapRecord(source);
   if (!isRecord(record)) return null;
@@ -67,6 +83,9 @@ export function parseCustomer(source: unknown): CustomerRecord | null {
   const fullName = readText(record.fullName) || readText(record.full_name);
   if (id === null || !fullName) return null;
 
+  const priceList = parseCustomerPriceList(record.price_list);
+  const priceListId = readId(record.price_list_id) ?? priceList?.id ?? null;
+
   return {
     id,
     fullName,
@@ -74,6 +93,8 @@ export function parseCustomer(source: unknown): CustomerRecord | null {
     direction: readText(record.direction),
     latitude: readCoordinate(record.latitude, LATITUDE_RANGE),
     longitude: readCoordinate(record.longitude, LONGITUDE_RANGE),
+    price_list_id: priceListId,
+    price_list: priceList,
   };
 }
 
