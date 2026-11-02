@@ -19,11 +19,6 @@ export const CURRENCY_NOT_CONFIGURED_DETAIL =
 export const PURCHASE_WITHOUT_ITEMS =
   "Esta compra no tiene productos. Ábrela para agregar líneas antes de confirmar.";
 
-export const LARGE_LIST_THRESHOLD = 200;
-
-export const LARGE_LIST_NOTICE =
-  "Este listado supera las 200 filas. Usa la búsqueda o los filtros para encontrar lo que necesitas.";
-
 export const RECOVERY_COOLDOWN_SECONDS = 120;
 
 export const RECOVERY_CODE_TTL_SECONDS = 300;

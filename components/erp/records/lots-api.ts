@@ -1,6 +1,13 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
 import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
+import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
@@ -307,6 +314,37 @@ function appendQuery(
   if (value === undefined || value === null) return;
   const normalized = String(value).trim();
   if (normalized) query.set(key, normalized);
+}
+
+const LOT_FILTERS = [
+  "product_id",
+  "supplier_id",
+  "item_state_id",
+  "warehouse_id",
+  "shelf_id",
+  "section_id",
+  "number",
+  "expired",
+  "expiring_before",
+  "expires_from",
+  "expires_to",
+  "location_status",
+] as const;
+
+export async function fetchLotPage(
+  query: ListQuery = {},
+): Promise<Paginated<LotRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/lots${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, LOT_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseLot, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchLots(filters: LotFilters = {}) {

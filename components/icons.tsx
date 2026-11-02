@@ -11,6 +11,8 @@ export type IconName =
   | "chart"
   | "check"
   | "chevron-down"
+  | "chevron-left"
+  | "chevron-right"
   | "clipboard"
   | "clock"
   | "close"
@@ -140,6 +142,8 @@ const paths: Record<IconName, ReactNode> = {
   ),
   check: <path d="m5 12 4 4L19 6" />,
   "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-left": <path d="m15 18-6-6 6-6" />,
+  "chevron-right": <path d="m9 18 6-6-6-6" />,
   clipboard: (
     <>
       <rect x="5" y="4" width="14" height="17" rx="2" />
