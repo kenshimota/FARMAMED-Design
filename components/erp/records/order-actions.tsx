@@ -330,8 +330,19 @@ export function OrderActionsSection({
               ? `Factura #${invoice?.number ?? invoice?.id} registrada.`
               : "El pedido quedó facturado."}
           </p>
-          {/* FIN-08: enlazar aquí a /app/facturas/[id] cuando exista la ruta. */}
-          <p className="mt-1 text-muted">No disponible en esta versión.</p>
+          {invoice?.id !== null && invoice?.id !== undefined ? (
+            <Link
+              className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+              href={`/app/facturas/${invoice.id}`}
+            >
+              Ver factura
+              <Icon name="arrow-right" size={14} />
+            </Link>
+          ) : (
+            <p className="mt-1 text-muted">
+              La factura no está disponible para consulta en este momento.
+            </p>
+          )}
         </div>
       )}
 
