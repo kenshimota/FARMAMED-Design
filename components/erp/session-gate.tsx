@@ -1,15 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Brand } from "@/components/brand";
 import { Icon } from "@/components/icons";
-import { ErpLoading } from "@/components/erp/erp-loading";
+import { AccessState } from "@/components/erp/access-state";
+import { CustomerIncompleteScreen } from "@/components/erp/customer-incomplete";
+import { CustomerShell } from "@/components/erp/customer-shell";
 import { ErpShell } from "@/components/erp/erp-shell";
+import { SessionLoading } from "@/components/erp/session-loading";
 import { SessionProvider } from "@/components/erp/session-context";
 import { CurrencyStatusProvider } from "@/components/erp/ui/currency-status-context";
 import { ToastProvider } from "@/components/erp/ui/toast";
 import { ApiError } from "@/lib/api";
+import { hasCustomerLink } from "@/lib/customer";
 import {
   buildLoginUrl,
   clearStoredToken,
@@ -24,8 +28,22 @@ type SessionState =
   | { status: "forbidden" }
   | { status: "error" };
 
+// CLI-03 y CLI-05 agregarán "/app/tienda" y "/app/mis-pedidos" cuando existan.
+const CUSTOMER_ROUTES = new Set([
+  "/app",
+  "/app/cuenta",
+  "/app/cuenta-incompleta",
+]);
+
+function isCustomerRoute(pathname: string) {
+  const normalized =
+    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return CUSTOMER_ROUTES.has(normalized);
+}
+
 export function SessionGate({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [state, setState] = useState<SessionState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -69,7 +87,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
     router.replace(buildLoginUrl(undefined, "cerrada"));
   }, [router]);
 
-  if (state.status === "loading") return <ErpLoading />;
+  if (state.status === "loading") return <SessionLoading />;
 
   if (state.status === "forbidden" || state.status === "error") {
     const forbidden = state.status === "forbidden";
@@ -108,13 +126,29 @@ export function SessionGate({ children }: { children: ReactNode }) {
     );
   }
 
+  const isCustomer = state.user.role === "customer";
+
   return (
     <SessionProvider logout={logout} user={state.user}>
-      <CurrencyStatusProvider>
-        <ToastProvider>
-          <ErpShell>{children}</ErpShell>
-        </ToastProvider>
-      </CurrencyStatusProvider>
+      {isCustomer ? (
+        hasCustomerLink(state.user) ? (
+          <CustomerShell>
+            {isCustomerRoute(pathname) ? (
+              children
+            ) : (
+              <AccessState description="El portal del cliente solo incluye el inicio de tienda, la cuenta y las secciones habilitadas. Usa la navegación para continuar." />
+            )}
+          </CustomerShell>
+        ) : (
+          <CustomerIncompleteScreen reason="vinculo" />
+        )
+      ) : (
+        <CurrencyStatusProvider>
+          <ToastProvider>
+            <ErpShell>{children}</ErpShell>
+          </ToastProvider>
+        </CurrencyStatusProvider>
+      )}
     </SessionProvider>
   );
 }

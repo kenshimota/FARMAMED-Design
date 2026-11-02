@@ -150,7 +150,7 @@ export function LoginForm({ aviso, retorno }: { aviso: string | null; retorno: s
     setCooldownAnnouncement(null);
 
     try {
-      const token = await authenticate(trimmedIdentifier, password);
+      const { token } = await authenticate(trimmedIdentifier, password);
       saveStoredToken(token);
       setSuccess(COPY.success);
     } catch (caughtError) {

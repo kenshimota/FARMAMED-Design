@@ -4,16 +4,32 @@ import type { LoginNotice } from "@/lib/session-store";
 
 export type { LoginNotice };
 
+export type SessionCustomer = {
+  id: number | string | null;
+  fullName: string;
+  email: string;
+  direction: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export type SessionUser = {
   id: number | string | null;
   username: string;
   name: string | null;
   email: string;
   role: string;
+  customer_id: number | string | null;
+  customer: SessionCustomer | null;
 };
 
 export function sessionDisplayName(user: SessionUser) {
-  return user.name?.trim() || user.username || user.email;
+  return (
+    user.name?.trim() ||
+    user.customer?.fullName.trim() ||
+    user.username ||
+    user.email
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -54,6 +70,27 @@ function getId(value: unknown): number | string | null {
   return null;
 }
 
+function getCoordinate(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseSessionCustomer(value: unknown): SessionCustomer | null {
+  if (!isRecord(value)) return null;
+  const id = getId(value.id);
+  if (id === null) return null;
+
+  return {
+    id,
+    fullName: getString(value.fullName, value.full_name, value.name) ?? "",
+    email: getString(value.email) ?? "",
+    direction: getString(value.direction) ?? "",
+    latitude: getCoordinate(value.latitude),
+    longitude: getCoordinate(value.longitude),
+  };
+}
+
 export function parseSessionUser(payload: unknown): SessionUser | null {
   const source = getUserSource(payload);
   if (!isRecord(source)) return null;
@@ -69,8 +106,18 @@ export function parseSessionUser(payload: unknown): SessionUser | null {
   const email = getString(source.email) ?? "Correo no disponible";
   const username = getString(source.username) ?? "";
   const name = getString(source.name, source.fullName, source.full_name) ?? null;
+  const customer = parseSessionCustomer(source.customer);
+  const customerId = getId(source.customer_id) ?? customer?.id ?? null;
 
-  return { id: getId(source.id), username, name, email, role };
+  return {
+    id: getId(source.id),
+    username,
+    name,
+    email,
+    role,
+    customer_id: customerId,
+    customer,
+  };
 }
 
 export function getToken(payload: unknown) {
@@ -86,7 +133,9 @@ export async function authenticate(identifier: string, password: string) {
   });
   const token = getToken(payload);
   if (!token) throw new Error("La respuesta de acceso no contiene un token.");
-  return token;
+  const user = parseSessionUser(payload);
+  if (!user) throw new Error("La respuesta de acceso no contiene un rol válido.");
+  return { token, user };
 }
 
 export async function getSessionUser(token: string) {
