@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { PanelError } from "@/components/erp/ui/panel-error";
@@ -32,24 +33,15 @@ type OrdersState =
   | { status: "ready"; orders: OrderRecord[] }
   | { status: "error"; error: unknown };
 
-function DisabledStoreAction() {
-  const hintId = useId();
-
+function StoreAction({ variant = "primary" }: { variant?: "primary" | "secondary" }) {
   return (
-    <div>
-      <button
-        aria-describedby={hintId}
-        className="button-base button-secondary cursor-not-allowed opacity-70"
-        disabled
-        type="button"
-      >
-        Ver la tienda
-        <Icon name="arrow-right" size={17} />
-      </button>
-      <p className="mt-2 max-w-xs text-[11px] font-medium leading-5 text-muted" id={hintId}>
-        Disponible cuando el catálogo esté habilitado.
-      </p>
-    </div>
+    <Link
+      className={`button-base ${variant === "primary" ? "button-primary" : "button-secondary"}`}
+      href="/app/tienda"
+    >
+      Ver la tienda
+      <Icon name="arrow-right" size={17} />
+    </Link>
   );
 }
 
@@ -199,7 +191,7 @@ export function CustomerHome() {
             actividad reciente.
           </p>
           <div className="mt-7">
-            <DisabledStoreAction />
+            <StoreAction />
           </div>
         </div>
       </section>
@@ -249,7 +241,7 @@ export function CustomerHome() {
         ) : (
           <div className="mt-6">
             <EmptyState
-              action={<DisabledStoreAction />}
+              action={<StoreAction variant="secondary" />}
               description="Cuando realices tu primer pedido, aparecerá aquí."
               headingLevel={3}
               title="Aún no tienes pedidos."
