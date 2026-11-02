@@ -14,18 +14,14 @@ export const PURCHASE_COPY = {
   noLines: "Agrega al menos una línea para confirmar.",
   notEditable: "Esta compra ya no se puede editar.",
   alreadyConfirmed: "Esta compra ya fue confirmada.",
-  itemRepeated: "Ese producto y estado ya están en la compra.",
   taxInvalid: "El impuesto de la línea debe ser un monto mayor o igual a 0.",
-  desktopOnly: "Disponible en escritorio",
-  desktopOnlyHelp:
-    "El constructor de líneas necesita más espacio para trabajar con claridad. Puedes consultar el detalle y confirmar o cancelar compras desde el móvil.",
   addLine: "Agregar línea",
   confirmPurchase: "Confirmar compra",
   cancelPurchase: "Cancelar compra",
   deleteDraft: "Eliminar borrador",
   created: "Compra creada.",
   saved: "Cambios guardados.",
-  confirmed: "Compra confirmada. Se actualizaron costos y existencias.",
+  confirmed: "Compra confirmada. Los lotes quedaron pendientes de ubicación.",
   cancelled: "Compra cancelada.",
   deleted: "Borrador eliminado.",
   supplierRequired: "Selecciona un proveedor.",
@@ -37,6 +33,24 @@ export const PURCHASE_COPY = {
   unitCostFormat:
     "Usa un número mayor o igual a 0, con máximo 2 decimales y 9 dígitos enteros.",
   taxRequired: "Ingresa el impuesto (monto).",
+  lotNumberRequired: "Ingresa el número de lote.",
+  lotNumberFormat: "El número de lote debe tener entre 1 y 100 caracteres.",
+  expirationRequired: "Ingresa la fecha de vencimiento.",
+  expirationInvalid: "Usa una fecha de vencimiento válida.",
+  duplicateLot: "Ya existe una línea con ese lote para este producto.",
+  lotIncompatible:
+    "El lote ya existe con otro estado o vencimiento. Revisa los datos antes de confirmar.",
+  confirmNeedLots:
+    "Todas las líneas necesitan número de lote y fecha de vencimiento.",
+  confirmIrreversible:
+    "Confirmar actualiza costos y existencias. No se puede deshacer.",
+  pendingLocation: "Los lotes quedarán pendientes de ubicación.",
+  goToInbox: "Ir a la bandeja de ubicación",
+  sameProductDifferentLots:
+    "El mismo producto puede repetirse con lotes distintos.",
+  noLot: "Sin lote",
+  lotReceived: "Lote recibido",
+  lotPendingConfirmation: "Pendiente de confirmar",
   currencyInvalid: "Selecciona una moneda activa.",
   lineInvalid: "Revisa los datos de la línea.",
   purchaseNotFound: "No encontramos esta compra. Puede que haya sido eliminada.",
@@ -54,6 +68,8 @@ export const PURCHASE_LINE_FIELD_IDS = {
   quantity: "compra-linea-cantidad",
   unit_cost: "compra-linea-costo",
   tax_amount: "compra-linea-impuesto",
+  lot_number: "compra-linea-lote",
+  expiration_date: "compra-linea-vencimiento",
 } as const;
 
 export type PurchaseHeaderFieldKey = keyof typeof PURCHASE_HEADER_FIELD_IDS;
@@ -71,6 +87,8 @@ export const PURCHASE_LINE_LABELS: Record<PurchaseLineFieldKey, string> = {
   quantity: "Cantidad",
   unit_cost: "Costo unitario",
   tax_amount: "Impuesto (monto)",
+  lot_number: "Número de lote",
+  expiration_date: "Fecha de vencimiento",
 };
 
 export function headerSummaryItems(
@@ -104,6 +122,13 @@ function readApiMessage(error: ApiError) {
   return error.message.trim();
 }
 
+export function missingLotsError(caught: unknown) {
+  if (!(caught instanceof ApiError) || caught.status !== 422) return false;
+  return [caught.message, ...Object.values(caught.fieldErrors)].some((message) =>
+    message.toLowerCase().includes("every item requires"),
+  );
+}
+
 export function purchaseErrorMessage(caught: unknown): string {
   if (caught instanceof ApiError) {
     const raw = readApiMessage(caught);
@@ -115,12 +140,27 @@ export function purchaseErrorMessage(caught: unknown): string {
         return PURCHASE_COPY.alreadyConfirmed;
       }
       if (normalized.includes("item already exists")) {
-        return PURCHASE_COPY.itemRepeated;
+        return PURCHASE_COPY.duplicateLot;
+      }
+      if (normalized.includes("lot already exists with different data")) {
+        return PURCHASE_COPY.lotIncompatible;
       }
     }
 
+    if (caught.status === 400 && normalized.includes("lot_number")) {
+      return PURCHASE_COPY.confirmNeedLots;
+    }
+
     if (caught.status === 422) {
+      if (missingLotsError(caught)) return PURCHASE_COPY.confirmNeedLots;
       if (normalized.includes("no items")) return PURCHASE_COPY.noLines;
+      if (
+        normalized.includes("every item requires") ||
+        normalized.includes("lot_number") ||
+        normalized.includes("expiration_date")
+      ) {
+        return PURCHASE_COPY.confirmNeedLots;
+      }
       if (normalized.includes("currency")) return PURCHASE_COPY.currencyInvalid;
       if (normalized.includes("tax")) return PURCHASE_COPY.taxInvalid;
     }
@@ -149,6 +189,12 @@ const LINE_FIELD_ALIASES: Record<string, PurchaseLineFieldKey> = {
   unitcost: "unit_cost",
   tax_amount: "tax_amount",
   taxamount: "tax_amount",
+  lot_number: "lot_number",
+  lotnumber: "lot_number",
+  lot: "lot_number",
+  expiration_date: "expiration_date",
+  expirationdate: "expiration_date",
+  expiration: "expiration_date",
 };
 
 function lineFieldMessage(key: PurchaseLineFieldKey, rawMessage: string) {
@@ -167,6 +213,13 @@ function lineFieldMessage(key: PurchaseLineFieldKey, rawMessage: string) {
       return PURCHASE_COPY.unitCostFormat;
     case "tax_amount":
       return PURCHASE_COPY.taxInvalid;
+    case "lot_number":
+      if (normalized.includes("already exists")) return PURCHASE_COPY.duplicateLot;
+      if (normalized.includes("100")) return PURCHASE_COPY.lotNumberFormat;
+      return PURCHASE_COPY.lotNumberRequired;
+    case "expiration_date":
+      if (normalized.includes("required")) return PURCHASE_COPY.expirationRequired;
+      return PURCHASE_COPY.expirationInvalid;
   }
 }
 
@@ -179,6 +232,15 @@ export function mapLineFieldErrors(error: unknown) {
     const key = match ? LINE_FIELD_ALIASES[match[1].toLowerCase()] : undefined;
     if (!key) continue;
     mapped[key] = lineFieldMessage(key, rawMessage);
+  }
+
+  if (Object.keys(mapped).length === 0 && error.status === 409) {
+    const normalized = readApiMessage(error).toLowerCase();
+    if (normalized.includes("item already exists")) {
+      mapped.lot_number = PURCHASE_COPY.duplicateLot;
+    } else if (normalized.includes("lot already exists with different data")) {
+      mapped.lot_number = PURCHASE_COPY.lotIncompatible;
+    }
   }
 
   return mapped;
@@ -232,6 +294,8 @@ const BULK_LINE_FIELD_LABELS: Record<string, string> = {
   quantity: PURCHASE_LINE_LABELS.quantity,
   unit_cost: PURCHASE_LINE_LABELS.unit_cost,
   tax_amount: PURCHASE_LINE_LABELS.tax_amount,
+  lot_number: PURCHASE_LINE_LABELS.lot_number,
+  expiration_date: PURCHASE_LINE_LABELS.expiration_date,
 };
 
 export function mapBulkLineErrors(error: unknown): BulkLineError[] {
@@ -252,6 +316,12 @@ export function mapBulkLineErrors(error: unknown): BulkLineError[] {
   }
 
   return entries;
+}
+
+export const PURCHASE_LOT_NUMBER_MAX_LENGTH = 100;
+
+export function normalizeLotNumber(value: string) {
+  return value.trim().toLocaleLowerCase("es-VE");
 }
 
 export const PURCHASE_QUANTITY_PATTERN = /^\d{1,9}$/;

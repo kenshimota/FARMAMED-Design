@@ -4,7 +4,7 @@ import { PurchaseFormPage } from "@/components/erp/records/purchase-form";
 export const metadata: Metadata = {
   title: "Editar compra",
   description:
-    "Actualiza la cabecera y las líneas de un borrador de compra de Farmamed sin convertir montos al cambiar la moneda.",
+    "Actualiza la cabecera y las líneas con lote y vencimiento de un borrador de compra de Farmamed sin convertir montos al cambiar la moneda.",
 };
 
 type EditPurchaseRouteProps = {

@@ -110,7 +110,11 @@ export function SessionGate({ children }: { children: ReactNode }) {
     router.replace(buildLoginUrl(undefined, "cerrada"));
   }, [router]);
 
-  if (state.status === "loading") return <SessionLoading />;
+  if (state.status === "loading") {
+    return (
+      <SessionLoading variant={isCustomerRoute(pathname) ? "customer" : "erp"} />
+    );
+  }
 
   if (state.status === "forbidden" || state.status === "error") {
     const forbidden = state.status === "forbidden";

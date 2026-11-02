@@ -301,12 +301,13 @@ function StoreCatalogContent({
           className="space-y-4"
         >
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
+            {products.map((product, index) => (
               <li className="min-w-0" key={`${product.id}:${product.itemState.id}`}>
                 <article className="flex h-full flex-col overflow-hidden rounded-[24px] border border-line bg-surface shadow-[0_18px_60px_rgba(27,12,104,0.04)]">
                   <StoreImage
                     className="h-44 w-full rounded-none border-x-0 border-t-0 border-b border-line"
                     label={product.name}
+                    priority={index < 4}
                     src={product.imageUrl}
                   />
                   <div className="flex flex-1 flex-col p-5">

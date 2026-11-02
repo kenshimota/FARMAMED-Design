@@ -11,6 +11,8 @@ import {
 import {
   PURCHASE_COPY,
   PURCHASE_LINE_FIELD_IDS,
+  PURCHASE_LOT_NUMBER_MAX_LENGTH,
+  normalizeLotNumber,
   purchaseErrorMessage,
   PURCHASE_LINE_LABELS,
   formatAmountInput,
@@ -22,6 +24,7 @@ import {
   type PurchaseLineFieldKey,
 } from "@/components/erp/records/purchase-errors";
 import {
+  DateField,
   SelectField,
   TextField,
 } from "@/components/erp/records/form-controls";
@@ -37,6 +40,11 @@ import {
   purchaseMoney,
   type PurchaseMoney,
 } from "@/components/erp/records/purchase-shared";
+import {
+  isValidIsoDate,
+  normalizeDateInput,
+} from "@/components/erp/records/lot-shared";
+import { formatDateOnly } from "@/lib/format";
 
 export type PurchaseLineValues = {
   product_id: string;
@@ -44,6 +52,8 @@ export type PurchaseLineValues = {
   quantity: string;
   unit_cost: string;
   tax_amount: string;
+  lot_number: string;
+  expiration_date: string;
 };
 
 export type PurchaseLineRow = {
@@ -54,6 +64,9 @@ export type PurchaseLineRow = {
   quantity: number;
   unit_cost: number;
   tax_amount: number;
+  lot_number: string;
+  expiration_date: string;
+  received_lot_id: RecordId | null;
 };
 
 export const EMPTY_LINE_VALUES: PurchaseLineValues = {
@@ -62,6 +75,8 @@ export const EMPTY_LINE_VALUES: PurchaseLineValues = {
   quantity: "",
   unit_cost: "",
   tax_amount: "",
+  lot_number: "",
+  expiration_date: "",
 };
 
 export function lineValuesFromRow(row: PurchaseLineRow): PurchaseLineValues {
@@ -71,6 +86,8 @@ export function lineValuesFromRow(row: PurchaseLineRow): PurchaseLineValues {
     quantity: String(row.quantity),
     unit_cost: formatAmountInput(row.unit_cost),
     tax_amount: formatAmountInput(row.tax_amount),
+    lot_number: row.lot_number,
+    expiration_date: normalizeDateInput(row.expiration_date),
   };
 }
 
@@ -101,7 +118,56 @@ export function validateLineValues(
     errors.tax_amount = PURCHASE_COPY.taxInvalid;
   }
 
+  const lotNumber = values.lot_number.trim();
+  if (!lotNumber) {
+    errors.lot_number = PURCHASE_COPY.lotNumberRequired;
+  } else if (lotNumber.length > PURCHASE_LOT_NUMBER_MAX_LENGTH) {
+    errors.lot_number = PURCHASE_COPY.lotNumberFormat;
+  }
+
+  const expiration = values.expiration_date.trim();
+  if (!expiration) {
+    errors.expiration_date = PURCHASE_COPY.expirationRequired;
+  } else if (!isValidIsoDate(normalizeDateInput(expiration))) {
+    errors.expiration_date = PURCHASE_COPY.expirationInvalid;
+  }
+
   return errors as Record<string, string>;
+}
+
+function lotKey(productId: RecordId | string, lotNumber: string) {
+  const normalized = normalizeLotNumber(lotNumber);
+  if (!normalized) return null;
+  return `${String(productId).trim()}::${normalized}`;
+}
+
+export function findDuplicateLotLineKeys(rows: readonly PurchaseLineRow[]) {
+  const grouped = new Map<string, string[]>();
+  for (const row of rows) {
+    const key = lotKey(row.product_id, row.lot_number);
+    if (!key) continue;
+    const keys = grouped.get(key);
+    if (keys) keys.push(row.key);
+    else grouped.set(key, [row.key]);
+  }
+  const duplicates: string[] = [];
+  for (const keys of grouped.values()) {
+    if (keys.length > 1) duplicates.push(...keys);
+  }
+  return duplicates;
+}
+
+function duplicateLotError(
+  values: PurchaseLineValues,
+  rows: readonly PurchaseLineRow[],
+  editingKey: string | null,
+) {
+  const key = lotKey(values.product_id, values.lot_number);
+  if (!key) return null;
+  const repeated = rows.some(
+    (row) => row.key !== editingKey && lotKey(row.product_id, row.lot_number) === key,
+  );
+  return repeated ? PURCHASE_COPY.duplicateLot : null;
 }
 
 type PurchaseLinesEditorProps = {
@@ -115,6 +181,7 @@ type PurchaseLinesEditorProps = {
   itemStatesLoading: boolean;
   itemStatesError: string | null;
   onRetryItemStates: () => void;
+  rowErrors?: Record<string, string>;
   onAdd: (values: PurchaseLineValues) => void | Promise<void>;
   onUpdate: (key: string, values: PurchaseLineValues) => void | Promise<void>;
   onDelete: (row: PurchaseLineRow) => void | Promise<void>;
@@ -131,6 +198,7 @@ export function PurchaseLinesEditor({
   itemStatesLoading,
   itemStatesError,
   onRetryItemStates,
+  rowErrors = {},
   onAdd,
   onUpdate,
   onDelete,
@@ -214,6 +282,8 @@ export function PurchaseLinesEditor({
     if (busy) return;
 
     const nextErrors = validateLineValues(values, { requireTax: !editingRow });
+    const duplicate = duplicateLotError(values, rows, editingKey);
+    if (duplicate) nextErrors.lot_number = duplicate;
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       setShowSummary(true);
@@ -246,6 +316,15 @@ export function PurchaseLinesEditor({
   }
 
   const summaryItems = lineSummaryItems(errors);
+  const selectedProductName = values.product_id
+    ? findById(products, values.product_id)?.name
+    : null;
+  const lotFieldLabel = selectedProductName
+    ? `${PURCHASE_LINE_LABELS.lot_number} de ${selectedProductName}`
+    : PURCHASE_LINE_LABELS.lot_number;
+  const expirationFieldLabel = selectedProductName
+    ? `${PURCHASE_LINE_LABELS.expiration_date} de ${selectedProductName}`
+    : PURCHASE_LINE_LABELS.expiration_date;
 
   const fields: ReactNode = (
     <>
@@ -322,6 +401,29 @@ export function PurchaseLinesEditor({
         required={!editingRow}
         value={values.tax_amount}
       />
+      <TextField
+        autoComplete="off"
+        disabled={busy}
+        error={errors.lot_number}
+        help="Obligatorio. El mismo producto puede repetirse con lotes distintos."
+        id={PURCHASE_LINE_FIELD_IDS.lot_number}
+        label={lotFieldLabel}
+        maxLength={PURCHASE_LOT_NUMBER_MAX_LENGTH}
+        onChange={(value) => updateField("lot_number", value)}
+        placeholder="Ej. LOTE-1"
+        required
+        value={values.lot_number}
+      />
+      <DateField
+        disabled={busy}
+        error={errors.expiration_date}
+        help="Obligatoria. Se guarda como fecha sin hora."
+        id={PURCHASE_LINE_FIELD_IDS.expiration_date}
+        label={expirationFieldLabel}
+        onChange={(value) => updateField("expiration_date", value)}
+        required
+        value={values.expiration_date}
+      />
     </>
   );
 
@@ -344,177 +446,295 @@ export function PurchaseLinesEditor({
     </div>
   );
 
+  function renderActions(row: PurchaseLineRow) {
+    if (editingKey === row.key) {
+      return (
+        <span className="inline-flex min-h-11 items-center rounded-full bg-soft-blue px-3.5 text-[12px] font-semibold text-brand">
+          Editando en el formulario
+        </span>
+      );
+    }
+    return (
+      <button
+        aria-label={`Editar la línea de ${productNameFor(row)}`}
+        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-ink/15 bg-surface px-3.5 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={busy}
+        onClick={() => startEdit(row)}
+        type="button"
+      >
+        <Icon name="arrow-right" size={15} />
+        Editar
+      </button>
+    );
+  }
+
+  function renderDeleteAction(row: PurchaseLineRow) {
+    return (
+      <button
+        aria-label={`Eliminar la línea de ${productNameFor(row)}`}
+        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-alert/30 bg-surface px-3.5 text-[12px] font-semibold text-alert-ink transition-colors hover:border-alert hover:bg-alert/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={busy}
+        onClick={() => void runOp(() => onDelete(row))}
+        type="button"
+      >
+        <Icon name="close" size={15} />
+        Eliminar
+      </button>
+    );
+  }
+
+  function lotLabel(row: PurchaseLineRow) {
+    return row.lot_number ? (
+      <span className="font-mono text-[12px] text-ink">{row.lot_number}</span>
+    ) : (
+      <span className="text-muted">{PURCHASE_COPY.noLot}</span>
+    );
+  }
+
+  function expirationLabel(row: PurchaseLineRow) {
+    return row.expiration_date
+      ? formatDateOnly(row.expiration_date)
+      : "Sin vencimiento";
+  }
+
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] border border-brand/15 bg-soft-blue p-5 md:hidden">
-        <p className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-          <Icon aria-hidden="true" className="text-brand" name="clipboard" size={18} />
-          {PURCHASE_COPY.desktopOnly}
-        </p>
-        <p className="mt-2 text-[13px] leading-6 text-muted">
-          {PURCHASE_COPY.desktopOnlyHelp}
-        </p>
-        {rows.length === 0 && (
-          <p className="mt-2 text-[13px] font-semibold text-ink">
-            {PURCHASE_COPY.noLines}
+      {notice && (
+        <NoticeBanner role="alert" tone="danger">
+          {notice}
+        </NoticeBanner>
+      )}
+
+      {showSummary && summaryItems.length > 0 && (
+        <FormErrorSummary errors={summaryItems} />
+      )}
+
+      <form
+        aria-label={
+          editingRow
+            ? "Editar la línea de la compra"
+            : "Agregar una línea a la compra"
+        }
+        className="rounded-[20px] border border-line bg-background p-4"
+        noValidate
+        onSubmit={handleSubmit}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-[13px] font-semibold text-ink">
+            {editingRow
+              ? `Editando ${productNameFor(editingRow)}`
+              : "Nueva línea"}
           </p>
-        )}
-      </div>
+          <p className="text-[12px] leading-5 text-muted">
+            {PURCHASE_COPY.sameProductDifferentLots}
+          </p>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {fields}
+        </div>
+        {formActions}
+      </form>
 
-      <div className="hidden md:block">
-        {notice && (
-          <NoticeBanner className="mb-4" role="alert" tone="danger">
-            {notice}
-          </NoticeBanner>
-        )}
-
-        {showSummary && summaryItems.length > 0 && (
-          <div className="mb-4">
-            <FormErrorSummary errors={summaryItems} />
-          </div>
-        )}
-
-        {!editingRow && (
-          <form
-            aria-label="Agregar una línea a la compra"
-            className="rounded-[20px] border border-line bg-background p-4"
-            noValidate
-            onSubmit={handleSubmit}
-          >
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{fields}</div>
-            {formActions}
-          </form>
-        )}
-
-        <div className="mt-4 overflow-x-auto rounded-[20px] border border-line bg-surface">
-          <table className="w-full min-w-[860px] border-collapse text-left">
-            <caption className="sr-only">
-              Líneas de la compra con producto, estado de ítem, cantidad, costo
-              unitario, subtotal, impuesto y total
-            </caption>
-            <thead>
-              <tr className="border-b border-line">
-                {[
-                  PURCHASE_LINE_LABELS.product_id,
-                  PURCHASE_LINE_LABELS.item_state_id,
-                  PURCHASE_LINE_LABELS.quantity,
-                  PURCHASE_LINE_LABELS.unit_cost,
-                  "Subtotal",
-                  PURCHASE_LINE_LABELS.tax_amount,
-                  "Total",
-                ].map((header) => (
-                  <th
-                    className="px-4 pb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted"
-                    key={header}
-                    scope="col"
-                  >
-                    {header}
-                  </th>
-                ))}
+      <div className="hidden overflow-x-auto rounded-[20px] border border-line bg-surface md:block">
+        <table className="w-full min-w-[1100px] border-collapse text-left">
+          <caption className="sr-only">
+            Líneas de la compra con producto, estado de ítem, cantidad, costo
+            unitario, subtotal, impuesto, total, número de lote y fecha de
+            vencimiento
+          </caption>
+          <thead>
+            <tr className="border-b border-line">
+              {[
+                PURCHASE_LINE_LABELS.product_id,
+                PURCHASE_LINE_LABELS.item_state_id,
+                PURCHASE_LINE_LABELS.quantity,
+                PURCHASE_LINE_LABELS.unit_cost,
+                "Subtotal",
+                PURCHASE_LINE_LABELS.tax_amount,
+                "Total",
+                PURCHASE_LINE_LABELS.lot_number,
+                PURCHASE_LINE_LABELS.expiration_date,
+              ].map((header) => (
                 <th
-                  className="px-4 pb-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted"
+                  className="px-4 pb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted"
+                  key={header}
                   scope="col"
                 >
-                  Acciones
+                  {header}
                 </th>
+              ))}
+              <th
+                className="sticky right-0 z-10 bg-surface px-4 pb-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted"
+                scope="col"
+              >
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td className="px-4 py-6 text-[13px] leading-6 text-muted" colSpan={10}>
+                  {PURCHASE_COPY.noLines}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-[13px] leading-6 text-muted" colSpan={8}>
-                    {PURCHASE_COPY.noLines}
-                  </td>
-                </tr>
-              )}
-              {rows.map((row) => {
-                if (editingKey === row.key) {
-                  return (
-                    <tr className="border-b border-line bg-background align-middle" key={row.key}>
-                      <td className="px-4 py-4" colSpan={8}>
-                        <form
-                          aria-label="Editar la línea de la compra"
-                          noValidate
-                          onSubmit={handleSubmit}
-                        >
-                          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {fields}
-                          </div>
-                          {formActions}
-                        </form>
-                      </td>
-                    </tr>
-                  );
-                }
-                return (
-                  <tr
-                    className="border-b border-line align-middle last:border-b-0"
-                    key={row.key}
+            )}
+            {rows.map((row) => (
+              <tr
+                className={`border-b border-line align-middle last:border-b-0 ${
+                  editingKey === row.key ? "bg-background" : ""
+                }`}
+                key={row.key}
+              >
+                <td className="px-4 py-3.5 text-[13px] text-ink">
+                  <span className="font-semibold">{productNameFor(row)}</span>
+                  {rowErrors[row.key] && (
+                    <p
+                      className="mt-1 text-[11px] font-semibold text-alert-ink"
+                      role="alert"
+                    >
+                      {rowErrors[row.key]}
+                    </p>
+                  )}
+                </td>
+                <td className="px-4 py-3.5 text-[13px] text-ink">
+                  <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
+                    {itemStateLabelFor(row)}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
+                  {row.quantity}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
+                  {purchaseMoney(row.unit_cost, currency)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
+                  {purchaseMoney(lineSubtotal(row.quantity, row.unit_cost), currency)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
+                  {purchaseMoney(row.tax_amount, currency)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-[13px] font-semibold tabular-nums text-ink">
+                  {purchaseMoney(lineTotal(row), currency)}
+                </td>
+                <td className="px-4 py-3.5 text-[13px]">{lotLabel(row)}</td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
+                  {expirationLabel(row)}
+                </td>
+                <td
+                  className={`sticky right-0 z-10 px-4 py-3.5 ${
+                    editingKey === row.key ? "bg-background" : "bg-surface"
+                  }`}
+                >
+                  <div
+                    aria-label={`Acciones para la línea de ${productNameFor(row)}`}
+                    className="flex flex-wrap items-center justify-end gap-2"
+                    role="group"
                   >
-                    <td className="px-4 py-3.5 text-[13px] text-ink">
-                      <span className="font-semibold">{productNameFor(row)}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-[13px] text-ink">
-                      <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
-                        {itemStateLabelFor(row)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
-                      {row.quantity}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
-                      {purchaseMoney(row.unit_cost, currency)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
-                      {purchaseMoney(lineSubtotal(row.quantity, row.unit_cost), currency)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-[13px] tabular-nums text-ink">
-                      {purchaseMoney(row.tax_amount, currency)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-[13px] font-semibold tabular-nums text-ink">
-                      {purchaseMoney(lineTotal(row), currency)}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div
-                        aria-label={`Acciones para la línea de ${productNameFor(row)}`}
-                        className="flex flex-wrap items-center justify-end gap-2"
-                        role="group"
-                      >
-                        <button
-                          aria-label={`Editar la línea de ${productNameFor(row)}`}
-                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-ink/15 bg-surface px-3.5 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={busy}
-                          onClick={() => startEdit(row)}
-                          type="button"
-                        >
-                          <Icon name="arrow-right" size={15} />
-                          Editar
-                        </button>
-                        <button
-                          aria-label={`Eliminar la línea de ${productNameFor(row)}`}
-                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-alert/30 bg-surface px-3.5 text-[12px] font-semibold text-alert-ink transition-colors hover:border-alert hover:bg-alert/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={busy}
-                          onClick={() => void runOp(() => onDelete(row))}
-                          type="button"
-                        >
-                          <Icon name="close" size={15} />
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <p className="mt-3 text-[12px] leading-5 text-muted">
-          Las líneas heredan la moneda de la compra
-          {currency?.code ? ` (${currency.code})` : ""}. El impuesto se registra
-          como monto absoluto, nunca como porcentaje.
-        </p>
+                    {renderActions(row)}
+                    {renderDeleteAction(row)}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      <ul className="space-y-3 md:hidden">
+        {rows.length === 0 && (
+          <li className="rounded-2xl border border-line bg-background px-4 py-5 text-[13px] leading-6 text-muted">
+            {PURCHASE_COPY.noLines}
+          </li>
+        )}
+        {rows.map((row) => (
+          <li
+            className={`rounded-2xl border border-line p-4 ${
+              editingKey === row.key ? "bg-soft-blue" : "bg-background"
+            }`}
+            key={row.key}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-ink">
+                  {productNameFor(row)}
+                </p>
+                {rowErrors[row.key] && (
+                  <p
+                    className="mt-1 text-[12px] font-semibold text-alert-ink"
+                    role="alert"
+                  >
+                    {rowErrors[row.key]}
+                  </p>
+                )}
+              </div>
+              <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
+                {itemStateLabelFor(row)}
+              </span>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Cantidad
+                </dt>
+                <dd className="mt-1 tabular-nums text-ink">{row.quantity}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Costo unitario
+                </dt>
+                <dd className="mt-1 tabular-nums text-ink">
+                  {purchaseMoney(row.unit_cost, currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Impuesto (monto)
+                </dt>
+                <dd className="mt-1 tabular-nums text-ink">
+                  {purchaseMoney(row.tax_amount, currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Total
+                </dt>
+                <dd className="mt-1 font-semibold tabular-nums text-ink">
+                  {purchaseMoney(lineTotal(row), currency)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  {PURCHASE_LINE_LABELS.lot_number}
+                </dt>
+                <dd className="mt-1">{lotLabel(row)}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  {PURCHASE_LINE_LABELS.expiration_date}
+                </dt>
+                <dd className="mt-1 tabular-nums text-ink">
+                  {expirationLabel(row)}
+                </dd>
+              </div>
+            </dl>
+            <div
+              aria-label={`Acciones para la línea de ${productNameFor(row)}`}
+              className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4"
+              role="group"
+            >
+              {renderActions(row)}
+              {renderDeleteAction(row)}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <p className="text-[12px] leading-5 text-muted">
+        Las líneas heredan la moneda de la compra
+        {currency?.code ? ` (${currency.code})` : ""}. El impuesto se registra
+        como monto absoluto, nunca como porcentaje.
+      </p>
     </div>
   );
 }

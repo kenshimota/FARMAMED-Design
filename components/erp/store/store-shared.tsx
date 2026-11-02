@@ -54,15 +54,21 @@ export function StoreImage({
   src,
   label,
   className,
+  priority = false,
+  onError,
 }: {
   src: string | null;
   label: string;
   className: string;
+  priority?: boolean;
+  onError?: () => void;
 }) {
   return (
     <RecordThumbnail
       className={className}
       label={label}
+      onError={onError}
+      priority={priority}
       size="lg"
       src={src}
     />
@@ -325,7 +331,7 @@ export function StoreErrorState({
   );
 }
 
-export function StoreGridSkeleton({ count = 8 }: { count?: number }) {
+export function StoreGridSkeleton({ count = 12 }: { count?: number }) {
   return (
     <div aria-busy="true" role="status">
       <span className="sr-only">Cargando productos de la tienda…</span>

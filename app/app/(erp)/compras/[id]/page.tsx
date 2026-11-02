@@ -4,7 +4,7 @@ import { PurchaseDetailPage } from "@/components/erp/records/purchase-detail";
 export const metadata: Metadata = {
   title: "Detalle de la compra",
   description:
-    "Consulta la cabecera, las líneas y los totales de una compra de Farmamed.",
+    "Consulta la cabecera, las líneas con lote y vencimiento, el lote recibido y los totales de una compra de Farmamed.",
 };
 
 type PurchaseDetailRouteProps = {

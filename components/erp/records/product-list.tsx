@@ -60,6 +60,10 @@ export function ProductListPage() {
   const categoryFilter = list.filters.category_id ?? "";
   const taxFilter = canReadTaxes ? list.filters.tax_id ?? "" : "";
   const hasQuery = Boolean(list.request.q);
+
+  const priorityProductIds = new Set(
+    products.slice(0, 4).map((product) => String(product.id)),
+  );
   const hasCategory = Boolean(categoryFilter);
   const hasTax = canReadTaxes && Boolean(taxFilter);
   const filtersActive = hasQuery || hasCategory || hasTax;
@@ -202,6 +206,7 @@ export function ProductListPage() {
         <RecordThumbnail
           label={product.name}
           loading={imagesLoading}
+          priority={priorityProductIds.has(String(product.id))}
           size="md"
           src={imageSourceFor(product)}
         />
@@ -286,6 +291,7 @@ export function ProductListPage() {
           <RecordThumbnail
             label={product.name}
             loading={imagesLoading}
+            priority={priorityProductIds.has(String(product.id))}
             size="lg"
             src={imageSourceFor(product)}
           />
