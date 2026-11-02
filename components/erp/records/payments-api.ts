@@ -1,6 +1,13 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
 import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
+import {
   parseImage,
   readCollection,
   type ImageRecord,
@@ -314,6 +321,34 @@ function buildPaymentFormData(
   }
   if (image) formData.set("image", image);
   return formData;
+}
+
+const PAYMENT_FILTERS = [
+  "customer_id",
+  "invoice_id",
+  "method_payment_id",
+  "currency_id",
+  "status",
+  "paid_from",
+  "paid_to",
+  "from",
+  "to",
+] as const;
+
+export async function fetchPaymentPage(
+  query: ListQuery = {},
+): Promise<Paginated<PaymentRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/payments${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, PAYMENT_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parsePayment, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchPayments(filters: PaymentFilters = {}) {

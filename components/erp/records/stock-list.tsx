@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -10,13 +10,17 @@ import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import {
   Tabs,
   getTabId,
   getTabPanelId,
 } from "@/components/erp/ui/tabs";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
-import { SelectField, TextField } from "@/components/erp/records/form-controls";
+import { useServerList } from "@/components/erp/ui/use-server-list";
+import { SelectField } from "@/components/erp/records/form-controls";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
   RecordActionLink,
@@ -31,8 +35,8 @@ import {
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
 import {
-  fetchProducts,
-  findById,
+  fetchProduct,
+  fetchProductPage,
   isPositiveRecordId,
   type ProductRecord,
 } from "@/components/erp/records/records-api";
@@ -42,7 +46,7 @@ import {
 } from "@/components/erp/records/item-states-api";
 import {
   fetchAvailableStocks,
-  fetchStocks,
+  fetchStockPage,
   type AvailableStockRecord,
   type StockRecord,
 } from "@/components/erp/records/stocks-api";
@@ -53,9 +57,10 @@ import {
   stockItemStateLabel,
   stockProductName,
 } from "@/components/erp/records/stock-shared";
-import { formatMoney } from "@/lib/format";
+import { formatInteger, formatMoney } from "@/lib/format";
 import { canReadModule } from "@/lib/permissions";
 import type { UiError } from "@/lib/api-errors";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 
 export type StockListTab = "agregadas" | "disponibles";
 export type StockInStockFilter = "" | "true" | "false";
@@ -70,24 +75,8 @@ const TABS_ID = "existencias-vistas";
 const AGGREGATED_PATH = "/app/existencias";
 const AVAILABLE_PATH = "/app/existencias/disponibles";
 
-const EMPTY_FILTERS: StockListFilters = {
-  productId: "",
-  itemStateId: "",
-  inStock: "",
-};
-
-const NO_PRODUCTS: ProductRecord[] = [];
 const NO_ITEM_STATES: ItemStateRecord[] = [];
-const NO_STOCKS: StockRecord[] = [];
 const NO_AVAILABLE_STOCKS: AvailableStockRecord[] = [];
-
-function filtersKey(filters: StockListFilters) {
-  return `${filters.productId}|${filters.itemStateId}|${filters.inStock}`;
-}
-
-function hasActiveFilters(filters: StockListFilters) {
-  return Boolean(filters.productId || filters.itemStateId || filters.inStock);
-}
 
 function stockErrorMessage(error: UiError | null, fallback: string) {
   if (!error) return fallback;
@@ -135,23 +124,16 @@ function StockListContent({
   const activeTab: StockListTab =
     normalizedPathname === AVAILABLE_PATH ? "disponibles" : "agregadas";
 
-  const [filters, setFilters] = useState<StockListFilters>(initialFilters);
   const [availableProductId, setAvailableProductId] = useState(
     initialAvailableProductId,
   );
-  const [productQuery, setProductQuery] = useState("");
-
-  const initialFiltersKey = filtersKey(initialFilters);
-  const [appliedInitialFiltersKey, setAppliedInitialFiltersKey] =
-    useState(initialFiltersKey);
-  if (initialFiltersKey !== appliedInitialFiltersKey) {
-    setAppliedInitialFiltersKey(initialFiltersKey);
-    setFilters({
-      productId: initialFilters.productId,
-      itemStateId: initialFilters.itemStateId,
-      inStock: initialFilters.inStock,
-    });
-  }
+  const lastAggregatedFilters = useRef<StockListFilters>({
+    productId: initialFilters.productId,
+    itemStateId: initialFilters.itemStateId,
+    inStock: initialFilters.inStock,
+  });
+  const [productDraft, setProductDraft] = useState("");
+  const [availableProductDraft, setAvailableProductDraft] = useState("");
 
   const [appliedInitialProductId, setAppliedInitialProductId] = useState(
     initialAvailableProductId,
@@ -164,55 +146,66 @@ function StockListContent({
   const aggregatedActive = activeTab === "agregadas";
   const availableActive = activeTab === "disponibles";
 
-  const productsResource = useAsyncResource(fetchProducts);
+  const list = useServerList<StockRecord>({
+    loader: (request) => fetchStockPage(request),
+    filterKeys: ["product_id", "item_state_id", "in_stock"],
+    enabled: aggregatedActive,
+    initial: {
+      filters: {
+        product_id: initialFilters.productId,
+        item_state_id: initialFilters.itemStateId,
+        in_stock: initialFilters.inStock,
+      },
+    },
+  });
   const itemStatesResource = useAsyncResource(fetchItemStates, {
     enabled: aggregatedActive,
   });
 
-  const products = productsResource.data ?? NO_PRODUCTS;
+  const productId = list.filters.product_id ?? "";
+  const itemStateId = list.filters.item_state_id ?? "";
+  const inStockValue = list.filters.in_stock ?? "";
+  const inStock: StockInStockFilter =
+    inStockValue === "true" || inStockValue === "false" ? inStockValue : "";
+  const stocks = list.items;
   const itemStates = itemStatesResource.data ?? NO_ITEM_STATES;
 
-  const stocksLoader = useCallback(
-    () =>
-      fetchStocks({
-        product_id: filters.productId || undefined,
-        item_state_id: filters.itemStateId || undefined,
-        in_stock:
-          filters.inStock === "" ? undefined : filters.inStock === "true",
-      }),
-    [filters.inStock, filters.itemStateId, filters.productId],
+  const productIds = useMemo(
+    () => [
+      ...(productId ? [productId] : []),
+      ...(availableProductId ? [availableProductId] : []),
+      ...stocks.map((stock) => String(stock.product_id)),
+    ],
+    [availableProductId, productId, stocks],
   );
-  const stocksResource = useAsyncResource(stocksLoader, {
-    enabled: aggregatedActive,
-  });
-  const reloadStocks = stocksResource.reload;
-  const stocks = stocksResource.data ?? NO_STOCKS;
+  const productsById = useRecordsById<ProductRecord>({
+    ids: productIds,
+    load: fetchProduct,
+    getId: (product) => product.id,
+  }).records;
 
-  const activeFilterKey = filtersKey(filters);
-  const appliedFilterKey = useRef(activeFilterKey);
+  const productLabel = productId
+    ? productsById[productId]
+      ? productOptionLabel(productsById[productId])
+      : `Producto #${productId}`
+    : "";
+  const [appliedProductLabel, setAppliedProductLabel] = useState(productLabel);
+  if (productLabel !== appliedProductLabel) {
+    setAppliedProductLabel(productLabel);
+    setProductDraft(productLabel);
+  }
 
-  useEffect(() => {
-    if (!aggregatedActive) return;
-    if (appliedFilterKey.current === activeFilterKey) return;
-    appliedFilterKey.current = activeFilterKey;
-    reloadStocks();
-  }, [activeFilterKey, aggregatedActive, reloadStocks]);
-
-  const filtersActive = hasActiveFilters(filters);
-  const countLabel = stocksResource.data
-    ? stockCountLabel(stocks.length)
-    : stocksResource.status === "error"
-      ? "No se pudieron cargar las existencias"
-      : "Cargando existencias…";
-
-  const aggregatedProductOptions = useMemo(
-    () =>
-      products.map((product) => ({
-        value: String(product.id),
-        label: productOptionLabel(product),
-      })),
-    [products],
-  );
+  const availableProductLabel = availableProductId
+    ? productsById[availableProductId]
+      ? productOptionLabel(productsById[availableProductId])
+      : `Producto #${availableProductId}`
+    : "";
+  const [appliedAvailableProductLabel, setAppliedAvailableProductLabel] =
+    useState(availableProductLabel);
+  if (availableProductLabel !== appliedAvailableProductLabel) {
+    setAppliedAvailableProductLabel(availableProductLabel);
+    setAvailableProductDraft(availableProductLabel);
+  }
 
   const itemStateOptions = useMemo(
     () =>
@@ -223,68 +216,57 @@ function StockListContent({
     [itemStates],
   );
 
-  const availableProduct = findById(products, availableProductId);
+  const availableProduct = productsById[availableProductId] ?? null;
   const availableProductValid = isPositiveRecordId(availableProductId);
   const availableProductName = stockProductName(
     availableProduct,
     availableProductId,
   );
 
-  const availableProductOptions = useMemo(() => {
-    const normalized = productQuery.trim().toLowerCase();
-    const filtered = normalized
-      ? products.filter((product) =>
-          `${product.name} ${product.reference}`
-            .toLowerCase()
-            .includes(normalized),
-        )
-      : products;
-    const options = filtered.map((product) => ({
-      value: String(product.id),
-      label: productOptionLabel(product),
-    }));
-
-    if (
-      availableProduct &&
-      !options.some((option) => option.value === String(availableProduct.id))
-    ) {
-      options.unshift({
-        value: String(availableProduct.id),
-        label: productOptionLabel(availableProduct),
-      });
-    }
-
-    return options;
-  }, [availableProduct, productQuery, products]);
+  const filtersActive = Boolean(productId || itemStateId || inStock);
+  const chips: FilterChip[] = [];
+  if (productId) {
+    chips.push({
+      id: "product_id",
+      label: `Producto: ${productLabel || `#${productId}`}`,
+      onRemove: () => list.setFilter("product_id", ""),
+    });
+  }
+  if (itemStateId) {
+    chips.push({
+      id: "item_state_id",
+      label: `Estado: ${
+        itemStateOptions.find((option) => option.value === itemStateId)?.label ??
+        `#${itemStateId}`
+      }`,
+      onRemove: () => list.setFilter("item_state_id", ""),
+    });
+  }
+  if (inStock) {
+    chips.push({
+      id: "in_stock",
+      label: inStock === "true" ? "Disponibilidad: con stock" : "Disponibilidad: sin stock",
+      onRemove: () => list.setFilter("in_stock", ""),
+    });
+  }
 
   function replaceQuery(path: string, params: URLSearchParams) {
     const query = params.toString();
     router.replace(query ? `${path}?${query}` : path, { scroll: false });
   }
 
-  function aggregatedQuery(next: StockListFilters) {
+  function aggregatedQuery(filters: StockListFilters) {
     const params = new URLSearchParams();
-    if (next.productId) params.set("product_id", next.productId);
-    if (next.itemStateId) params.set("item_state_id", next.itemStateId);
-    if (next.inStock) params.set("in_stock", next.inStock);
+    if (filters.productId) params.set("product_id", filters.productId);
+    if (filters.itemStateId) params.set("item_state_id", filters.itemStateId);
+    if (filters.inStock) params.set("in_stock", filters.inStock);
     return params;
   }
 
-  function availableQuery(productId: string) {
+  function availableQuery(productIdValue: string) {
     const params = new URLSearchParams();
-    if (productId) params.set("product_id", productId);
+    if (productIdValue) params.set("product_id", productIdValue);
     return params;
-  }
-
-  function updateFilter(key: keyof StockListFilters, value: string) {
-    const next = { ...filters, [key]: value } as StockListFilters;
-    setFilters(next);
-    replaceQuery(AGGREGATED_PATH, aggregatedQuery(next));
-  }
-
-  function clearFilters() {
-    setFilters(EMPTY_FILTERS);
-    replaceQuery(AGGREGATED_PATH, new URLSearchParams());
   }
 
   function selectAvailableProduct(value: string) {
@@ -298,13 +280,18 @@ function StockListContent({
     if (nextTab === activeTab) return;
 
     if (nextTab === "disponibles") {
+      lastAggregatedFilters.current = {
+        productId,
+        itemStateId,
+        inStock,
+      };
       const params = availableQuery(availableProductId);
       const query = params.toString();
       router.push(query ? `${AVAILABLE_PATH}?${query}` : AVAILABLE_PATH);
       return;
     }
 
-    const params = aggregatedQuery(filters);
+    const params = aggregatedQuery(lastAggregatedFilters.current);
     const query = params.toString();
     router.push(query ? `${AGGREGATED_PATH}?${query}` : AGGREGATED_PATH);
   }
@@ -319,7 +306,7 @@ function StockListContent({
       key: "producto",
       header: "Producto",
       render: (stock) => {
-        const product = findById(products, stock.product_id);
+        const product = productsById[String(stock.product_id)] ?? null;
         return (
           <div>
             <Link
@@ -355,7 +342,7 @@ function StockListContent({
   ];
 
   function renderAggregatedActions(stock: StockRecord) {
-    const product = findById(products, stock.product_id);
+    const product = productsById[String(stock.product_id)] ?? null;
     const productName = stockProductName(product, stock.product_id);
     const itemStateLabel = stockItemStateLabel(stock, itemStates);
     return (
@@ -379,7 +366,7 @@ function StockListContent({
   }
 
   function renderAggregatedCard(stock: StockRecord) {
-    const product = findById(products, stock.product_id);
+    const product = productsById[String(stock.product_id)] ?? null;
     return (
       <div>
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -454,82 +441,82 @@ function StockListContent({
       >
         <h2 className="sr-only">Existencias agregadas</h2>
 
-        <section
-          aria-label="Filtros de existencias"
-          className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-        >
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <SelectField
-              emptyLabel="No hay productos registrados."
+        <FilterBar
+          activeCount={chips.length}
+          chips={chips}
+          id="existencias-filtros"
+          loading={list.status === "loading"}
+          onClear={list.clearFilters}
+          results={
+            list.status === "loading"
+              ? "Cargando existencias…"
+              : list.status === "error" && stocks.length === 0
+                ? "No se pudieron cargar las existencias"
+                : list.meta.total === 0
+                  ? "Sin existencias"
+                  : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                      list.range.to,
+                    )} de ${formatInteger(list.meta.total)}`
+          }
+          search={
+            <AutocompleteField
+              help="Busca el producto por nombre o referencia. El filtro se aplica en el servidor."
               id="filtro-existencias-producto"
               label="Producto"
-              loading={productsResource.status === "loading"}
-              loadingLabel="Cargando productos…"
-              loadError={
-                productsResource.status === "error"
-                  ? productsResource.error?.message ??
-                    "No pudimos cargar los productos."
-                  : null
-              }
-              onChange={(value) => updateFilter("productId", value)}
-              onRetry={productsResource.reload}
-              options={aggregatedProductOptions}
-              placeholder="Todos los productos"
-              value={filters.productId}
+              loadOptions={async (query) => {
+                const page = await fetchProductPage({ q: query, pageSize: 10 });
+                return page.data.map((product) => ({
+                  value: String(product.id),
+                  label: productOptionLabel(product),
+                }));
+              }}
+              onSelect={(option) => {
+                setProductDraft(option.label);
+                list.setFilter("product_id", option.value);
+              }}
+              onValueChange={(value) => {
+                setProductDraft(value);
+                if (value !== productLabel) {
+                  list.setFilter("product_id", "");
+                }
+              }}
+              placeholder="Buscar producto"
+              value={productDraft}
             />
-            <SelectField
-              emptyLabel="No hay estados de ítem registrados."
-              id="filtro-existencias-estado"
-              label="Estado del ítem"
-              loading={itemStatesResource.status === "loading"}
-              loadingLabel="Cargando estados…"
-              loadError={
-                itemStatesResource.status === "error"
-                  ? itemStatesResource.error?.message ??
-                    "No pudimos cargar los estados de ítem."
-                  : null
-              }
-              onChange={(value) => updateFilter("itemStateId", value)}
-              onRetry={itemStatesResource.reload}
-              options={itemStateOptions}
-              placeholder="Todos los estados"
-              value={filters.itemStateId}
-            />
-            <SelectField
-              id="filtro-existencias-disponibilidad"
-              label="Disponibilidad"
-              onChange={(value) =>
-                updateFilter(
-                  "inStock",
-                  value === "true" || value === "false" ? value : "",
-                )
-              }
-              options={[
-                { value: "true", label: "Solo con stock" },
-                { value: "false", label: "Solo sin stock" },
-              ]}
-              placeholder="Todas las existencias"
-              value={filters.inStock}
-            />
-          </div>
+          }
+        >
+          <SelectField
+            emptyLabel="No hay estados de ítem registrados."
+            id="filtro-existencias-estado"
+            label="Estado del ítem"
+            loading={itemStatesResource.status === "loading"}
+            loadingLabel="Cargando estados…"
+            loadError={
+              itemStatesResource.status === "error"
+                ? itemStatesResource.error?.message ??
+                  "No pudimos cargar los estados de ítem."
+                : null
+            }
+            onChange={(value) => list.setFilter("item_state_id", value)}
+            onRetry={itemStatesResource.reload}
+            options={itemStateOptions}
+            placeholder="Todos los estados"
+            value={itemStateId}
+          />
+          <SelectField
+            id="filtro-existencias-disponibilidad"
+            label="Disponibilidad"
+            onChange={(value) => list.setFilter("in_stock", value)}
+            options={[
+              { value: "true", label: "Solo con stock" },
+              { value: "false", label: "Solo sin stock" },
+            ]}
+            placeholder="Todas las existencias"
+            value={inStock}
+          />
+        </FilterBar>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-            <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-              {countLabel}
-            </p>
-            {filtersActive && (
-              <button
-                className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                onClick={clearFilters}
-                type="button"
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
-        </section>
-
-        {stocksResource.status === "loading" && (
+        {list.status === "loading" && (
           <RecordsTableSkeleton
             columns={4}
             label="Cargando existencias…"
@@ -537,34 +524,32 @@ function StockListContent({
           />
         )}
 
-        {stocksResource.status === "error" && stocks.length === 0 && (
+        {list.status === "error" && stocks.length === 0 && (
           <RecordsLoadError
             backHref="/app"
             backLabel="Volver al inicio"
             description={stockErrorMessage(
-              stocksResource.error,
+              list.error,
               "No pudimos cargar las existencias.",
             )}
-            onRetry={
-              stocksResource.error?.canRetry ? reloadStocks : undefined
-            }
+            onRetry={list.error?.canRetry ? list.reload : undefined}
             title="No pudimos cargar las existencias"
           />
         )}
 
-        {stocksResource.status !== "loading" &&
-          !(stocksResource.status === "error" && stocks.length === 0) && (
+        {list.status !== "loading" &&
+          !(list.status === "error" && stocks.length === 0) && (
             <section aria-label="Listado de existencias agregadas" className="space-y-4">
-              {stocksResource.status === "refreshing" && (
+              {list.status === "refreshing" && (
                 <div aria-hidden="true" className="reload-bar" />
               )}
 
-              {stocksResource.status === "error" && stocks.length > 0 && (
+              {list.status === "error" && stocks.length > 0 && (
                 <NoticeBanner
                   action={
                     <button
                       className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                      onClick={reloadStocks}
+                      onClick={list.reload}
                       type="button"
                     >
                       Reintentar
@@ -573,24 +558,16 @@ function StockListContent({
                   tone="warning"
                 >
                   {stockErrorMessage(
-                    stocksResource.error,
+                    list.error,
                     "No pudimos actualizar las existencias. Mostramos los datos disponibles.",
                   )}
                 </NoticeBanner>
               )}
 
               {stocks.length === 0 ? (
-                <EmptyState
-                  action={
-                    filtersActive ? (
-                      <button
-                        className="button-base button-secondary min-h-11 px-5"
-                        onClick={clearFilters}
-                        type="button"
-                      >
-                        Limpiar filtros
-                      </button>
-                    ) : (
+                list.meta.total === 0 && !filtersActive ? (
+                  <EmptyState
+                    action={
                       <Link
                         className="button-base button-secondary min-h-11 px-5"
                         href="/app/compras"
@@ -598,27 +575,50 @@ function StockListContent({
                         Ver compras
                         <Icon name="clipboard" size={16} />
                       </Link>
-                    )
-                  }
-                  description={
-                    filtersActive
-                      ? "Ajusta los filtros para ver otros resultados."
-                      : "Se crean al confirmar una compra."
-                  }
-                  title={
-                    filtersActive
-                      ? "No hay existencias que coincidan con los filtros."
-                      : "Todavía no hay existencias registradas."
-                  }
-                />
+                    }
+                    description="Se crean al confirmar una compra."
+                    title="Todavía no hay existencias registradas."
+                  />
+                ) : (
+                  <EmptyState
+                    action={
+                      <button
+                        className="button-base button-secondary min-h-11 px-5"
+                        onClick={
+                          list.isPageOutOfRange
+                            ? list.goToFirstPage
+                            : list.clearFilters
+                        }
+                        type="button"
+                      >
+                        {list.isPageOutOfRange
+                          ? "Ir a la primera página"
+                          : "Limpiar filtros"}
+                      </button>
+                    }
+                    description={
+                      list.isPageOutOfRange
+                        ? `Hay ${formatInteger(
+                            list.meta.total,
+                          )} existencias en total, pero esta página no tiene filas.`
+                        : "No hay resultados con estos filtros. Ajusta los criterios."
+                    }
+                    title={
+                      list.isPageOutOfRange
+                        ? "No hay resultados en esta página"
+                        : "Sin resultados con estos filtros."
+                    }
+                  />
+                )
               ) : (
                 <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                   <RecordsTable
+                    busy={list.status === "refreshing"}
                     caption="Existencias agregadas por producto y estado de ítem, con su cantidad y enlace a lotes"
                     columns={aggregatedColumns}
                     getRowKey={(stock) => String(stock.id)}
                     getRowLabel={(stock) =>
-                      `${stockProductName(findById(products, stock.product_id), stock.product_id)} en estado ${stockItemStateLabel(stock, itemStates)}`
+                      `${stockProductName(productsById[String(stock.product_id)] ?? null, stock.product_id)} en estado ${stockItemStateLabel(stock, itemStates)}`
                     }
                     renderCard={renderAggregatedCard}
                     rowActions={renderAggregatedActions}
@@ -626,6 +626,13 @@ function StockListContent({
                   />
                 </div>
               )}
+
+              <PaginationControls
+                meta={list.meta}
+                onFirstPage={list.goToFirstPage}
+                onPageChange={list.setPage}
+                onPageSizeChange={list.setPageSize}
+              />
             </section>
           )}
 
@@ -655,36 +662,30 @@ function StockListContent({
           aria-label="Selector de producto para disponibilidad"
           className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              help="Filtra la lista por nombre o referencia sin salir de la página."
-              id="buscar-producto-disponible"
-              label="Buscar producto"
-              onChange={setProductQuery}
-              placeholder="Nombre o referencia"
-              value={productQuery}
-            />
-            <SelectField
-              emptyLabel={
-                productQuery
-                  ? "No hay productos que coincidan con la búsqueda."
-                  : "No hay productos registrados."
-              }
+          <div className="max-w-xl">
+            <AutocompleteField
+              help="Busca el producto por nombre o referencia. La disponibilidad se consulta por producto."
               id="producto-disponible"
               label="Producto"
-              loading={productsResource.status === "loading"}
-              loadingLabel="Cargando productos…"
-              loadError={
-                productsResource.status === "error"
-                  ? productsResource.error?.message ??
-                    "No pudimos cargar los productos."
-                  : null
-              }
-              onChange={selectAvailableProduct}
-              onRetry={productsResource.reload}
-              options={availableProductOptions}
-              placeholder="Selecciona un producto"
-              value={availableProductId}
+              loadOptions={async (query) => {
+                const page = await fetchProductPage({ q: query, pageSize: 10 });
+                return page.data.map((product) => ({
+                  value: String(product.id),
+                  label: productOptionLabel(product),
+                }));
+              }}
+              onSelect={(option) => {
+                setAvailableProductDraft(option.label);
+                selectAvailableProduct(option.value);
+              }}
+              onValueChange={(value) => {
+                setAvailableProductDraft(value);
+                if (value !== availableProductLabel) {
+                  selectAvailableProduct("");
+                }
+              }}
+              placeholder="Buscar producto"
+              value={availableProductDraft}
             />
           </div>
           <p aria-live="polite" className="mt-4 text-[12px] text-muted">

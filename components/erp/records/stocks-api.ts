@@ -4,6 +4,13 @@ import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type StockCurrency = {
   id: RecordId;
@@ -189,6 +196,30 @@ function appendFilter(query: URLSearchParams, key: string, value: RecordId | und
   if (value === undefined || value === null) return;
   const normalized = String(value).trim();
   if (normalized) query.set(key, normalized);
+}
+
+const STOCK_FILTERS = [
+  "product_id",
+  "warehouse_id",
+  "item_state_id",
+  "in_stock",
+  "low_stock",
+] as const;
+
+export async function fetchStockPage(
+  query: ListQuery = {},
+): Promise<Paginated<StockRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/stocks${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, STOCK_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseStock, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchStocks(filters: StockFilters = {}) {

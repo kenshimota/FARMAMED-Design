@@ -1,14 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -18,19 +11,20 @@ import { CurrencyChip, CurrencySelect } from "@/components/erp/ui/currency-selec
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
-import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import {
   PURCHASE_COPY,
 } from "@/components/erp/records/purchase-errors";
 import {
-  fetchPurchases,
+  fetchPurchasePage,
   type PurchaseCurrency,
   type PurchaseRecord,
-  type PurchaseStatus,
 } from "@/components/erp/records/purchases-api";
 import {
   PurchaseStatusBadge,
-  purchaseCountLabel,
   purchaseMoney,
   purchaseNumberLabel,
   PURCHASE_STATUS_OPTIONS,
@@ -50,14 +44,15 @@ import {
   RecordsTable,
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
-import { findById } from "@/components/erp/records/records-api";
 import {
-  fetchSuppliers,
+  fetchSupplier,
+  fetchSupplierPage,
   type SupplierRecord,
 } from "@/components/erp/records/suppliers-api";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatInteger } from "@/lib/format";
 import type { UiError } from "@/lib/api-errors";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 
 export type PurchaseListFilters = {
   supplierId: string;
@@ -65,34 +60,6 @@ export type PurchaseListFilters = {
   number: string;
   currencyId: string;
 };
-
-const EMPTY_FILTERS: PurchaseListFilters = {
-  supplierId: "",
-  status: "",
-  number: "",
-  currencyId: "",
-};
-
-const NO_PURCHASES: PurchaseRecord[] = [];
-const NO_SUPPLIERS: SupplierRecord[] = [];
-
-function isPurchaseStatus(value: string): value is PurchaseStatus {
-  return (PURCHASE_STATUS_OPTIONS as readonly { value: string }[]).some(
-    (option) => option.value === value,
-  );
-}
-
-function filtersKey(filters: PurchaseListFilters) {
-  return [filters.supplierId, filters.status, filters.number, filters.currencyId].join(
-    "|",
-  );
-}
-
-function hasActiveFilters(filters: PurchaseListFilters) {
-  return Boolean(
-    filters.supplierId || filters.status || filters.number.trim() || filters.currencyId,
-  );
-}
 
 function purchaseErrorMessage(error: UiError | null, fallback: string) {
   if (!error) return fallback;
@@ -123,28 +90,33 @@ function PurchaseListContent({
   initialFilters: PurchaseListFilters;
 }) {
   const { user } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
   const currencyStatus = useCurrencyStatusContext();
   const activityVisible = useActivityVisible();
   const canWrite = canWriteModule(user.role, "compras");
 
-  const [filters, setFilters] = useState<PurchaseListFilters>(initialFilters);
+  const list = useServerList<PurchaseRecord>({
+    loader: (request) => fetchPurchasePage(request),
+    filterKeys: ["supplier_id", "status", "number", "currency_id"],
+    defaultSort: "number",
+    defaultOrder: "desc",
+    initial: {
+      filters: {
+        supplier_id: initialFilters.supplierId,
+        status: initialFilters.status,
+        number: initialFilters.number,
+        currency_id: initialFilters.currencyId,
+      },
+    },
+  });
   const [numberDraft, setNumberDraft] = useState(initialFilters.number);
-  const filtersRef = useRef(filters);
+  const [supplierDraft, setSupplierDraft] = useState("");
   const numberTimer = useRef<number | null>(null);
 
-  const initialFiltersKey = filtersKey(initialFilters);
-  const [appliedInitialFiltersKey, setAppliedInitialFiltersKey] =
-    useState(initialFiltersKey);
-  if (initialFiltersKey !== appliedInitialFiltersKey) {
-    setAppliedInitialFiltersKey(initialFiltersKey);
-    setFilters(initialFilters);
-    if (numberDraft === filters.number) setNumberDraft(initialFilters.number);
-  }
-
-  const suppliersResource = useAsyncResource(fetchSuppliers);
-  const suppliers = suppliersResource.data ?? NO_SUPPLIERS;
+  const supplierId = list.filters.supplier_id ?? "";
+  const status = list.filters.status ?? "";
+  const number = list.filters.number ?? "";
+  const currencyId = list.filters.currency_id ?? "";
+  const purchases = list.items;
 
   const currencies = useMemo<PurchaseCurrency[]>(() => {
     return (currencyStatus?.currencies ?? [])
@@ -156,38 +128,39 @@ function PurchaseListContent({
         symbol: currency.symbol,
       }));
   }, [currencyStatus?.currencies]);
-  const purchasesLoader = useCallback(
-    () =>
-      fetchPurchases({
-        supplier_id: filters.supplierId || undefined,
-        status:
-          filters.status && isPurchaseStatus(filters.status)
-            ? filters.status
-            : undefined,
-        number: filters.number.trim() || undefined,
-        currency_id: filters.currencyId || undefined,
-      }),
-    [filters.currencyId, filters.number, filters.status, filters.supplierId],
+
+  const supplierIds = useMemo(
+    () => [
+      ...(supplierId ? [supplierId] : []),
+      ...purchases
+        .filter((purchase) => !purchase.supplier)
+        .map((purchase) => String(purchase.supplier_id)),
+    ],
+    [purchases, supplierId],
   );
-  const purchasesResource = useAsyncResource(purchasesLoader);
-  const reloadPurchases = purchasesResource.reload;
-  const purchases = useMemo(() => {
-    const list = purchasesResource.data ?? NO_PURCHASES;
-    return [...list].sort((first, second) => second.number - first.number);
-  }, [purchasesResource.data]);
+  const suppliersById = useRecordsById<SupplierRecord>({
+    ids: supplierIds,
+    load: fetchSupplier,
+    getId: (supplier) => supplier.id,
+  }).records;
 
-  const activeFilterKey = filtersKey(filters);
-  const appliedFilterKey = useRef(activeFilterKey);
+  const supplierLabel = supplierId
+    ? suppliersById[supplierId]
+      ? suppliersById[supplierId].name
+      : `Proveedor #${supplierId}`
+    : "";
+  const [appliedSupplierLabel, setAppliedSupplierLabel] =
+    useState(supplierLabel);
+  if (supplierLabel !== appliedSupplierLabel) {
+    setAppliedSupplierLabel(supplierLabel);
+    setSupplierDraft(supplierLabel);
+  }
 
-  useEffect(() => {
-    filtersRef.current = filters;
-  }, [filters]);
-
-  useEffect(() => {
-    if (appliedFilterKey.current === activeFilterKey) return;
-    appliedFilterKey.current = activeFilterKey;
-    reloadPurchases();
-  }, [activeFilterKey, reloadPurchases]);
+  const [appliedNumber, setAppliedNumber] = useState(number);
+  if (number !== appliedNumber) {
+    setAppliedNumber(number);
+    setNumberDraft(number);
+  }
 
   useEffect(() => {
     return () => {
@@ -195,26 +168,50 @@ function PurchaseListContent({
     };
   }, []);
 
-  const filtersActive = hasActiveFilters(filters);
-  const countLabel = purchasesResource.data
-    ? purchaseCountLabel(purchases.length)
-    : purchasesResource.status === "error"
-      ? "No se pudieron cargar las compras"
-      : "Cargando compras…";
-
-  const supplierOptions = useMemo(
-    () =>
-      suppliers.map((supplier) => ({
-        value: String(supplier.id),
-        label: supplier.name,
-      })),
-    [suppliers],
-  );
+  const filtersActive = Boolean(supplierId || status || number || currencyId);
+  const chips: FilterChip[] = [];
+  if (supplierId) {
+    chips.push({
+      id: "supplier_id",
+      label: `Proveedor: ${supplierLabel || `#${supplierId}`}`,
+      onRemove: () => list.setFilter("supplier_id", ""),
+    });
+  }
+  if (status) {
+    chips.push({
+      id: "status",
+      label: `Estado: ${
+        PURCHASE_STATUS_OPTIONS.find((option) => option.value === status)
+          ?.label ?? status
+      }`,
+      onRemove: () => list.setFilter("status", ""),
+    });
+  }
+  if (number) {
+    chips.push({
+      id: "number",
+      label: `Número: ${number}`,
+      onRemove: () => {
+        setNumberDraft("");
+        list.setFilter("number", "");
+      },
+    });
+  }
+  if (currencyId) {
+    chips.push({
+      id: "currency_id",
+      label: `Moneda: ${
+        currencies.find((currency) => String(currency.id) === currencyId)?.code ??
+        `#${currencyId}`
+      }`,
+      onRemove: () => list.setFilter("currency_id", ""),
+    });
+  }
 
   if (!activityVisible) return null;
 
   function supplierFor(purchase: PurchaseRecord) {
-    return purchase.supplier ?? findById(suppliers, purchase.supplier_id);
+    return purchase.supplier ?? suppliersById[String(purchase.supplier_id)] ?? null;
   }
 
   function supplierNameFor(purchase: PurchaseRecord) {
@@ -244,33 +241,18 @@ function PurchaseListContent({
     );
   }
 
-  function commitFilters(next: PurchaseListFilters) {
-    setFilters(next);
-    const params = new URLSearchParams();
-    if (next.supplierId) params.set("supplier_id", next.supplierId);
-    if (next.status) params.set("status", next.status);
-    if (next.number.trim()) params.set("number", next.number.trim());
-    if (next.currencyId) params.set("currency_id", next.currencyId);
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function updateFilter(key: keyof PurchaseListFilters, value: string) {
-    commitFilters({ ...filters, [key]: value });
-  }
-
   function handleNumberChange(value: string) {
     setNumberDraft(value);
     if (numberTimer.current !== null) window.clearTimeout(numberTimer.current);
     numberTimer.current = window.setTimeout(() => {
-      commitFilters({ ...filtersRef.current, number: value.trim() });
-    }, 450);
+      list.setFilter("number", value.trim());
+    }, 300);
   }
 
   function clearFilters() {
     if (numberTimer.current !== null) window.clearTimeout(numberTimer.current);
     setNumberDraft("");
-    commitFilters(EMPTY_FILTERS);
+    list.clearFilters();
   }
 
   const columns: RecordsTableColumn<PurchaseRecord>[] = [
@@ -456,105 +438,112 @@ function PurchaseListContent({
 
       <CurrencyNoticeBanner />
 
-      <section
-        aria-label="Filtros de compras"
-        className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SelectField
-            emptyLabel="No hay proveedores registrados."
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        id="compras-filtros"
+        loading={list.status === "loading"}
+        onClear={clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando compras…"
+            : list.status === "error" && purchases.length === 0
+              ? "No se pudieron cargar las compras"
+              : list.meta.total === 0
+                ? "Sin compras"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="Busca el proveedor por nombre. El filtro se aplica en el servidor."
             id="filtro-compra-proveedor"
             label="Proveedor"
-            loading={suppliersResource.status === "loading"}
-            loadingLabel="Cargando proveedores…"
-            loadError={
-              suppliersResource.status === "error"
-                ? suppliersResource.error?.message ??
-                  "No pudimos cargar los proveedores."
-                : null
-            }
-            onChange={(value) => updateFilter("supplierId", value)}
-            onRetry={suppliersResource.reload}
-            options={supplierOptions}
-            placeholder="Todos los proveedores"
-            value={filters.supplierId}
+            loadOptions={async (query) => {
+              const page = await fetchSupplierPage({ q: query, pageSize: 10 });
+              return page.data.map((supplier) => ({
+                value: String(supplier.id),
+                label: supplier.name,
+                description: supplier.identification,
+              }));
+            }}
+            onSelect={(option) => {
+              setSupplierDraft(option.label);
+              list.setFilter("supplier_id", option.value);
+            }}
+            onValueChange={(value) => {
+              setSupplierDraft(value);
+              if (value !== supplierLabel) {
+                list.setFilter("supplier_id", "");
+              }
+            }}
+            placeholder="Buscar proveedor"
+            value={supplierDraft}
           />
-          <SelectField
-            id="filtro-compra-estado"
-            label="Estado"
-            onChange={(value) => updateFilter("status", value)}
-            options={PURCHASE_STATUS_OPTIONS.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
-            placeholder="Todos los estados"
-            value={filters.status}
-          />
-          <TextField
-            help="Filtra por número de compra. Se aplica automáticamente al escribir."
-            id="filtro-compra-numero"
-            label="Número"
-            onChange={handleNumberChange}
-            placeholder="Ej. 12"
-            value={numberDraft}
-          />
-          <CurrencySelect
-            allOptionLabel="Todas las monedas"
-            filter
-            help="Busca por código o nombre."
-            id="filtro-compra-moneda"
-            label="Moneda"
-            onChange={(value) => updateFilter("currencyId", value)}
-            value={filters.currencyId}
-          />
-        </div>
+        }
+      >
+        <SelectField
+          id="filtro-compra-estado"
+          label="Estado"
+          onChange={(value) => list.setFilter("status", value)}
+          options={PURCHASE_STATUS_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          placeholder="Todos los estados"
+          value={status}
+        />
+        <TextField
+          help="Filtra por número de compra. Se aplica automáticamente al escribir."
+          id="filtro-compra-numero"
+          inputType="search"
+          label="Número"
+          onChange={handleNumberChange}
+          placeholder="Ej. 12"
+          value={numberDraft}
+        />
+        <CurrencySelect
+          allOptionLabel="Todas las monedas"
+          filter
+          help="Busca por código o nombre."
+          id="filtro-compra-moneda"
+          label="Moneda"
+          onChange={(value) => list.setFilter("currency_id", value)}
+          value={currencyId}
+        />
+      </FilterBar>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {countLabel}
-          </p>
-          {filtersActive && (
-            <button
-              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
-
-      {purchasesResource.status === "loading" && (
+      {list.status === "loading" && (
         <RecordsTableSkeleton columns={8} label="Cargando compras…" rows={6} />
       )}
 
-      {purchasesResource.status === "error" && purchases.length === 0 && (
+      {list.status === "error" && purchases.length === 0 && (
         <RecordsLoadError
           backHref="/app"
           backLabel="Volver al inicio"
           description={purchaseErrorMessage(
-            purchasesResource.error,
+            list.error,
             "No pudimos cargar las compras.",
           )}
-          onRetry={reloadPurchases}
+          onRetry={list.reload}
           title="No pudimos cargar las compras"
         />
       )}
 
-      {purchasesResource.status !== "loading" &&
-        !(purchasesResource.status === "error" && purchases.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && purchases.length === 0) && (
           <section aria-label="Listado de compras" className="space-y-4">
-            {purchasesResource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
 
-            {purchasesResource.status === "error" && purchases.length > 0 && (
+            {list.status === "error" && purchases.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={reloadPurchases}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -563,45 +552,64 @@ function PurchaseListContent({
                 tone="warning"
               >
                 {purchaseErrorMessage(
-                  purchasesResource.error,
+                  list.error,
                   "No pudimos actualizar las compras. Mostramos los datos disponibles.",
                 )}
               </NoticeBanner>
             )}
 
             {purchases.length === 0 ? (
-              <EmptyState
-                action={
-                  filtersActive ? (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/compras/nueva"
+                      >
+                        Nueva compra
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="Se crean como borrador y se confirman cuando los productos llegan a la droguería."
+                  title={PURCHASE_COPY.empty}
+                />
+              ) : (
+                <EmptyState
+                  action={
                     <button
                       className="button-base button-secondary min-h-11 px-5"
-                      onClick={clearFilters}
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : clearFilters
+                      }
                       type="button"
                     >
-                      Limpiar filtros
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
                     </button>
-                  ) : canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/compras/nueva"
-                    >
-                      Nueva compra
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description={
-                  filtersActive
-                    ? PURCHASE_COPY.emptyFilteredHelp
-                    : "Se crean como borrador y se confirman cuando los productos llegan a la droguería."
-                }
-                title={
-                  filtersActive ? PURCHASE_COPY.emptyFiltered : PURCHASE_COPY.empty
-                }
-              />
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} compras en total, pero esta página no tiene filas.`
+                      : PURCHASE_COPY.emptyFilteredHelp
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : PURCHASE_COPY.emptyFiltered
+                  }
+                />
+              )
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
+                  busy={list.status === "refreshing"}
                   caption="Compras registradas con su proveedor, moneda, estado, montos y fecha de confirmación"
                   columns={columns}
                   getRowKey={(purchase) => String(purchase.id)}
@@ -612,6 +620,13 @@ function PurchaseListContent({
                 />
               </div>
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
     </div>

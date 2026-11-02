@@ -1,14 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyNoticeBanner } from "@/components/erp/ui/currency-notice-banner";
@@ -16,14 +9,18 @@ import { CurrencyChip, CurrencySelect } from "@/components/erp/ui/currency-selec
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { CostDeleteDialog } from "@/components/erp/records/cost-delete-dialog";
 import {
-  fetchCosts,
+  fetchCostPage,
   type CostCurrency,
   type CostRecord,
 } from "@/components/erp/records/costs-api";
-import { SelectField } from "@/components/erp/records/form-controls";
+import { DateField, SelectField } from "@/components/erp/records/form-controls";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
   RecordActionButton,
@@ -39,7 +36,8 @@ import {
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
 import {
-  fetchProducts,
+  fetchProduct,
+  fetchProductPage,
   findById,
   type ProductRecord,
 } from "@/components/erp/records/records-api";
@@ -47,6 +45,7 @@ import {
   fetchItemStates,
   type ItemStateRecord,
 } from "@/components/erp/records/item-states-api";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 import { canWriteModule } from "@/lib/permissions";
 import { formatInteger, formatMoney } from "@/lib/format";
 
@@ -56,27 +55,7 @@ export type CostListFilters = {
   currencyId: string;
 };
 
-const EMPTY_FILTERS: CostListFilters = {
-  productId: "",
-  itemStateId: "",
-  currencyId: "",
-};
-
-const NO_COSTS: CostRecord[] = [];
-const NO_PRODUCTS: ProductRecord[] = [];
 const NO_ITEM_STATES: ItemStateRecord[] = [];
-
-function filtersKey(filters: CostListFilters) {
-  return `${filters.productId}|${filters.itemStateId}|${filters.currencyId}`;
-}
-
-function hasActiveFilters(filters: CostListFilters) {
-  return Boolean(filters.productId || filters.itemStateId || filters.currencyId);
-}
-
-function costCountLabel(count: number) {
-  return count === 1 ? "1 costo" : `${formatInteger(count)} costos`;
-}
 
 function productNameFor(product: ProductRecord | null, productId: CostRecord["product_id"]) {
   return product?.name ?? `Producto #${productId}`;
@@ -88,60 +67,62 @@ function productReferenceFor(product: ProductRecord | null) {
 
 export function CostListPage({ initialFilters }: { initialFilters: CostListFilters }) {
   const { user } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
   const currencyStatus = useCurrencyStatusContext();
   const canWrite = canWriteModule(user.role, "costos");
 
-  const [filters, setFilters] = useState<CostListFilters>(initialFilters);
+  const list = useServerList<CostRecord>({
+    loader: (request) => fetchCostPage(request),
+    filterKeys: ["product_id", "item_state_id", "currency_id", "from", "to"],
+    initial: {
+      filters: {
+        product_id: initialFilters.productId,
+        item_state_id: initialFilters.itemStateId,
+        currency_id: initialFilters.currencyId,
+      },
+    },
+  });
   const [deleteTarget, setDeleteTarget] = useState<CostRecord | null>(null);
-
-  const productsResource = useAsyncResource(fetchProducts);
   const itemStatesResource = useAsyncResource(fetchItemStates);
 
-  const products = productsResource.data ?? NO_PRODUCTS;
+  const productId = list.filters.product_id ?? "";
+  const itemStateId = list.filters.item_state_id ?? "";
+  const currencyId = list.filters.currency_id ?? "";
+  const fromDate = list.filters.from ?? "";
+  const toDate = list.filters.to ?? "";
+  const costs = list.items;
   const itemStates = itemStatesResource.data ?? NO_ITEM_STATES;
   const currencies = useMemo(
     () => currencyStatus?.currencies ?? [],
     [currencyStatus?.currencies],
   );
 
-  const costLoader = useCallback(
-    () =>
-      fetchCosts({
-        product_id: filters.productId || undefined,
-        item_state_id: filters.itemStateId || undefined,
-        currency_id: filters.currencyId || undefined,
-      }),
-    [filters.currencyId, filters.itemStateId, filters.productId],
+  const productIds = useMemo(
+    () => [
+      ...(productId ? [productId] : []),
+      ...costs.map((cost) => String(cost.product_id)),
+    ],
+    [costs, productId],
   );
-  const costsResource = useAsyncResource(costLoader);
-  const reloadCosts = costsResource.reload;
-  const costs = costsResource.data ?? NO_COSTS;
+  const productsById = useRecordsById<ProductRecord>({
+    ids: productIds,
+    load: fetchProduct,
+    getId: (product) => product.id,
+  }).records;
 
-  const activeFilterKey = filtersKey(filters);
-  const appliedFilterKey = useRef(activeFilterKey);
+  const productLabel = productId
+    ? productsById[productId]
+      ? `${productsById[productId].name} (${productsById[productId].reference})`
+      : `Producto #${productId}`
+    : "";
+  const [productDraft, setProductDraft] = useState(productLabel);
+  const [appliedProductLabel, setAppliedProductLabel] = useState(productLabel);
+  if (productLabel !== appliedProductLabel) {
+    setAppliedProductLabel(productLabel);
+    setProductDraft(productLabel);
+  }
 
-  useEffect(() => {
-    if (appliedFilterKey.current === activeFilterKey) return;
-    appliedFilterKey.current = activeFilterKey;
-    reloadCosts();
-  }, [activeFilterKey, reloadCosts]);
-
-  const filtersActive = hasActiveFilters(filters);
-  const countLabel = costsResource.data
-    ? costCountLabel(costs.length)
-    : costsResource.status === "error"
-      ? "No se pudieron cargar los costos"
-      : "Cargando costos…";
-
-  const productOptions = useMemo(
-    () =>
-      products.map((product) => ({
-        value: String(product.id),
-        label: `${product.name} (${product.reference})`,
-      })),
-    [products],
+  const filtersActive = Boolean(
+    productId || itemStateId || currencyId || fromDate || toDate,
   );
 
   const itemStateOptions = useMemo(
@@ -153,8 +134,51 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
     [itemStates],
   );
 
+  const chips: FilterChip[] = [];
+  if (productId) {
+    chips.push({
+      id: "product_id",
+      label: `Producto: ${productLabel || `#${productId}`}`,
+      onRemove: () => list.setFilter("product_id", ""),
+    });
+  }
+  if (itemStateId) {
+    chips.push({
+      id: "item_state_id",
+      label: `Estado: ${
+        itemStateOptions.find((option) => option.value === itemStateId)?.label ??
+        `#${itemStateId}`
+      }`,
+      onRemove: () => list.setFilter("item_state_id", ""),
+    });
+  }
+  if (currencyId) {
+    chips.push({
+      id: "currency_id",
+      label: `Moneda: ${
+        currencies.find((currency) => String(currency.id) === currencyId)?.code ??
+        `#${currencyId}`
+      }`,
+      onRemove: () => list.setFilter("currency_id", ""),
+    });
+  }
+  if (fromDate) {
+    chips.push({
+      id: "from",
+      label: `Desde: ${fromDate}`,
+      onRemove: () => list.setFilter("from", ""),
+    });
+  }
+  if (toDate) {
+    chips.push({
+      id: "to",
+      label: `Hasta: ${toDate}`,
+      onRemove: () => list.setFilter("to", ""),
+    });
+  }
+
   function productFor(productId: CostRecord["product_id"]) {
-    return findById(products, productId);
+    return productsById[String(productId)] ?? null;
   }
 
   function itemStateLabelFor(cost: CostRecord) {
@@ -185,24 +209,6 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
         (item) => item.id !== null && String(item.id) === String(currency.id),
       ) ?? currency
     );
-  }
-
-  function updateFilter(key: keyof CostListFilters, value: string) {
-    const next = { ...filters, [key]: value };
-    setFilters(next);
-
-    const params = new URLSearchParams();
-    if (next.productId) params.set("product_id", next.productId);
-    if (next.itemStateId) params.set("item_state_id", next.itemStateId);
-    if (next.currencyId) params.set("currency_id", next.currencyId);
-    const query = params.toString();
-
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function clearFilters() {
-    setFilters(EMPTY_FILTERS);
-    router.replace(pathname, { scroll: false });
   }
 
   const columns: RecordsTableColumn<CostRecord>[] = [
@@ -379,103 +385,120 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
 
       <CurrencyNoticeBanner />
 
-      <section
-        aria-label="Filtros de costos"
-        className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <SelectField
-            emptyLabel="No hay productos registrados."
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        id="costos-filtros"
+        loading={list.status === "loading"}
+        onClear={list.clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando costos…"
+            : list.status === "error" && costs.length === 0
+              ? "No se pudieron cargar los costos"
+              : list.meta.total === 0
+                ? "Sin costos"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="Busca el producto por nombre o referencia. El filtro se aplica en el servidor."
             id="filtro-costo-producto"
             label="Producto"
-            loading={productsResource.status === "loading"}
-            loadingLabel="Cargando productos…"
-            loadError={
-              productsResource.status === "error"
-                ? productsResource.error?.message ??
-                  "No pudimos cargar los productos."
-                : null
-            }
-            onChange={(value) => updateFilter("productId", value)}
-            onRetry={productsResource.reload}
-            options={productOptions}
-            placeholder="Todos los productos"
-            value={filters.productId}
+            loadOptions={async (query) => {
+              const page = await fetchProductPage({ q: query, pageSize: 10 });
+              return page.data.map((product) => ({
+                value: String(product.id),
+                label: `${product.name} (${product.reference})`,
+              }));
+            }}
+            onSelect={(option) => {
+              setProductDraft(option.label);
+              list.setFilter("product_id", option.value);
+            }}
+            onValueChange={(value) => {
+              setProductDraft(value);
+              if (value !== productLabel) {
+                list.setFilter("product_id", "");
+              }
+            }}
+            placeholder="Buscar producto"
+            value={productDraft}
           />
-          <SelectField
-            emptyLabel="No hay estados de ítem registrados."
-            id="filtro-costo-estado"
-            label="Estado del ítem"
-            loading={itemStatesResource.status === "loading"}
-            loadingLabel="Cargando estados…"
-            loadError={
-              itemStatesResource.status === "error"
-                ? itemStatesResource.error?.message ??
-                  "No pudimos cargar los estados de ítem."
-                : null
-            }
-            onChange={(value) => updateFilter("itemStateId", value)}
-            onRetry={itemStatesResource.reload}
-            options={itemStateOptions}
-            placeholder="Todos los estados"
-            value={filters.itemStateId}
-          />
-          <CurrencySelect
-            allOptionLabel="Todas las monedas"
-            filter
-            help="Busca por código o nombre."
-            id="filtro-costo-moneda"
-            label="Moneda"
-            onChange={(value) => updateFilter("currencyId", value)}
-            value={filters.currencyId}
-          />
-        </div>
+        }
+      >
+        <SelectField
+          emptyLabel="No hay estados de ítem registrados."
+          id="filtro-costo-estado"
+          label="Estado del ítem"
+          loading={itemStatesResource.status === "loading"}
+          loadingLabel="Cargando estados…"
+          loadError={
+            itemStatesResource.status === "error"
+              ? itemStatesResource.error?.message ??
+                "No pudimos cargar los estados de ítem."
+              : null
+          }
+          onChange={(value) => list.setFilter("item_state_id", value)}
+          onRetry={itemStatesResource.reload}
+          options={itemStateOptions}
+          placeholder="Todos los estados"
+          value={itemStateId}
+        />
+        <CurrencySelect
+          allOptionLabel="Todas las monedas"
+          filter
+          help="Busca por código o nombre."
+          id="filtro-costo-moneda"
+          label="Moneda"
+          onChange={(value) => list.setFilter("currency_id", value)}
+          value={currencyId}
+        />
+        <DateField
+          id="filtro-costo-desde"
+          label="Desde"
+          max={toDate || undefined}
+          onChange={(value) => list.setFilter("from", value)}
+          value={fromDate}
+        />
+        <DateField
+          id="filtro-costo-hasta"
+          label="Hasta"
+          min={fromDate || undefined}
+          onChange={(value) => list.setFilter("to", value)}
+          value={toDate}
+        />
+      </FilterBar>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {countLabel}
-          </p>
-          {filtersActive && (
-            <button
-              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
-
-      {costsResource.status === "loading" && (
+      {list.status === "loading" && (
         <RecordsTableSkeleton columns={5} label="Cargando costos…" rows={6} />
       )}
 
-      {costsResource.status === "error" && costs.length === 0 && (
+      {list.status === "error" && costs.length === 0 && (
         <RecordsLoadError
           backHref="/app"
           backLabel="Volver al inicio"
-          description={
-            costsResource.error?.message ?? "No pudimos cargar los costos."
-          }
-          onRetry={reloadCosts}
+          description={list.error?.message ?? "No pudimos cargar los costos."}
+          onRetry={list.reload}
           title="No pudimos cargar los costos"
         />
       )}
 
-      {costsResource.status !== "loading" &&
-        !(costsResource.status === "error" && costs.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && costs.length === 0) && (
           <section aria-label="Listado de costos" className="space-y-4">
-            {costsResource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
 
-            {costsResource.status === "error" && costs.length > 0 && (
+            {list.status === "error" && costs.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={reloadCosts}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -483,46 +506,63 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
                 }
                 tone="warning"
               >
-                {costsResource.error?.message ??
+                {list.error?.message ??
                   "No pudimos actualizar los costos. Mostramos los datos disponibles."}
               </NoticeBanner>
             )}
 
             {costs.length === 0 ? (
-              <EmptyState
-                action={
-                  filtersActive ? (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/costos/nuevo"
+                      >
+                        Nuevo costo
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="Se crean manualmente o al confirmar una compra."
+                  title="Todavía no hay costos registrados."
+                />
+              ) : (
+                <EmptyState
+                  action={
                     <button
                       className="button-base button-secondary min-h-11 px-5"
-                      onClick={clearFilters}
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : list.clearFilters
+                      }
                       type="button"
                     >
-                      Limpiar filtros
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
                     </button>
-                  ) : canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/costos/nuevo"
-                    >
-                      Nuevo costo
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description={
-                  filtersActive
-                    ? "Ajusta los filtros para ver otros resultados."
-                    : "Se crean manualmente o al confirmar una compra."
-                }
-                title={
-                  filtersActive
-                    ? "No hay costos que coincidan con los filtros."
-                    : "Todavía no hay costos registrados."
-                }
-              />
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} costos en total, pero esta página no tiene filas.`
+                      : "No hay resultados con estos filtros. Ajusta los criterios."
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : "Sin resultados con estos filtros."
+                  }
+                />
+              )
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
+                  busy={list.status === "refreshing"}
                   caption="Costos vigentes por producto y estado de ítem, con su moneda y acciones"
                   columns={columns}
                   getRowKey={(cost) => String(cost.id)}
@@ -535,6 +575,13 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
                 />
               </div>
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
 
@@ -542,7 +589,7 @@ export function CostListPage({ initialFilters }: { initialFilters: CostListFilte
         cost={deleteTarget}
         itemStateLabel={deleteTarget ? itemStateLabelFor(deleteTarget) : ""}
         onClose={() => setDeleteTarget(null)}
-        onDeleted={reloadCosts}
+        onDeleted={list.reload}
         productName={
           deleteTarget
             ? productNameFor(deleteProduct, deleteTarget.product_id)

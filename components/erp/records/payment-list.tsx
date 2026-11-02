@@ -1,14 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -18,9 +11,13 @@ import { CurrencyChip, CurrencySelect } from "@/components/erp/ui/currency-selec
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
 import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { DateField, SelectField } from "@/components/erp/records/form-controls";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
@@ -36,9 +33,9 @@ import {
   RecordsTable,
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
-import { findById } from "@/components/erp/records/records-api";
 import {
-  fetchCustomers,
+  fetchCustomer,
+  fetchCustomerPage,
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
 import {
@@ -47,13 +44,12 @@ import {
 } from "@/components/erp/records/method-payments-api";
 import {
   deletePayment,
-  fetchPayments,
+  fetchPaymentPage,
   type PaymentRecord,
   type PaymentStatusResult,
 } from "@/components/erp/records/payments-api";
 import {
   PaymentAmount,
-  paymentCountLabel,
   paymentMethodLabel,
   paymentMoney,
   paymentReferenceLabel,
@@ -66,9 +62,10 @@ import {
   type PaymentStatusDialogMode,
 } from "@/components/erp/records/payment-status-dialog";
 import type { WalletCurrency } from "@/components/erp/records/wallets-api";
-import { formatDateOnly, formatMoney } from "@/lib/format";
+import { formatDateOnly, formatInteger, formatMoney } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import type { UiError } from "@/lib/api-errors";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 
 export type PaymentListFilters = {
   customerId: string;
@@ -88,33 +85,9 @@ export const EMPTY_PAYMENT_FILTERS: PaymentListFilters = {
   status: "",
 };
 
-const NO_PAYMENTS: PaymentRecord[] = [];
-const NO_CUSTOMERS: CustomerRecord[] = [];
 const NO_METHODS: MethodPayment[] = [];
 
 const PAYMENT_STATUS_FILTER_OPTIONS = paymentStatusOptions();
-
-function filtersKey(filters: PaymentListFilters) {
-  return [
-    filters.customerId,
-    filters.methodPaymentId,
-    filters.currencyId,
-    filters.paidFrom,
-    filters.paidTo,
-    filters.status,
-  ].join("|");
-}
-
-function hasActiveFilters(filters: PaymentListFilters) {
-  return Boolean(
-    filters.customerId ||
-      filters.methodPaymentId ||
-      filters.currencyId ||
-      filters.paidFrom ||
-      filters.paidTo ||
-      filters.status,
-  );
-}
 
 function listErrorMessage(error: UiError | null) {
   if (!error) return "No pudimos cargar los pagos.";
@@ -145,15 +118,35 @@ function PaymentListContent({
   initialFilters: PaymentListFilters;
 }) {
   const { user } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
   const toast = useToast();
   const currencyStatus = useCurrencyStatusContext();
   const activityVisible = useActivityVisible();
   const canWrite = canWriteModule(user.role, "pagos");
   const canDelete = user.role === "admin";
 
-  const [filters, setFilters] = useState<PaymentListFilters>(initialFilters);
+  const list = useServerList<PaymentRecord>({
+    loader: (request) => fetchPaymentPage(request),
+    filterKeys: [
+      "customer_id",
+      "method_payment_id",
+      "currency_id",
+      "status",
+      "paid_from",
+      "paid_to",
+    ],
+    defaultSort: "paid_at",
+    defaultOrder: "desc",
+    initial: {
+      filters: {
+        customer_id: initialFilters.customerId,
+        method_payment_id: initialFilters.methodPaymentId,
+        currency_id: initialFilters.currencyId,
+        status: initialFilters.status,
+        paid_from: initialFilters.paidFrom,
+        paid_to: initialFilters.paidTo,
+      },
+    },
+  });
   const [deleteTarget, setDeleteTarget] = useState<PaymentRecord | null>(null);
   const [statusTarget, setStatusTarget] = useState<{
     payment: PaymentRecord;
@@ -162,72 +155,42 @@ function PaymentListContent({
   const [statusUpdates, setStatusUpdates] = useState<
     Record<string, PaymentStatusResult>
   >({});
+  const [customerDraft, setCustomerDraft] = useState("");
 
-  const initialKey = filtersKey(initialFilters);
-  const [appliedInitialKey, setAppliedInitialKey] = useState(initialKey);
-  if (initialKey !== appliedInitialKey) {
-    setAppliedInitialKey(initialKey);
-    setFilters(initialFilters);
-  }
+  const customerId = list.filters.customer_id ?? "";
+  const methodPaymentId = list.filters.method_payment_id ?? "";
+  const currencyId = list.filters.currency_id ?? "";
+  const status = list.filters.status ?? "";
+  const paidFrom = list.filters.paid_from ?? "";
+  const paidTo = list.filters.paid_to ?? "";
 
-  const customersResource = useAsyncResource(fetchCustomers);
   const methodsResource = useAsyncResource(fetchMethodPayments);
-  const customers = customersResource.data ?? NO_CUSTOMERS;
   const methods = methodsResource.data ?? NO_METHODS;
 
-  const loader = useCallback(
-    () =>
-      fetchPayments({
-        customerId: filters.customerId || undefined,
-        methodPaymentId: filters.methodPaymentId || undefined,
-        currencyId: filters.currencyId || undefined,
-        paidFrom: filters.paidFrom || undefined,
-        paidTo: filters.paidTo || undefined,
-        status: filters.status || undefined,
-      }),
-    [
-      filters.customerId,
-      filters.currencyId,
-      filters.methodPaymentId,
-      filters.paidFrom,
-      filters.paidTo,
-      filters.status,
+  const customerIds = useMemo(
+    () => [
+      ...(customerId ? [customerId] : []),
+      ...list.items.map((payment) => String(payment.customer_id)),
     ],
+    [customerId, list.items],
   );
-  const resource = useAsyncResource(loader);
-  const reload = resource.reload;
-  const payments = useMemo(() => {
-    const list = resource.data ?? NO_PAYMENTS;
-    return list.map((payment) => {
-      const update = statusUpdates[String(payment.id)];
-      if (!update) return payment;
-      return {
-        ...payment,
-        status: update.status,
-        rejection_reason: update.rejection_reason,
-        wallet: update.wallet ?? payment.wallet,
-      };
-    });
-  }, [resource.data, statusUpdates]);
+  const customersById = useRecordsById<CustomerRecord>({
+    ids: customerIds,
+    load: fetchCustomer,
+    getId: (customer) => customer.id,
+  }).records;
 
-  const activeKey = filtersKey(filters);
-  const appliedKey = useRef(activeKey);
-  useEffect(() => {
-    if (appliedKey.current === activeKey) return;
-    appliedKey.current = activeKey;
-    reload();
-  }, [activeKey, reload]);
-
-  const customerOptions = useMemo(
-    () =>
-      customers.map((customer) => ({
-        value: String(customer.id),
-        label: customer.email
-          ? `${customer.fullName} — ${customer.email}`
-          : customer.fullName,
-      })),
-    [customers],
-  );
+  const customerLabel = customerId
+    ? customersById[customerId]
+      ? customersById[customerId].fullName
+      : `Cliente #${customerId}`
+    : "";
+  const [appliedCustomerLabel, setAppliedCustomerLabel] =
+    useState(customerLabel);
+  if (customerLabel !== appliedCustomerLabel) {
+    setAppliedCustomerLabel(customerLabel);
+    setCustomerDraft(customerLabel);
+  }
 
   const methodOptions = useMemo(
     () =>
@@ -240,40 +203,91 @@ function PaymentListContent({
     [methods],
   );
 
-  const filtersActive = hasActiveFilters(filters);
-  const invalidDateRange = Boolean(
-    filters.paidFrom && filters.paidTo && filters.paidFrom > filters.paidTo,
+  const payments = useMemo(
+    () =>
+      list.items.map((payment) => {
+        const update = statusUpdates[String(payment.id)];
+        if (!update) return payment;
+        return {
+          ...payment,
+          status: update.status,
+          rejection_reason: update.rejection_reason,
+          wallet: update.wallet ?? payment.wallet,
+        };
+      }),
+    [list.items, statusUpdates],
   );
 
-  if (!activityVisible) return null;
+  const filtersActive = Boolean(
+    customerId ||
+      methodPaymentId ||
+      currencyId ||
+      status ||
+      paidFrom ||
+      paidTo,
+  );
+  const invalidDateRange = Boolean(
+    paidFrom && paidTo && paidFrom > paidTo,
+  );
 
-  function commitFilters(next: PaymentListFilters) {
-    setFilters(next);
-    const params = new URLSearchParams();
-    if (next.customerId) params.set("customer_id", next.customerId);
-    if (next.methodPaymentId) {
-      params.set("method_payment_id", next.methodPaymentId);
-    }
-    if (next.currencyId) params.set("currency_id", next.currencyId);
-    if (next.paidFrom) params.set("paid_from", next.paidFrom);
-    if (next.paidTo) params.set("paid_to", next.paidTo);
-    if (next.status) params.set("status", next.status);
-    const search = params.toString();
-    router.replace(search ? `${pathname}?${search}` : pathname, {
-      scroll: false,
+  const chips: FilterChip[] = [];
+  if (customerId) {
+    chips.push({
+      id: "customer_id",
+      label: `Cliente: ${customerLabel || `#${customerId}`}`,
+      onRemove: () => list.setFilter("customer_id", ""),
+    });
+  }
+  if (status) {
+    chips.push({
+      id: "status",
+      label: `Estado: ${
+        PAYMENT_STATUS_FILTER_OPTIONS.find((option) => option.value === status)
+          ?.label ?? status
+      }`,
+      onRemove: () => list.setFilter("status", ""),
+    });
+  }
+  if (methodPaymentId) {
+    chips.push({
+      id: "method_payment_id",
+      label: `Método: ${
+        methodOptions.find((option) => option.value === methodPaymentId)?.label ??
+        `#${methodPaymentId}`
+      }`,
+      onRemove: () => list.setFilter("method_payment_id", ""),
+    });
+  }
+  if (currencyId) {
+    chips.push({
+      id: "currency_id",
+      label: `Moneda: ${
+        (currencyStatus?.currencies ?? []).find(
+          (currency) => String(currency.id) === currencyId,
+        )?.code ?? `#${currencyId}`
+      }`,
+      onRemove: () => list.setFilter("currency_id", ""),
+    });
+  }
+  if (paidFrom) {
+    chips.push({
+      id: "paid_from",
+      label: `Desde: ${paidFrom}`,
+      onRemove: () => list.setFilter("paid_from", ""),
+    });
+  }
+  if (paidTo) {
+    chips.push({
+      id: "paid_to",
+      label: `Hasta: ${paidTo}`,
+      onRemove: () => list.setFilter("paid_to", ""),
     });
   }
 
-  function updateFilter(key: keyof PaymentListFilters, value: string) {
-    commitFilters({ ...filters, [key]: value });
-  }
-
-  function clearFilters() {
-    commitFilters(EMPTY_PAYMENT_FILTERS);
-  }
+  if (!activityVisible) return null;
 
   function customerFor(payment: PaymentRecord) {
-    return findById(customers, payment.customer_id);
+    return customersById[String(payment.customer_id)] ?? null;
   }
 
   function customerNameFor(payment: PaymentRecord) {
@@ -303,7 +317,7 @@ function PaymentListContent({
         ? "Pago eliminado. El saldo de la billetera se actualizó."
         : "Pago eliminado. El saldo de la billetera no cambia.",
     );
-    reload();
+    list.reload();
   }
 
   function handleStatusSuccess(
@@ -326,7 +340,7 @@ function PaymentListContent({
           : "Pago conciliado. El saldo fue acreditado.",
     );
     setStatusTarget(null);
-    reload();
+    list.reload();
   }
 
   function renderActions(payment: PaymentRecord) {
@@ -535,100 +549,102 @@ function PaymentListContent({
 
       <CurrencyNoticeBanner />
 
-      <section
-        aria-label="Filtros de pagos"
-        className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <SelectField
-            emptyLabel="No hay clientes registrados."
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        id="pagos-filtros"
+        loading={list.status === "loading"}
+        onClear={list.clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando pagos…"
+            : list.status === "error" && payments.length === 0
+              ? "No se pudieron cargar los pagos"
+              : list.meta.total === 0
+                ? "Sin pagos"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="Busca el cliente por nombre o correo. El filtro se aplica en el servidor."
             id="filtro-pago-cliente"
             label="Cliente"
-            loading={customersResource.status === "loading"}
-            loadingLabel="Cargando clientes…"
-            loadError={
-              customersResource.status === "error"
-                ? customersResource.error?.message ??
-                  "No pudimos cargar los clientes."
-                : null
-            }
-            onChange={(value) => updateFilter("customerId", value)}
-            onRetry={customersResource.reload}
-            options={customerOptions}
-            placeholder="Todos los clientes"
-            value={filters.customerId}
+            loadOptions={async (query) => {
+              const page = await fetchCustomerPage({ q: query, pageSize: 10 });
+              return page.data.map((customer) => ({
+                value: String(customer.id),
+                label: customer.fullName,
+                description: customer.email || undefined,
+              }));
+            }}
+            onSelect={(option) => {
+              setCustomerDraft(option.label);
+              list.setFilter("customer_id", option.value);
+            }}
+            onValueChange={(value) => {
+              setCustomerDraft(value);
+              if (value !== customerLabel) {
+                list.setFilter("customer_id", "");
+              }
+            }}
+            placeholder="Buscar cliente"
+            value={customerDraft}
           />
-          <SelectField
-            emptyLabel="No hay estados de pago."
-            id="filtro-pago-estado"
-            label="Estado"
-            onChange={(value) => updateFilter("status", value)}
-            options={PAYMENT_STATUS_FILTER_OPTIONS}
-            placeholder="Todos los estados"
-            value={filters.status}
-          />
-          <SelectField
-            emptyLabel="No hay métodos registrados."
-            id="filtro-pago-metodo"
-            label="Método de pago"
-            loading={methodsResource.status === "loading"}
-            loadingLabel="Cargando métodos…"
-            loadError={
-              methodsResource.status === "error"
-                ? methodsResource.error?.message ??
-                  "No pudimos cargar los métodos de pago."
-                : null
-            }
-            onChange={(value) => updateFilter("methodPaymentId", value)}
-            onRetry={methodsResource.reload}
-            options={methodOptions}
-            placeholder="Todos los métodos"
-            value={filters.methodPaymentId}
-          />
-          <CurrencySelect
-            allOptionLabel="Todas las monedas"
-            filter
-            help="Busca por código o nombre."
-            id="filtro-pago-moneda"
-            label="Moneda"
-            onChange={(value) => updateFilter("currencyId", value)}
-            value={filters.currencyId}
-          />
-          <DateField
-            id="filtro-pago-desde"
-            label="Pagado desde"
-            max={filters.paidTo || undefined}
-            onChange={(value) => updateFilter("paidFrom", value)}
-            value={filters.paidFrom}
-          />
-          <DateField
-            id="filtro-pago-hasta"
-            label="Pagado hasta"
-            min={filters.paidFrom || undefined}
-            onChange={(value) => updateFilter("paidTo", value)}
-            value={filters.paidTo}
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {resource.status === "loading"
-              ? "Cargando pagos…"
-              : resource.status === "error" && payments.length === 0
-                ? "No se pudieron cargar los pagos"
-                : paymentCountLabel(payments.length)}
-          </p>
-          {filtersActive && (
-            <button
-              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
+        }
+      >
+        <SelectField
+          emptyLabel="No hay estados de pago."
+          id="filtro-pago-estado"
+          label="Estado"
+          onChange={(value) => list.setFilter("status", value)}
+          options={PAYMENT_STATUS_FILTER_OPTIONS}
+          placeholder="Todos los estados"
+          value={status}
+        />
+        <SelectField
+          emptyLabel="No hay métodos registrados."
+          id="filtro-pago-metodo"
+          label="Método de pago"
+          loading={methodsResource.status === "loading"}
+          loadingLabel="Cargando métodos…"
+          loadError={
+            methodsResource.status === "error"
+              ? methodsResource.error?.message ??
+                "No pudimos cargar los métodos de pago."
+              : null
+          }
+          onChange={(value) => list.setFilter("method_payment_id", value)}
+          onRetry={methodsResource.reload}
+          options={methodOptions}
+          placeholder="Todos los métodos"
+          value={methodPaymentId}
+        />
+        <CurrencySelect
+          allOptionLabel="Todas las monedas"
+          filter
+          help="Busca por código o nombre."
+          id="filtro-pago-moneda"
+          label="Moneda"
+          onChange={(value) => list.setFilter("currency_id", value)}
+          value={currencyId}
+        />
+        <DateField
+          id="filtro-pago-desde"
+          label="Pagado desde"
+          max={paidTo || undefined}
+          onChange={(value) => list.setFilter("paid_from", value)}
+          value={paidFrom}
+        />
+        <DateField
+          id="filtro-pago-hasta"
+          label="Pagado hasta"
+          min={paidFrom || undefined}
+          onChange={(value) => list.setFilter("paid_to", value)}
+          value={paidTo}
+        />
+      </FilterBar>
 
       {invalidDateRange && (
         <NoticeBanner tone="warning">
@@ -637,33 +653,33 @@ function PaymentListContent({
         </NoticeBanner>
       )}
 
-      {resource.status === "loading" && (
+      {list.status === "loading" && (
         <RecordsTableSkeleton columns={8} label="Cargando pagos…" rows={6} />
       )}
 
-      {resource.status === "error" && payments.length === 0 && (
+      {list.status === "error" && payments.length === 0 && (
         <RecordsLoadError
           backHref="/app"
           backLabel="Volver al inicio"
-          description={listErrorMessage(resource.error)}
-          onRetry={reload}
+          description={listErrorMessage(list.error)}
+          onRetry={list.reload}
           title="No pudimos cargar los pagos"
         />
       )}
 
-      {resource.status !== "loading" &&
-        !(resource.status === "error" && payments.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && payments.length === 0) && (
           <section aria-label="Listado de pagos" className="space-y-4">
-            {resource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
 
-            {resource.status === "error" && payments.length > 0 && (
+            {list.status === "error" && payments.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={reload}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -671,44 +687,63 @@ function PaymentListContent({
                 }
                 tone="warning"
               >
-                {listErrorMessage(resource.error)} Mostramos los datos
+                {listErrorMessage(list.error)} Mostramos los datos
                 disponibles.
               </NoticeBanner>
             )}
 
             {payments.length === 0 ? (
-              <EmptyState
-                action={
-                  filtersActive ? (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/pagos/nuevo"
+                      >
+                        Registrar pago
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="Registra el primer pago recibido. El saldo se acredita cuando el pago se concilia."
+                  title="Aún no hay pagos registrados."
+                />
+              ) : (
+                <EmptyState
+                  action={
                     <button
                       className="button-base button-secondary min-h-11 px-5"
-                      onClick={clearFilters}
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : list.clearFilters
+                      }
                       type="button"
                     >
-                      Limpiar filtros
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
                     </button>
-                  ) : canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/pagos/nuevo"
-                    >
-                      Registrar pago
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description={
-                  filtersActive
-                    ? "No hay pagos que coincidan con los filtros seleccionados."
-                    : "Registra el primer pago recibido. El saldo se acredita cuando el pago se concilia."
-                }
-                title={
-                  filtersActive ? "Sin resultados" : "Aún no hay pagos registrados."
-                }
-              />
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} pagos en total, pero esta página no tiene filas.`
+                      : "No hay pagos que coincidan con los filtros seleccionados."
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : "Sin resultados con estos filtros."
+                  }
+                />
+              )
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
+                  busy={list.status === "refreshing"}
                   caption="Pagos recibidos con su fecha, cliente, estado, método, moneda, monto, comprobante y referencia"
                   columns={columns}
                   getRowKey={(payment) => String(payment.id)}
@@ -719,6 +754,13 @@ function PaymentListContent({
                 />
               </div>
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
 
