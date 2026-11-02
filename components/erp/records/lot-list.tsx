@@ -20,6 +20,7 @@ import {
   addDaysIso,
   getLotExpiryStatus,
   LotExpiryBadge,
+  LotLocationStatusBadge,
   lotCountLabel,
   lotItemStateLabel,
   lotLocationLabel,
@@ -31,7 +32,9 @@ import {
 } from "@/components/erp/records/lot-shared";
 import {
   fetchLots,
+  lotAvailable,
   type LotFilters,
+  type LotLocationStatus,
   type LotRecord,
 } from "@/components/erp/records/lots-api";
 import { SelectField, TextField } from "@/components/erp/records/form-controls";
@@ -86,6 +89,7 @@ export type LotListFilters = {
   shelfId: string;
   sectionId: string;
   number: string;
+  locationStatus: "" | LotLocationStatus;
   expired: "" | "true" | "false";
   expiringBefore: string;
 };
@@ -97,6 +101,7 @@ const EMPTY_FILTERS: LotListFilters = {
   shelfId: "",
   sectionId: "",
   number: "",
+  locationStatus: "",
   expired: "",
   expiringBefore: "",
 };
@@ -117,6 +122,12 @@ const EXPIRY_OPTIONS = [
   { value: "personalizado", label: "Personalizado" },
 ];
 
+const LOCATION_STATUS_OPTIONS = [
+  { value: "pending", label: "Pendiente de ubicar" },
+  { value: "in_progress", label: "Ubicando" },
+  { value: "located", label: "Ubicado" },
+];
+
 function currentExpiryWindows() {
   return {
     d30: addDaysIso(30),
@@ -133,6 +144,7 @@ function filtersKey(filters: LotListFilters) {
     filters.shelfId,
     filters.sectionId,
     filters.number,
+    filters.locationStatus,
     filters.expired,
     filters.expiringBefore,
   ].join("|");
@@ -146,6 +158,7 @@ function hasActiveFilters(filters: LotListFilters) {
       filters.shelfId ||
       filters.sectionId ||
       filters.number.trim() ||
+      filters.locationStatus ||
       filters.expired ||
       filters.expiringBefore,
   );
@@ -159,6 +172,7 @@ function toApiFilters(filters: LotListFilters): LotFilters {
     shelf_id: filters.shelfId || undefined,
     section_id: filters.sectionId || undefined,
     number: filters.number.trim() || undefined,
+    location_status: filters.locationStatus || undefined,
     expired:
       filters.expired === "true"
         ? true
@@ -177,6 +191,9 @@ function buildQuery(filters: LotListFilters) {
   if (filters.shelfId) params.set("shelf_id", filters.shelfId);
   if (filters.sectionId) params.set("section_id", filters.sectionId);
   if (filters.number.trim()) params.set("number", filters.number.trim());
+  if (filters.locationStatus) {
+    params.set("location_status", filters.locationStatus);
+  }
   if (filters.expired) params.set("expired", filters.expired);
   if (filters.expiringBefore) {
     params.set("expiring_before", filters.expiringBefore);
@@ -216,6 +233,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
   const { user } = useSession();
   const canWrite = canWriteModule(user.role, "lotes");
   const canReadExistencias = canReadModule(user.role, "existencias");
+  const canWriteBandeja = canWriteModule(user.role, "bandeja_almacen");
 
   const [filters, setFilters] = useState<LotListFilters>(initialFilters);
   const [dateWindows, setDateWindows] = useState<ReturnType<
@@ -428,6 +446,14 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     commitFilters({ ...filters, shelfId: value, sectionId: "" });
   }
 
+  function updateLocationStatus(value: string) {
+    const locationStatus: LotListFilters["locationStatus"] =
+      value === "pending" || value === "in_progress" || value === "located"
+        ? value
+        : "";
+    commitFilters({ ...filters, locationStatus });
+  }
+
   function updateExpiry(value: string) {
     if (value === "personalizado") return;
     if (value === "") {
@@ -531,6 +557,11 @@ function LotListContent({ initialFilters }: LotListPageProps) {
       ),
     },
     {
+      key: "ubicacion-estado",
+      header: "Estado de ubicación",
+      render: (lot) => <LotLocationStatusBadge lot={lot} />,
+    },
+    {
       key: "existencia",
       header: "Existencia",
       className: "whitespace-nowrap text-right",
@@ -559,7 +590,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
       headerClassName: "text-right",
       render: (lot) => (
         <span className="font-semibold tabular-nums text-brand">
-          {formatInteger(lot.stock - lot.reserved)}
+          {formatInteger(lotAvailable(lot))}
         </span>
       ),
     },
@@ -586,6 +617,15 @@ function LotListContent({ initialFilters }: LotListPageProps) {
         >
           Ver detalle
         </RecordActionLink>
+        {canWriteBandeja && lot.location_status !== "located" && (
+          <RecordActionLink
+            ariaLabel={`Ir a la bandeja de almacén para ubicar el lote ${lot.number} de ${productName}`}
+            href={`/app/almacen/bandeja?lot_number=${encodeURIComponent(lot.number)}`}
+            icon="warehouse"
+          >
+            Ubicar lote
+          </RecordActionLink>
+        )}
         {canWrite && (
           <RecordActionLink
             ariaLabel={`Editar el lote ${lot.number} de ${productName}`}
@@ -637,6 +677,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
               {lotItemStateLabel(lot, itemStates)}
             </span>
+            <LotLocationStatusBadge lot={lot} />
             <LotExpiryBadge expirationDate={lot.expiration_date} />
           </div>
         </div>
@@ -663,7 +704,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
               Disponible
             </dt>
             <dd className="mt-1 font-semibold tabular-nums text-brand">
-              {formatInteger(lot.stock - lot.reserved)}
+              {formatInteger(lotAvailable(lot))}
             </dd>
           </div>
         </dl>
@@ -696,7 +737,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             </Link>
           ) : undefined
         }
-        description="Consulta los lotes de Farmamed con su vencimiento, cantidades y ubicación física. Los lotes y las existencias son fuentes independientes."
+        description="Consulta los lotes de Farmamed con su vencimiento, cantidades, estado de ubicación y ubicación física. Los lotes pendientes no están disponibles para la venta y los lotes y las existencias son fuentes independientes."
         eyebrow="Inventario"
         title="Lotes"
       />
@@ -832,6 +873,14 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             value={filters.sectionId}
           />
           <SelectField
+            id="filtro-lotes-ubicacion"
+            label="Estado de ubicación"
+            onChange={updateLocationStatus}
+            options={LOCATION_STATUS_OPTIONS}
+            placeholder="Todos los estados"
+            value={filters.locationStatus}
+          />
+          <SelectField
             help={
               expirySelection === "personalizado"
                 ? "Este filtro conserva la fecha exacta recibida."
@@ -890,7 +939,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
       </section>
 
       {lotsResource.status === "loading" && (
-        <RecordsTableSkeleton columns={9} label="Cargando lotes…" rows={6} />
+        <RecordsTableSkeleton columns={10} label="Cargando lotes…" rows={6} />
       )}
 
       {lotsResource.status === "error" && lots.length === 0 && (
@@ -977,7 +1026,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
-                  caption="Lotes con número, producto, vencimiento, estado, existencia, reservado, disponible, ubicación y acciones"
+                  caption="Lotes con número, producto, vencimiento, estado, estado de ubicación, existencia, reservado, disponible, ubicación y acciones"
                   columns={columns}
                   getRowAttributes={(lot) => {
                     const status = getLotExpiryStatus(lot.expiration_date);

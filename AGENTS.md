@@ -29,6 +29,11 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `app/app/(erp)/`: único grupo de rutas protegidas y layout del ERP.
 - `app/app/(erp)/tienda/`: catálogo y detalle de producto del portal del cliente.
 - `app/app/(erp)/billetera/`: saldo por moneda y movimientos propios del cliente en solo lectura.
+- `app/app/(erp)/almacen/bandeja/`: bandeja de lotes pendientes de ubicación con inicio y asignación de bodega, estante y sección.
+- `components/erp/records/warehouse-inbox-list.tsx`: listado, filtros y estados de la bandeja de almacén.
+- `components/erp/records/warehouse-inbox-actions.tsx`: acciones para iniciar la ubicación y abrir el diálogo de asignación.
+- `components/erp/records/warehouse-inbox-api.ts`: tipos y llamadas a `/warehouse-inbox`.
+- `components/erp/records/lot-location-dialog.tsx`: diálogo en cascada de bodega, estante y sección.
 - `components/erp/`: shell responsive, navegación, estados de sesión y placeholders del ERP.
 - `components/erp/store/`: catálogo, detalle y estados de la tienda del cliente.
 - `components/erp/store/use-store-resource.ts`: carga de recursos de la tienda con reintento y estados de error.

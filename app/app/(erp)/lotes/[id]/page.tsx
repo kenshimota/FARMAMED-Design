@@ -4,7 +4,7 @@ import { LotDetailPage } from "@/components/erp/records/lot-detail";
 export const metadata: Metadata = {
   title: "Detalle del lote",
   description:
-    "Consulta el vencimiento, las cantidades y la ubicación física de un lote de Farmamed.",
+    "Consulta el vencimiento, las cantidades y el estado de ubicación de un lote de Farmamed.",
 };
 
 type LotDetailRouteProps = {

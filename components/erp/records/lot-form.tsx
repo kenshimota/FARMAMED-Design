@@ -134,6 +134,7 @@ export function LotFormPage({ mode, lotId }: LotFormPageProps) {
 function LotFormContent({ mode, lotId }: LotFormPageProps) {
   const router = useRouter();
   const toast = useToast();
+  const { user } = useSession();
   const editing = mode === "edit";
 
   const lotLoader = useCallback(() => fetchLot(lotId ?? ""), [lotId]);
@@ -155,6 +156,7 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
   const products = productsResource.data ?? [];
   const itemStates = itemStatesResource.data ?? [];
   const warehouses = warehousesResource.data ?? [];
+  const canWriteBandeja = canWriteModule(user.role, "bandeja_almacen");
 
   if (lot) {
     const key = String(lot.id);
@@ -166,9 +168,9 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
         expiration_date: normalizeDateInput(lot.expiration_date),
         stock: String(lot.stock),
         reserved: String(lot.reserved),
-        warehouse_id: String(lot.warehouse_id),
-        shelf_id: String(lot.shelf_id),
-        section_id: String(lot.section_id),
+        warehouse_id: lot.warehouse_id !== null ? String(lot.warehouse_id) : "",
+        shelf_id: lot.shelf_id !== null ? String(lot.shelf_id) : "",
+        section_id: lot.section_id !== null ? String(lot.section_id) : "",
       };
       setValues(next);
       setInitialValues(next);
@@ -549,6 +551,14 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
       {header}
 
       <LotSyncNotice variant={editing ? "detail" : "list"} />
+
+      {editing && lot && lot.location_status !== "located" && (
+        <NoticeBanner role="status" tone="warning">
+          {canWriteBandeja
+            ? "Este lote aún no tiene una ubicación física asignada. Puedes asignarla desde la bandeja de almacén o completar bodega, estante y sección en este formulario."
+            : "Este lote aún no tiene una ubicación física asignada. Completa bodega, estante y sección para registrar la ubicación junto con sus datos."}
+        </NoticeBanner>
+      )}
 
       <section className="rounded-[28px] border border-line bg-surface p-5 shadow-[0_18px_60px_rgba(27,12,104,0.04)] sm:p-7">
         <div>
