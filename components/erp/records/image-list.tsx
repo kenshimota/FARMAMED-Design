@@ -6,8 +6,11 @@ import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { FilterBar } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { Skeleton } from "@/components/erp/ui/skeleton";
-import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { TextField } from "@/components/erp/records/form-controls";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { ImageDeleteDialog } from "@/components/erp/records/image-delete-dialog";
 import { ImagePreview } from "@/components/erp/records/image-preview";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
@@ -18,7 +21,7 @@ import {
 } from "@/components/erp/records/record-actions";
 import { RecordsLoadError } from "@/components/erp/records/record-states";
 import {
-  fetchImages,
+  fetchImagePage,
   getImageDisplayName,
   isOpaqueImageReference,
   type ImageRecord,
@@ -26,32 +29,8 @@ import {
 import { formatInteger } from "@/lib/format";
 import { canWriteModule } from "@/lib/permissions";
 
-const NO_IMAGES: ImageRecord[] = [];
 const CARD_GRID =
   "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
-
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function compareImageIds(first: ImageRecord, second: ImageRecord) {
-  const firstNumber = Number(first.id);
-  const secondNumber = Number(second.id);
-  if (Number.isFinite(firstNumber) && Number.isFinite(secondNumber)) {
-    return firstNumber - secondNumber;
-  }
-  return String(first.id).localeCompare(String(second.id), "es", {
-    numeric: true,
-  });
-}
-
-function imageCountLabel(count: number) {
-  return count === 1 ? "1 imagen" : `${formatInteger(count)} imágenes`;
-}
 
 function shortUrl(url: string) {
   return url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
@@ -198,49 +177,28 @@ function ImageCard({
 export function ImageListPage() {
   const { user } = useSession();
   const canWrite = canWriteModule(user.role, "catalogo");
-  const imagesResource = useAsyncResource(fetchImages);
-  const [query, setQuery] = useState("");
+  const list = useServerList<ImageRecord>({
+    loader: (request) => fetchImagePage(request),
+  });
   const [deleteTarget, setDeleteTarget] = useState<{
     displayName: string;
     image: ImageRecord;
   } | null>(null);
 
-  const images = useMemo(
-    () => [...(imagesResource.data ?? NO_IMAGES)].sort(compareImageIds),
-    [imagesResource.data],
-  );
+  const images = list.items;
 
-  const imageIndexes = useMemo(
-    () =>
-      new Map(
-        images.map((image, index) => [String(image.id), index] as const),
-      ),
-    [images],
-  );
+  const imageIndexes = useMemo(() => {
+    const offset = (list.meta.page - 1) * list.meta.page_size;
+    return new Map(
+      images.map((image, index) => [String(image.id), offset + index] as const),
+    );
+  }, [images, list.meta.page, list.meta.page_size]);
 
   function displayNameFor(image: ImageRecord) {
     return getImageDisplayName(image, imageIndexes.get(String(image.id)));
   }
 
-  const filteredImages = useMemo(() => {
-    const normalizedQuery = normalizeSearch(query);
-    if (!normalizedQuery) return images;
-    return images.filter((image) => {
-      const displayName = getImageDisplayName(
-        image,
-        imageIndexes.get(String(image.id)),
-      );
-      return (
-        normalizeSearch(image.reference).includes(normalizedQuery) ||
-        normalizeSearch(displayName).includes(normalizedQuery)
-      );
-    });
-  }, [imageIndexes, images, query]);
-
-  const hasQuery = query.trim().length > 0;
-  const countLabel = hasQuery
-    ? `Mostrando ${formatInteger(filteredImages.length)} de ${imageCountLabel(images.length)}`
-    : imageCountLabel(images.length);
+  const hasQuery = Boolean(list.request.q);
 
   return (
     <div className="space-y-5">
@@ -261,32 +219,79 @@ export function ImageListPage() {
         title="Imágenes"
       />
 
-      {imagesResource.status === "loading" && <ImageCardsSkeleton />}
+      <FilterBar
+        activeCount={Number(hasQuery)}
+        chips={
+          hasQuery
+            ? [
+                {
+                  id: "q",
+                  label: `Búsqueda: ${list.request.q}`,
+                  onRemove: () => {
+                    list.setSearch("");
+                    list.commitSearch();
+                  },
+                },
+              ]
+            : []
+        }
+        id="imagenes-filtros"
+        loading={list.status === "loading"}
+        onClear={list.clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando imágenes…"
+            : list.status === "error" && images.length === 0
+              ? "No pudieron cargarse las imágenes"
+              : list.meta.total === 0
+                ? "Sin imágenes"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <TextField
+            help="La búsqueda se aplica en el servidor por nombre o referencia."
+            id="buscar-imagenes"
+            inputType="search"
+            label="Buscar por nombre o referencia"
+            onChange={list.setSearch}
+            placeholder="Buscar por nombre o referencia"
+            value={list.searchDraft}
+          />
+        }
+      />
 
-      {imagesResource.status === "error" && images.length === 0 && (
+      {list.status === "loading" && <ImageCardsSkeleton />}
+
+      {list.status === "error" && images.length === 0 && (
         <RecordsLoadError
           description={
-            imagesResource.error?.message ??
+            list.error?.message ??
             "No pudimos cargar las imágenes. Revisa tu conexión e intenta de nuevo."
           }
-          onRetry={imagesResource.reload}
+          onRetry={list.reload}
           title="No pudimos cargar las imágenes."
         />
       )}
 
-      {imagesResource.status !== "loading" &&
-        !(imagesResource.status === "error" && images.length === 0) && (
-          <section aria-label="Listado de imágenes" className="space-y-4">
-            {imagesResource.status === "refreshing" && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && images.length === 0) && (
+          <section
+            aria-busy={list.status === "refreshing" || undefined}
+            aria-label="Listado de imágenes"
+            className="space-y-4"
+          >
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
 
-            {imagesResource.status === "error" && images.length > 0 && (
+            {list.status === "error" && images.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={imagesResource.reload}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -294,101 +299,92 @@ export function ImageListPage() {
                 }
                 tone="warning"
               >
-                {imagesResource.error?.message ??
+                {list.error?.message ??
                   "No pudimos actualizar las imágenes. Mostramos los datos disponibles."}
               </NoticeBanner>
             )}
 
-            <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
-              <div>
-                <label
-                  className="mb-2 block text-[12px] font-semibold text-ink"
-                  htmlFor="buscar-imagenes"
-                >
-                  Buscar por nombre o referencia
-                </label>
-                <div className="relative">
-                  <Icon
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
-                    name="search"
-                    size={17}
-                  />
-                  <input
-                    className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-11 pr-4 text-[14px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
-                    id="buscar-imagenes"
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar por nombre o referencia"
-                    type="search"
-                    value={query}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-                <p
-                  aria-live="polite"
-                  className="text-[12px] font-semibold text-muted"
-                >
-                  {countLabel}
-                </p>
-                {hasQuery && (
-                  <button
-                    className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                    onClick={() => setQuery("")}
-                    type="button"
-                  >
-                    Limpiar búsqueda
-                  </button>
-                )}
-              </div>
-            </div>
-
             {images.length === 0 ? (
-              <EmptyState
-                action={
-                  canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/imagenes/nueva"
+              list.meta.total === 0 && !hasQuery ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/imagenes/nueva"
+                      >
+                        Registrar la primera imagen
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="Registra la primera para usarla en productos."
+                  headingLevel={2}
+                  title="Todavía no hay imágenes."
+                />
+              ) : (
+                <EmptyState
+                  action={
+                    <button
+                      className="button-base button-secondary min-h-11 px-5"
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : list.clearFilters
+                      }
+                      type="button"
                     >
-                      Registrar la primera imagen
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description="Registra la primera para usarla en productos."
-                headingLevel={2}
-                title="Todavía no hay imágenes."
-              />
-            ) : filteredImages.length === 0 ? (
-              <EmptyState
-                action={
-                  <button
-                    className="button-base button-secondary min-h-11 px-5"
-                    onClick={() => setQuery("")}
-                    type="button"
-                  >
-                    Limpiar búsqueda
-                  </button>
-                }
-                description="Prueba con otro nombre o referencia."
-                headingLevel={2}
-                title="No hay imágenes que coincidan con la búsqueda."
-              />
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar búsqueda"}
+                    </button>
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} imágenes en total, pero esta página no tiene filas.`
+                      : "Prueba con otro nombre o referencia."
+                  }
+                  headingLevel={2}
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : "Sin resultados con estos filtros."
+                  }
+                />
+              )
             ) : (
-              <ul className={CARD_GRID}>
-                {filteredImages.map((image) => (
-                  <ImageCard
-                    canWrite={canWrite}
-                    displayName={displayNameFor(image)}
-                    image={image}
-                    key={String(image.id)}
-                    onDelete={(target, displayName) =>
-                      setDeleteTarget({ displayName, image: target })
-                    }
-                  />
-                ))}
-              </ul>
+              <>
+                <ul className={CARD_GRID}>
+                  {images.map((image) => (
+                    <ImageCard
+                      canWrite={canWrite}
+                      displayName={displayNameFor(image)}
+                      image={image}
+                      key={String(image.id)}
+                      onDelete={(target, displayName) =>
+                        setDeleteTarget({ displayName, image: target })
+                      }
+                    />
+                  ))}
+                </ul>
+                <PaginationControls
+                  meta={list.meta}
+                  onFirstPage={list.goToFirstPage}
+                  onPageChange={list.setPage}
+                  onPageSizeChange={list.setPageSize}
+                />
+              </>
+            )}
+
+            {images.length === 0 && list.meta.total > 0 && (
+              <PaginationControls
+                meta={list.meta}
+                onFirstPage={list.goToFirstPage}
+                onPageChange={list.setPage}
+                onPageSizeChange={list.setPageSize}
+              />
             )}
           </section>
         )}
@@ -397,7 +393,7 @@ export function ImageListPage() {
         image={deleteTarget?.image ?? null}
         imageName={deleteTarget?.displayName ?? null}
         onClose={() => setDeleteTarget(null)}
-        onDeleted={imagesResource.reload}
+        onDeleted={list.reload}
       />
     </div>
   );

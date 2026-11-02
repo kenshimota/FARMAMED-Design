@@ -1,26 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
-import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import {
-  fetchCustomers,
+  fetchCustomer,
+  fetchCustomerPage,
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 import {
   INVOICE_COPY,
   invoiceLoadErrorMessage,
 } from "@/components/erp/records/invoices-errors";
 import {
   InvoiceStatusBadge,
-  invoiceCountLabel,
   invoiceDateLabel,
   invoiceMoney,
   invoiceNumberLabel,
@@ -41,10 +44,11 @@ import {
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
 import {
-  fetchInvoices,
+  fetchInvoicePage,
   type Invoice,
 } from "@/lib/finance/invoices-api";
 import { canReadModule } from "@/lib/permissions";
+import { formatInteger } from "@/lib/format";
 
 export type InvoiceListFilters = {
   orderId: string;
@@ -53,36 +57,8 @@ export type InvoiceListFilters = {
   paymentStatus: string;
 };
 
-const EMPTY_FILTERS: InvoiceListFilters = {
-  orderId: "",
-  customerId: "",
-  number: "",
-  paymentStatus: "",
-};
-
-const NO_INVOICES: Invoice[] = [];
-const NO_CUSTOMERS: CustomerRecord[] = [];
-
-function filtersKey(filters: InvoiceListFilters) {
-  return [
-    filters.orderId.trim(),
-    filters.customerId,
-    filters.number.trim(),
-    filters.paymentStatus,
-  ].join("|");
-}
-
 function normalizeDigits(value: string) {
   return value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-}
-
-function hasActiveFilters(filters: InvoiceListFilters) {
-  return Boolean(
-    filters.orderId.trim() ||
-      filters.customerId ||
-      filters.number.trim() ||
-      filters.paymentStatus,
-  );
 }
 
 export function InvoiceListPage({
@@ -104,92 +80,131 @@ function InvoiceListContent({
 }: {
   initialFilters: InvoiceListFilters;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const customersResource = useAsyncResource(fetchCustomers);
-  const customers = customersResource.data ?? NO_CUSTOMERS;
+  const list = useServerList<Invoice>({
+    loader: (request) => fetchInvoicePage(request),
+    filterKeys: ["order_id", "customer_id", "number", "payment_status"],
+    defaultSort: "issued_at",
+    defaultOrder: "desc",
+    initial: {
+      filters: {
+        order_id: initialFilters.orderId,
+        customer_id: initialFilters.customerId,
+        number: initialFilters.number,
+        payment_status: initialFilters.paymentStatus,
+      },
+    },
+  });
+  const [orderDraft, setOrderDraft] = useState(initialFilters.orderId);
+  const [numberDraft, setNumberDraft] = useState(initialFilters.number);
+  const [customerDraft, setCustomerDraft] = useState("");
+  const timers = useRef<Record<string, number>>({});
 
-  const [filters, setFilters] = useState<InvoiceListFilters>(initialFilters);
-  const [draft, setDraft] = useState<InvoiceListFilters>(initialFilters);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const orderId = list.filters.order_id ?? "";
+  const customerId = list.filters.customer_id ?? "";
+  const number = list.filters.number ?? "";
+  const paymentStatus = list.filters.payment_status ?? "";
+  const invoices = list.items;
 
-  const initialFiltersKey = filtersKey(initialFilters);
-  const [appliedInitialFiltersKey, setAppliedInitialFiltersKey] =
-    useState(initialFiltersKey);
-  if (initialFiltersKey !== appliedInitialFiltersKey) {
-    setAppliedInitialFiltersKey(initialFiltersKey);
-    setFilters(initialFilters);
-    setDraft(initialFilters);
+  const [appliedOrderId, setAppliedOrderId] = useState(orderId);
+  if (orderId !== appliedOrderId) {
+    setAppliedOrderId(orderId);
+    setOrderDraft(orderId);
   }
 
-  const loader = useCallback(
-    () =>
-      fetchInvoices({
-        orderId: filters.orderId.trim() || undefined,
-        customerId: filters.customerId || undefined,
-        number: filters.number.trim() || undefined,
-        paymentStatus: filters.paymentStatus || undefined,
-      }),
-    [filters.customerId, filters.number, filters.orderId, filters.paymentStatus],
-  );
-  const resource = useAsyncResource(loader);
-  const reloadInvoices = resource.reload;
-  const invoices = resource.data ?? NO_INVOICES;
+  const [appliedNumber, setAppliedNumber] = useState(number);
+  if (number !== appliedNumber) {
+    setAppliedNumber(number);
+    setNumberDraft(number);
+  }
 
-  const activeFilterKey = filtersKey(filters);
-  const appliedFilterKey = useRef(activeFilterKey);
+  const customerIds = useMemo(
+    () => (customerId ? [customerId] : []),
+    [customerId],
+  );
+  const customersById = useRecordsById<CustomerRecord>({
+    ids: customerIds,
+    load: fetchCustomer,
+    getId: (customer) => customer.id,
+  }).records;
+  const customerLabel = customerId
+    ? customersById[customerId]
+      ? customersById[customerId].fullName
+      : `Cliente #${customerId}`
+    : "";
+  const [appliedCustomerLabel, setAppliedCustomerLabel] =
+    useState(customerLabel);
+  if (customerLabel !== appliedCustomerLabel) {
+    setAppliedCustomerLabel(customerLabel);
+    setCustomerDraft(customerLabel);
+  }
 
   useEffect(() => {
-    if (appliedFilterKey.current === activeFilterKey) return;
-    appliedFilterKey.current = activeFilterKey;
-    reloadInvoices();
-  }, [activeFilterKey, reloadInvoices]);
+    return () => {
+      for (const timer of Object.values(timers.current)) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, []);
 
-  const filtersActive = hasActiveFilters(filters);
-  const countLabel = resource.data
-    ? invoiceCountLabel(invoices.length)
-    : resource.status === "error"
-      ? "No se pudieron cargar las facturas"
-      : "Cargando facturas…";
-
-  const customerOptions = useMemo(
-    () =>
-      customers.map((customer) => ({
-        value: String(customer.id),
-        label: customer.email
-          ? `${customer.fullName} — ${customer.email}`
-          : customer.fullName,
-      })),
-    [customers],
+  const filtersActive = Boolean(
+    orderId || customerId || number || paymentStatus,
   );
 
-  function commitFilters(next: InvoiceListFilters) {
-    const normalized: InvoiceListFilters = {
-      orderId: next.orderId.trim(),
-      customerId: next.customerId,
-      number: next.number.trim(),
-      paymentStatus: next.paymentStatus,
-    };
-    setFilters(normalized);
-    setDraft(normalized);
-    const params = new URLSearchParams();
-    if (normalized.orderId) params.set("order_id", normalized.orderId);
-    if (normalized.customerId) params.set("customer_id", normalized.customerId);
-    if (normalized.number) params.set("number", normalized.number);
-    if (normalized.paymentStatus) {
-      params.set("payment_status", normalized.paymentStatus);
-    }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  const chips: FilterChip[] = [];
+  if (orderId) {
+    chips.push({
+      id: "order_id",
+      label: `Pedido: #${orderId}`,
+      onRemove: () => list.setFilter("order_id", ""),
+    });
+  }
+  if (customerId) {
+    chips.push({
+      id: "customer_id",
+      label: `Cliente: ${customerLabel || `#${customerId}`}`,
+      onRemove: () => list.setFilter("customer_id", ""),
+    });
+  }
+  if (number) {
+    chips.push({
+      id: "number",
+      label: `Número: #${number}`,
+      onRemove: () => {
+        setNumberDraft("");
+        list.setFilter("number", "");
+      },
+    });
+  }
+  if (paymentStatus) {
+    chips.push({
+      id: "payment_status",
+      label: `Estado de pago: ${
+        invoiceStatusOptions().find((option) => option.value === paymentStatus)
+          ?.label ?? paymentStatus
+      }`,
+      onRemove: () => list.setFilter("payment_status", ""),
+    });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    commitFilters(draft);
+  function scheduleFilter(key: string, value: string) {
+    if (timers.current[key] !== undefined) {
+      window.clearTimeout(timers.current[key]);
+    }
+    timers.current[key] = window.setTimeout(() => {
+      delete timers.current[key];
+      list.setFilter(key, value.trim());
+    }, 300);
   }
 
   function clearFilters() {
-    commitFilters(EMPTY_FILTERS);
+    for (const timer of Object.values(timers.current)) {
+      window.clearTimeout(timer);
+    }
+    timers.current = {};
+    setOrderDraft("");
+    setNumberDraft("");
+    setCustomerDraft("");
+    list.clearFilters();
   }
 
   const columns: RecordsTableColumn<Invoice>[] = [
@@ -393,154 +408,126 @@ function InvoiceListContent({
         title="Facturas"
       />
 
-      <section
-        aria-label="Filtros de facturas"
-        className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-      >
-        <div className="flex items-center justify-between gap-3 lg:hidden">
-          <h2 className="text-[13px] font-semibold text-ink">Filtros</h2>
-          <button
-            aria-controls="filtros-facturas-campos"
-            aria-expanded={filtersOpen}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-ink/15 bg-surface px-4 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand"
-            onClick={() => setFiltersOpen((current) => !current)}
-            type="button"
-          >
-            {filtersOpen ? "Ocultar filtros" : "Mostrar filtros"}
-            <Icon
-              className={`transition-transform motion-reduce:transition-none ${filtersOpen ? "rotate-180" : ""}`}
-              name="chevron-down"
-              size={15}
-            />
-          </button>
-        </div>
-
-        <form
-          className={`${filtersOpen ? "grid" : "hidden"} mt-4 gap-4 sm:grid-cols-2 lg:mt-0 lg:grid lg:grid-cols-4`}
-          id="filtros-facturas-campos"
-          onSubmit={handleSubmit}
-        >
-          <TextField
-            help="Identificador del pedido facturado."
-            id="filtro-factura-pedido"
-            inputMode="numeric"
-            label="Pedido"
-            maxLength={12}
-            onChange={(value) =>
-              setDraft((current) => ({
-                ...current,
-                orderId: normalizeDigits(value),
-              }))
-            }
-            placeholder="Ej. 12"
-            value={draft.orderId}
-          />
-          <SelectField
-            emptyLabel="No hay clientes registrados."
-            id="filtro-factura-cliente"
-            label="Cliente"
-            loading={customersResource.status === "loading"}
-            loadingLabel="Cargando clientes…"
-            loadError={
-              customersResource.status === "error"
-                ? customersResource.error?.message ??
-                  "No pudimos cargar los clientes."
-                : null
-            }
-            onChange={(value) =>
-              setDraft((current) => ({ ...current, customerId: value }))
-            }
-            onRetry={customersResource.reload}
-            options={customerOptions}
-            placeholder="Todos los clientes"
-            value={draft.customerId}
-          />
-          <TextField
-            help="Número exacto de la factura."
-            id="filtro-factura-numero"
-            inputMode="numeric"
-            label="Número"
-            maxLength={12}
-            onChange={(value) =>
-              setDraft((current) => ({
-                ...current,
-                number: normalizeDigits(value),
-              }))
-            }
-            placeholder="Ej. 7"
-            value={draft.number}
-          />
-          <SelectField
-            id="filtro-factura-estado"
-            label="Estado de pago"
-            onChange={(value) =>
-              setDraft((current) => ({ ...current, paymentStatus: value }))
-            }
-            options={invoiceStatusOptions()}
-            placeholder="Todos los estados"
-            value={draft.paymentStatus}
-          />
-
-          <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-4">
-            <button
-              className="button-base button-primary min-h-11 px-5 text-[13px]"
-              type="submit"
-            >
-              Aplicar filtros
-              <Icon name="search" size={16} />
-            </button>
-            {filtersActive && (
-              <button
-                className="button-base button-secondary min-h-11 px-5 text-[13px]"
-                onClick={clearFilters}
-                type="button"
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
-        </form>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {countLabel}
-          </p>
-          <p className="text-[12px] text-muted">
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        extra={
+          <p className="mt-3 text-[12px] leading-5 text-muted">
             Las facturas no se editan ni se eliminan desde esta pantalla.
           </p>
-        </div>
-      </section>
+        }
+        id="facturas-filtros"
+        loading={list.status === "loading"}
+        onClear={clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando facturas…"
+            : list.status === "error" && invoices.length === 0
+              ? "No se pudieron cargar las facturas"
+              : list.meta.total === 0
+                ? "Sin facturas"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="Busca el cliente por nombre o correo. El filtro se aplica en el servidor."
+            id="filtro-factura-cliente"
+            label="Cliente"
+            loadOptions={async (query) => {
+              const page = await fetchCustomerPage({ q: query, pageSize: 10 });
+              return page.data.map((customer) => ({
+                value: String(customer.id),
+                label: customer.fullName,
+                description: customer.email || undefined,
+              }));
+            }}
+            onSelect={(option) => {
+              setCustomerDraft(option.label);
+              list.setFilter("customer_id", option.value);
+            }}
+            onValueChange={(value) => {
+              setCustomerDraft(value);
+              if (value !== customerLabel) {
+                list.setFilter("customer_id", "");
+              }
+            }}
+            placeholder="Buscar cliente"
+            value={customerDraft}
+          />
+        }
+      >
+        <TextField
+          help="Identificador del pedido facturado. Se aplica al escribir."
+          id="filtro-factura-pedido"
+          inputMode="numeric"
+          inputType="search"
+          label="Pedido"
+          maxLength={12}
+          onChange={(value) => {
+            const digits = normalizeDigits(value);
+            setOrderDraft(digits);
+            scheduleFilter("order_id", digits);
+          }}
+          placeholder="Ej. 12"
+          value={orderDraft}
+        />
+        <TextField
+          help="Número exacto de la factura. Se aplica al escribir."
+          id="filtro-factura-numero"
+          inputMode="numeric"
+          inputType="search"
+          label="Número"
+          maxLength={12}
+          onChange={(value) => {
+            const digits = normalizeDigits(value);
+            setNumberDraft(digits);
+            scheduleFilter("number", digits);
+          }}
+          placeholder="Ej. 7"
+          value={numberDraft}
+        />
+        <SelectField
+          id="filtro-factura-estado"
+          label="Estado de pago"
+          onChange={(value) => list.setFilter("payment_status", value)}
+          options={invoiceStatusOptions()}
+          placeholder="Todos los estados"
+          value={paymentStatus}
+        />
+      </FilterBar>
 
-      {resource.status === "loading" && (
+      {list.status === "loading" && (
         <RecordsTableSkeleton columns={10} label="Cargando facturas…" rows={6} />
       )}
 
-      {resource.status === "error" && invoices.length === 0 && (
+      {list.status === "error" && invoices.length === 0 && (
         <RecordsLoadError
           backHref="/app"
           backLabel="Volver al inicio"
           description={invoiceLoadErrorMessage(
-            resource.error,
+            list.error,
             "No pudimos cargar las facturas.",
           )}
-          onRetry={reloadInvoices}
+          onRetry={list.reload}
           title="No pudimos cargar las facturas"
         />
       )}
 
-      {resource.status !== "loading" &&
-        !(resource.status === "error" && invoices.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && invoices.length === 0) && (
           <section aria-label="Listado de facturas" className="space-y-4">
-            {resource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
 
-            {resource.status === "error" && invoices.length > 0 && (
+            {list.status === "error" && invoices.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={reloadInvoices}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -549,24 +536,16 @@ function InvoiceListContent({
                 tone="warning"
               >
                 {invoiceLoadErrorMessage(
-                  resource.error,
+                  list.error,
                   "No pudimos actualizar las facturas. Mostramos los datos disponibles.",
                 )}
               </NoticeBanner>
             )}
 
             {invoices.length === 0 ? (
-              <EmptyState
-                action={
-                  filtersActive ? (
-                    <button
-                      className="button-base button-secondary min-h-11 px-5"
-                      onClick={clearFilters}
-                      type="button"
-                    >
-                      Limpiar filtros
-                    </button>
-                  ) : (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
                     <Link
                       className="button-base button-secondary min-h-11 px-5"
                       href="/app/pedidos"
@@ -574,20 +553,45 @@ function InvoiceListContent({
                       Ver pedidos
                       <Icon name="arrow-right" size={17} />
                     </Link>
-                  )
-                }
-                description={
-                  filtersActive
-                    ? INVOICE_COPY.emptyFilteredHelp
-                    : "Las facturas se crean al facturar un pedido. Revisa los pedidos disponibles para facturar."
-                }
-                title={
-                  filtersActive ? INVOICE_COPY.emptyFiltered : INVOICE_COPY.empty
-                }
-              />
+                  }
+                  description="Las facturas se crean al facturar un pedido. Revisa los pedidos disponibles para facturar."
+                  title={INVOICE_COPY.empty}
+                />
+              ) : (
+                <EmptyState
+                  action={
+                    <button
+                      className="button-base button-secondary min-h-11 px-5"
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : clearFilters
+                      }
+                      type="button"
+                    >
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
+                    </button>
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} facturas en total, pero esta página no tiene filas.`
+                      : INVOICE_COPY.emptyFilteredHelp
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : INVOICE_COPY.emptyFiltered
+                  }
+                />
+              )
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
+                  busy={list.status === "refreshing"}
                   caption="Facturas con número, pedido, cliente, emisión, vencimiento, total, pagado, saldo y estado de pago"
                   columns={columns}
                   getRowKey={(invoice) => String(invoice.id)}
@@ -598,6 +602,13 @@ function InvoiceListContent({
                 />
               </div>
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
 

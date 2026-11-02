@@ -18,6 +18,7 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `npm run lint`: análisis estático de todo el proyecto.
 - `npm run build`: compilación de producción; debe pasar antes de entregar.
 - `npm run start`: sirve la compilación de producción.
+- `npm test`: pruebas del helper de paginación con `node:test`.
 
 ### Estructura
 
@@ -37,6 +38,11 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `components/erp/login-scene.tsx`: límite cliente que decide entre la escena 3D y su alternativa estática según tamaño y movimiento.
 - `lib/`: cliente del API, sesión, matriz de permisos y definición de rutas.
 - `lib/cart.ts`: carrito local del portal del cliente, aislado por cliente autenticado.
+- `lib/pagination.ts`: contrato compartido de paginación, query de servidor y lectura del sobre `{ data, meta }`.
+- `components/erp/ui/use-server-list.ts`: hook único de página, búsqueda con debounce, filtros, orden y URL.
+- `components/erp/ui/pagination-controls.tsx`: navegación y tamaño de página accesibles.
+- `components/erp/ui/filter-bar.tsx`: barra responsive de filtros y chips activos.
+- `components/erp/ui/autocomplete-field.tsx`: autocompletado con debounce y navegación por teclado.
 - `lib/store.ts`: cliente de productos, variantes, moneda y disponibilidad de la tienda.
 - `components/pharma-experience.tsx`: límite cliente y carga diferida de la escena.
 - `components/pharma-scene.tsx`: geometría, texturas, animación y limpieza de Three.js.

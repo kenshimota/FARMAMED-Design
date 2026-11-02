@@ -4,6 +4,13 @@ import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type CostCurrency = {
   id: RecordId;
@@ -158,6 +165,30 @@ function appendFilter(query: URLSearchParams, key: string, value: RecordId | und
   if (value === undefined || value === null) return;
   const normalized = String(value).trim();
   if (normalized) query.set(key, normalized);
+}
+
+const COST_FILTERS = [
+  "product_id",
+  "item_state_id",
+  "currency_id",
+  "from",
+  "to",
+] as const;
+
+export async function fetchCostPage(
+  query: ListQuery = {},
+): Promise<Paginated<CostRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/costs${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, COST_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseCost, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchCosts(filters: CostFilters = {}) {
