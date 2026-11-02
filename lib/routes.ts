@@ -425,6 +425,72 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/asignaciones",
   },
   {
+    path: "/app/pedidos",
+    title: "Pedidos",
+    label: "Pedidos",
+    group: "Operación",
+    module: "pedidos",
+    icon: "clipboard",
+    description:
+      "Listado global de pedidos con filtros por estado, cliente y número, y acciones según su estado.",
+    navigation: true,
+  },
+  {
+    path: "/app/pedidos/nuevo",
+    title: "Nuevo pedido",
+    label: "Nuevo pedido",
+    group: "Operación",
+    module: "pedidos",
+    icon: "clipboard",
+    description:
+      "Venta asistida para armar un pedido de un cliente asignado y generarlo directamente.",
+    parent: "/app/pedidos",
+  },
+  {
+    path: "/app/pedidos/[id]",
+    title: "Detalle del pedido",
+    label: "Detalle del pedido",
+    group: "Operación",
+    module: "pedidos",
+    icon: "clipboard",
+    description:
+      "Consulta el cliente, las líneas, el término de pago, el historial y las acciones de un pedido.",
+    parent: "/app/pedidos",
+  },
+  {
+    path: "/app/pedidos/estados",
+    title: "Estados de pedido",
+    label: "Estados de pedido",
+    group: "Operación",
+    module: "pedidos_estados",
+    icon: "clipboard",
+    description:
+      "Configura el orden y la cadena de estados que seguirán los pedidos.",
+    navigation: true,
+  },
+  {
+    path: "/app/pedidos/estados/nuevo",
+    title: "Nuevo estado de pedido",
+    label: "Nuevo estado",
+    group: "Operación",
+    module: "pedidos_estados",
+    icon: "clipboard",
+    description:
+      "Registra un estado adicional y define su lugar en la cadena de pedidos.",
+    parent: "/app/pedidos/estados",
+  },
+  {
+    path: "/app/pedidos/estados/[id]/editar",
+    title: "Editar estado de pedido",
+    label: "Editar estado",
+    group: "Operación",
+    module: "pedidos_estados",
+    icon: "clipboard",
+    description:
+      "Actualiza el nombre, la descripción, el orden y el siguiente estado.",
+    parent: "/app/pedidos/estados",
+  },
+  {
     path: "/app/existencias",
     title: "Existencias",
     label: "Existencias",
@@ -836,7 +902,6 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
 
 export const FUTURE_MODULES = [
   { label: "Ventas", group: "Operación", icon: "cart" },
-  { label: "Pedidos", group: "Operación", icon: "clipboard" },
   { label: "Entregas", group: "Operación", icon: "truck" },
   { label: "Reportes", group: "Finanzas", icon: "chart" },
 ] as const;
