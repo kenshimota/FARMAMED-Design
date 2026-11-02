@@ -4,8 +4,6 @@ import { useId, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { LoadingRegion, SkeletonTable } from "@/components/erp/ui/skeleton";
-import { NoticeBanner } from "@/components/erp/ui/banner";
-import { LARGE_LIST_NOTICE, LARGE_LIST_THRESHOLD } from "@/lib/feedback";
 import { formatInteger } from "@/lib/format";
 
 export type DataTableColumn<T> = {
@@ -70,9 +68,6 @@ export function DataTable<T>({
     <div className="space-y-4">
       {refreshing && (
         <div aria-hidden="true" className="reload-bar" />
-      )}
-      {rows.length > LARGE_LIST_THRESHOLD && (
-        <NoticeBanner tone="warning">{LARGE_LIST_NOTICE}</NoticeBanner>
       )}
       {search && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

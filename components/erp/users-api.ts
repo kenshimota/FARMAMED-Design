@@ -9,6 +9,13 @@ import {
   type RecordId,
 } from "@/components/erp/records/records-api";
 import { getStoredToken } from "@/lib/session";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type UserRecord = {
   id: RecordId;
@@ -82,9 +89,27 @@ function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
 }
 
+const USER_FILTERS = ["role", "is_active", "customer_id"] as const;
+
 export async function fetchUsers() {
   const payload = await apiFetch<unknown>("/users", authOptions());
   return parseUserList(payload);
+}
+
+export async function fetchUserPage(
+  query: ListQuery = {},
+): Promise<Paginated<UserRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/users${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, USER_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseUser, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchUser(id: RecordId) {

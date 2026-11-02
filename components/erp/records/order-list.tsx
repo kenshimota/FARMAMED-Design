@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -10,16 +9,19 @@ import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { ORDER_COPY } from "@/components/erp/records/orders-errors";
 import {
-  fetchOrders,
+  fetchOrderPage,
   fetchOrderStatuses,
   type OrderRecord,
 } from "@/components/erp/records/orders-api";
 import {
   OrderStatusBadge,
-  orderCountLabel,
   orderMoney,
   orderNumberLabel,
   orderStatusOptions,
@@ -39,9 +41,11 @@ import {
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
 import {
-  fetchCustomers,
+  fetchCustomer,
+  fetchCustomerPage,
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import { formatDateTime, formatInteger } from "@/lib/format";
 import type { UiError } from "@/lib/api-errors";
@@ -51,23 +55,6 @@ export type OrderListFilters = {
   customerId: string;
   number: string;
 };
-
-const EMPTY_FILTERS: OrderListFilters = {
-  status: "",
-  customerId: "",
-  number: "",
-};
-
-const NO_ORDERS: OrderRecord[] = [];
-const NO_CUSTOMERS: CustomerRecord[] = [];
-
-function filtersKey(filters: OrderListFilters) {
-  return [filters.status, filters.customerId, filters.number].join("|");
-}
-
-function hasActiveFilters(filters: OrderListFilters) {
-  return Boolean(filters.status || filters.customerId || filters.number.trim());
-}
 
 function listErrorMessage(error: UiError | null, fallback: string) {
   if (!error) return fallback;
@@ -97,56 +84,60 @@ function OrderListContent({
   initialFilters: OrderListFilters;
 }) {
   const { user } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
   const currencyStatus = useCurrencyStatusContext();
   const canWrite = canWriteModule(user.role, "pedidos");
 
-  const [filters, setFilters] = useState<OrderListFilters>(initialFilters);
+  const list = useServerList<OrderRecord>({
+    loader: (request) => fetchOrderPage(request),
+    filterKeys: ["status", "customer_id", "number"],
+    defaultSort: "createdAt",
+    defaultOrder: "desc",
+    initial: {
+      filters: {
+        status: initialFilters.status,
+        customer_id: initialFilters.customerId,
+        number: initialFilters.number,
+      },
+    },
+  });
   const [numberDraft, setNumberDraft] = useState(initialFilters.number);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const filtersRef = useRef(filters);
+  const [customerDraft, setCustomerDraft] = useState("");
   const numberTimer = useRef<number | null>(null);
 
-  const initialFiltersKey = filtersKey(initialFilters);
-  const [appliedInitialFiltersKey, setAppliedInitialFiltersKey] =
-    useState(initialFiltersKey);
-  if (initialFiltersKey !== appliedInitialFiltersKey) {
-    setAppliedInitialFiltersKey(initialFiltersKey);
-    setFilters(initialFilters);
-    setNumberDraft(initialFilters.number);
-  }
+  const status = list.filters.status ?? "";
+  const customerId = list.filters.customer_id ?? "";
+  const number = list.filters.number ?? "";
+  const orders = list.items;
 
   const statusesResource = useAsyncResource(fetchOrderStatuses);
   const statuses = statusesResource.data ?? [];
-  const customersResource = useAsyncResource(fetchCustomers);
-  const customers = customersResource.data ?? NO_CUSTOMERS;
 
-  const loader = useCallback(
-    () =>
-      fetchOrders({
-        status: filters.status || undefined,
-        customer_id: filters.customerId || undefined,
-        number: filters.number.trim() || undefined,
-      }),
-    [filters.customerId, filters.number, filters.status],
+  const [appliedNumber, setAppliedNumber] = useState(number);
+  if (number !== appliedNumber) {
+    setAppliedNumber(number);
+    setNumberDraft(number);
+  }
+
+  const customerIds = useMemo(
+    () => (customerId ? [customerId] : []),
+    [customerId],
   );
-  const ordersResource = useAsyncResource(loader);
-  const reloadOrders = ordersResource.reload;
-  const orders = ordersResource.data ?? NO_ORDERS;
-
-  const activeFilterKey = filtersKey(filters);
-  const appliedFilterKey = useRef(activeFilterKey);
-
-  useEffect(() => {
-    filtersRef.current = filters;
-  }, [filters]);
-
-  useEffect(() => {
-    if (appliedFilterKey.current === activeFilterKey) return;
-    appliedFilterKey.current = activeFilterKey;
-    reloadOrders();
-  }, [activeFilterKey, reloadOrders]);
+  const customersById = useRecordsById<CustomerRecord>({
+    ids: customerIds,
+    load: fetchCustomer,
+    getId: (customer) => customer.id,
+  }).records;
+  const customerLabel = customerId
+    ? customersById[customerId]
+      ? customersById[customerId].fullName
+      : `Cliente #${customerId}`
+    : "";
+  const [appliedCustomerLabel, setAppliedCustomerLabel] =
+    useState(customerLabel);
+  if (customerLabel !== appliedCustomerLabel) {
+    setAppliedCustomerLabel(customerLabel);
+    setCustomerDraft(customerLabel);
+  }
 
   useEffect(() => {
     return () => {
@@ -154,36 +145,34 @@ function OrderListContent({
     };
   }, []);
 
-  const filtersActive = hasActiveFilters(filters);
-  const countLabel = ordersResource.data
-    ? orderCountLabel(orders.length)
-    : ordersResource.status === "error"
-      ? "No se pudieron cargar los pedidos"
-      : "Cargando pedidos…";
-
-  const customerOptions = useMemo(
-    () =>
-      customers.map((customer) => ({
-        value: String(customer.id),
-        label: customer.email
-          ? `${customer.fullName} — ${customer.email}`
-          : customer.fullName,
-      })),
-    [customers],
-  );
-
-  function commitFilters(next: OrderListFilters) {
-    setFilters(next);
-    const params = new URLSearchParams();
-    if (next.status) params.set("status", next.status);
-    if (next.customerId) params.set("customer_id", next.customerId);
-    if (next.number.trim()) params.set("number", next.number.trim());
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  const filtersActive = Boolean(status || customerId || number);
+  const chips: FilterChip[] = [];
+  if (status) {
+    chips.push({
+      id: "status",
+      label: `Estado: ${
+        orderStatusOptions(statuses).find((option) => option.value === status)
+          ?.label ?? status
+      }`,
+      onRemove: () => list.setFilter("status", ""),
+    });
   }
-
-  function updateFilter(key: keyof OrderListFilters, value: string) {
-    commitFilters({ ...filters, [key]: value });
+  if (customerId) {
+    chips.push({
+      id: "customer_id",
+      label: `Cliente: ${customerLabel || `#${customerId}`}`,
+      onRemove: () => list.setFilter("customer_id", ""),
+    });
+  }
+  if (number) {
+    chips.push({
+      id: "number",
+      label: `Número: ${number}`,
+      onRemove: () => {
+        setNumberDraft("");
+        list.setFilter("number", "");
+      },
+    });
   }
 
   function handleNumberChange(value: string) {
@@ -191,14 +180,14 @@ function OrderListContent({
     setNumberDraft(digits);
     if (numberTimer.current !== null) window.clearTimeout(numberTimer.current);
     numberTimer.current = window.setTimeout(() => {
-      commitFilters({ ...filtersRef.current, number: digits });
-    }, 450);
+      list.setFilter("number", digits);
+    }, 300);
   }
 
   function clearFilters() {
     if (numberTimer.current !== null) window.clearTimeout(numberTimer.current);
     setNumberDraft("");
-    commitFilters(EMPTY_FILTERS);
+    list.clearFilters();
   }
 
   function currencyFor(order: OrderRecord) {
@@ -380,119 +369,105 @@ function OrderListContent({
         </NoticeBanner>
       )}
 
-      <section
-        aria-label="Filtros de pedidos"
-        className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-      >
-        <div className="flex items-center justify-between gap-3 lg:hidden">
-          <h2 className="text-[13px] font-semibold text-ink">Filtros</h2>
-          <button
-            aria-controls="filtros-pedidos-campos"
-            aria-expanded={filtersOpen}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-ink/15 bg-surface px-4 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand"
-            onClick={() => setFiltersOpen((current) => !current)}
-            type="button"
-          >
-            {filtersOpen ? "Ocultar filtros" : "Mostrar filtros"}
-            <Icon
-              className={`transition-transform motion-reduce:transition-none ${filtersOpen ? "rotate-180" : ""}`}
-              name="chevron-down"
-              size={15}
-            />
-          </button>
-        </div>
-
-        <div
-          className={`${filtersOpen ? "grid" : "hidden"} mt-4 gap-4 sm:grid-cols-2 lg:mt-0 lg:grid lg:grid-cols-3`}
-          id="filtros-pedidos-campos"
-        >
-          <SelectField
-            emptyLabel="No hay estados configurados."
-            id="filtro-pedido-estado"
-            label="Estado"
-            loading={statusesResource.status === "loading"}
-            loadingLabel="Cargando estados…"
-            onChange={(value) => updateFilter("status", value)}
-            options={orderStatusOptions(statuses)}
-            placeholder="Todos los estados"
-            value={filters.status}
-          />
-          <SelectField
-            emptyLabel="No hay clientes registrados."
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        id="pedidos-filtros"
+        loading={list.status === "loading"}
+        onClear={clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando pedidos…"
+            : list.status === "error" && orders.length === 0
+              ? "No se pudieron cargar los pedidos"
+              : list.meta.total === 0
+                ? "Sin pedidos"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="Busca el cliente por nombre o correo. El filtro se aplica en el servidor."
             id="filtro-pedido-cliente"
             label="Cliente"
-            loading={customersResource.status === "loading"}
-            loadingLabel="Cargando clientes…"
-            loadError={
-              customersResource.status === "error"
-                ? customersResource.error?.message ??
-                  "No pudimos cargar los clientes."
-                : null
-            }
-            onChange={(value) => updateFilter("customerId", value)}
-            onRetry={customersResource.reload}
-            options={customerOptions}
-            placeholder="Todos los clientes"
-            value={filters.customerId}
+            loadOptions={async (query) => {
+              const page = await fetchCustomerPage({ q: query, pageSize: 10 });
+              return page.data.map((customer) => ({
+                value: String(customer.id),
+                label: customer.fullName,
+                description: customer.email || undefined,
+              }));
+            }}
+            onSelect={(option) => {
+              setCustomerDraft(option.label);
+              list.setFilter("customer_id", option.value);
+            }}
+            onValueChange={(value) => {
+              setCustomerDraft(value);
+              if (value !== customerLabel) {
+                list.setFilter("customer_id", "");
+              }
+            }}
+            placeholder="Buscar cliente"
+            value={customerDraft}
           />
-          <TextField
-            help="Número exacto del pedido. Se aplica automáticamente al escribir."
-            id="filtro-pedido-numero"
-            inputMode="numeric"
-            label="Número"
-            maxLength={12}
-            onChange={handleNumberChange}
-            placeholder="Ej. 12"
-            value={numberDraft}
-          />
-        </div>
+        }
+      >
+        <SelectField
+          emptyLabel="No hay estados configurados."
+          id="filtro-pedido-estado"
+          label="Estado"
+          loading={statusesResource.status === "loading"}
+          loadingLabel="Cargando estados…"
+          onChange={(value) => list.setFilter("status", value)}
+          options={orderStatusOptions(statuses)}
+          placeholder="Todos los estados"
+          value={status}
+        />
+        <TextField
+          help="Número exacto del pedido. Se aplica automáticamente al escribir."
+          id="filtro-pedido-numero"
+          inputMode="numeric"
+          inputType="search"
+          label="Número"
+          maxLength={12}
+          onChange={handleNumberChange}
+          placeholder="Ej. 12"
+          value={numberDraft}
+        />
+      </FilterBar>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {countLabel}
-          </p>
-          {filtersActive && (
-            <button
-              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
-
-      {ordersResource.status === "loading" && (
+      {list.status === "loading" && (
         <RecordsTableSkeleton columns={8} label="Cargando pedidos…" rows={6} />
       )}
 
-      {ordersResource.status === "error" && orders.length === 0 && (
+      {list.status === "error" && orders.length === 0 && (
         <RecordsLoadError
           backHref="/app"
           backLabel="Volver al inicio"
           description={listErrorMessage(
-            ordersResource.error,
+            list.error,
             "No pudimos cargar los pedidos.",
           )}
-          onRetry={reloadOrders}
+          onRetry={list.reload}
           title="No pudimos cargar los pedidos"
         />
       )}
 
-      {ordersResource.status !== "loading" &&
-        !(ordersResource.status === "error" && orders.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && orders.length === 0) && (
           <section aria-label="Listado de pedidos" className="space-y-4">
-            {ordersResource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
 
-            {ordersResource.status === "error" && orders.length > 0 && (
+            {list.status === "error" && orders.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={reloadOrders}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -501,45 +476,64 @@ function OrderListContent({
                 tone="warning"
               >
                 {listErrorMessage(
-                  ordersResource.error,
+                  list.error,
                   "No pudimos actualizar los pedidos. Mostramos los datos disponibles.",
                 )}
               </NoticeBanner>
             )}
 
             {orders.length === 0 ? (
-              <EmptyState
-                action={
-                  filtersActive ? (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/pedidos/nuevo"
+                      >
+                        Nuevo pedido
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="La venta asistida permite crear el primer pedido para un cliente asignado."
+                  title={ORDER_COPY.empty}
+                />
+              ) : (
+                <EmptyState
+                  action={
                     <button
                       className="button-base button-secondary min-h-11 px-5"
-                      onClick={clearFilters}
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : clearFilters
+                      }
                       type="button"
                     >
-                      Limpiar filtros
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
                     </button>
-                  ) : canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/pedidos/nuevo"
-                    >
-                      Nuevo pedido
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description={
-                  filtersActive
-                    ? ORDER_COPY.emptyFilteredHelp
-                    : "La venta asistida permite crear el primer pedido para un cliente asignado."
-                }
-                title={
-                  filtersActive ? ORDER_COPY.emptyFiltered : ORDER_COPY.empty
-                }
-              />
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} pedidos en total, pero esta página no tiene filas.`
+                      : ORDER_COPY.emptyFilteredHelp
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : ORDER_COPY.emptyFiltered
+                  }
+                />
+              )
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
+                  busy={list.status === "refreshing"}
                   caption="Pedidos con número, fecha, cliente, estado, líneas, subtotal, total y moneda"
                   columns={columns}
                   getRowKey={(order) => String(order.id)}
@@ -550,6 +544,13 @@ function OrderListContent({
                 />
               </div>
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
 
