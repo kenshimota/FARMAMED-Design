@@ -16,7 +16,8 @@ type CustomerNavItem = {
   activeWhen?: readonly string[];
 };
 
-// CLI-03, CLI-04 y CLI-05 completan tienda, carrito y mis pedidos.
+// CLI-03, CLI-04, CLI-05 y CLI-06 completan tienda, carrito, mis pedidos y
+// billetera del cliente.
 const NAV_ITEMS: readonly CustomerNavItem[] = [
   { label: "Inicio", href: "/app", icon: "home" },
   { label: "Tienda", href: "/app/tienda", icon: "cart" },
@@ -27,6 +28,7 @@ const NAV_ITEMS: readonly CustomerNavItem[] = [
     activeWhen: ["/app/finalizar-pedido"],
   },
   { label: "Mis pedidos", href: "/app/mis-pedidos", icon: "clipboard" },
+  { label: "Mi billetera", href: "/app/billetera", icon: "coins" },
   { label: "Mi cuenta", href: "/app/cuenta", icon: "user" },
 ];
 

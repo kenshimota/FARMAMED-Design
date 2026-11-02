@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { InvoiceDetailPage } from "@/components/erp/records/invoice-detail";
 
 export const metadata: Metadata = {
-  title: "Detalle de la factura",
+  title: "Factura",
   description:
-    "Consulta las líneas, los totales, el saldo pendiente, el vencimiento y los pagos aplicados a una factura de Farmamed.",
+    "Consulta el número, las fechas, las líneas, los totales, el saldo pendiente y los pagos aplicados a una factura de Farmamed.",
 };
 
 type InvoiceDetailRouteProps = {

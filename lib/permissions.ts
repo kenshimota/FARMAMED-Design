@@ -142,7 +142,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
     "Administra usuarios, roles, catálogos, operación, pedidos, facturas, inventario, compras, monedas, impuestos, términos de pago, métodos de pago, pagos, billeteras y listas de precios.",
   customer:
-    "Consulta el catálogo en modo lectura y revisa los pedidos de su cuenta.",
+    "Consulta el catálogo en modo lectura, revisa los pedidos de su cuenta y consulta sus facturas y billetera.",
   seller:
     "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, monedas, estantes, impuestos, métodos de pago y billeteras.",
   dispatcher:

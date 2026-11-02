@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
+import { CustomerInvoiceDetail } from "@/components/erp/customer/customer-invoice-detail";
 import { useSession } from "@/components/erp/session-context";
 import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
@@ -14,6 +15,7 @@ import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import {
   InvoicePaymentDialog,
 } from "@/components/erp/records/invoice-payment-dialog";
+import { InvoiceLinesSection } from "@/components/erp/records/invoice-lines";
 import {
   INVOICE_COPY,
   invoiceLoadErrorMessage,
@@ -43,7 +45,6 @@ import {
   fetchInvoice,
   fetchInvoicePayments,
   type Invoice,
-  type InvoiceItem,
   type InvoicePaymentAllocation,
 } from "@/lib/finance/invoices-api";
 import { formatInteger, formatRate } from "@/lib/format";
@@ -51,6 +52,9 @@ import { canReadModule, canWriteModule } from "@/lib/permissions";
 
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { user } = useSession();
+  if (user.role === "customer") {
+    return <CustomerInvoiceDetail invoiceId={invoiceId} />;
+  }
   if (!canReadModule(user.role, "facturas")) {
     return (
       <AccessState description="Tu rol no tiene acceso al módulo de facturas. La consulta y la aplicación de pagos están disponibles para administradores y vendedores." />
@@ -68,153 +72,6 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
     );
   }
   return <InvoiceDetailContent invoiceId={invoiceId} />;
-}
-
-function InvoiceLinesSection({
-  invoice,
-}: {
-  invoice: Invoice;
-}) {
-  const items = invoice.items;
-
-  const columns: RecordsTableColumn<InvoiceItem>[] = [
-    {
-      key: "producto",
-      header: "Producto",
-      render: (item) => (
-        <div>
-          <span className="font-semibold text-ink">{item.productName}</span>
-          {item.productReference && (
-            <span className="mt-1 block font-mono text-[11px] text-muted">
-              Ref. {item.productReference}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "estado",
-      header: "Estado del ítem",
-      render: (item) => (
-        <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
-          {item.itemStateName}
-        </span>
-      ),
-    },
-    {
-      key: "cantidad",
-      header: "Cantidad",
-      className: "whitespace-nowrap tabular-nums",
-      render: (item) => formatInteger(item.quantity),
-    },
-    {
-      key: "precio",
-      header: "Precio unitario",
-      className: "whitespace-nowrap tabular-nums",
-      render: (item) => invoiceMoney(item.unitPrice, invoice.currency),
-    },
-    {
-      key: "subtotal",
-      header: "Subtotal",
-      className: "whitespace-nowrap font-semibold tabular-nums",
-      render: (item) => invoiceMoney(item.subtotal, invoice.currency),
-    },
-  ];
-
-  function renderCard(item: InvoiceItem) {
-    return (
-      <div>
-        <p className="text-[15px] font-semibold text-ink">{item.productName}</p>
-        {item.productReference && (
-          <p className="mt-1 font-mono text-[11px] text-muted">
-            Ref. {item.productReference}
-          </p>
-        )}
-        <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
-          <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Estado del ítem
-            </dt>
-            <dd className="mt-1 text-ink">{item.itemStateName}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Cantidad
-            </dt>
-            <dd className="mt-1 tabular-nums text-ink">
-              {formatInteger(item.quantity)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Precio unitario
-            </dt>
-            <dd className="mt-1 tabular-nums text-ink">
-              {invoiceMoney(item.unitPrice, invoice.currency)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Subtotal
-            </dt>
-            <dd className="mt-1 font-semibold tabular-nums text-ink">
-              {invoiceMoney(item.subtotal, invoice.currency)}
-            </dd>
-          </div>
-        </dl>
-      </div>
-    );
-  }
-
-  return (
-    <section
-      aria-labelledby="lineas-factura"
-      className="rounded-[28px] border border-line bg-surface p-5 shadow-[0_18px_60px_rgba(27,12,104,0.04)] sm:p-7"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <span className="eyebrow">Detalle</span>
-          <h2
-            className="mt-3 text-xl font-semibold tracking-[-0.03em] text-ink"
-            id="lineas-factura"
-          >
-            Líneas de la factura
-          </h2>
-          <p className="mt-2 text-[13px] leading-6 text-muted">
-            Son copias inmutables del pedido al momento de facturar.
-          </p>
-        </div>
-        <span className="inline-flex rounded-full border border-line bg-background px-3 py-1.5 text-[11px] font-semibold text-ink">
-          {items.length === 1 ? "1 línea" : `${formatInteger(items.length)} líneas`}
-        </span>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="mt-5">
-          <EmptyState
-            description="Esta factura no tiene líneas registradas."
-            title="Sin líneas de factura"
-          />
-        </div>
-      ) : (
-        <div className="mt-5">
-          <RecordsTable
-            caption="Líneas de la factura con producto, referencia, estado, cantidad, precio unitario y subtotal"
-            columns={columns}
-            getRowKey={(item) =>
-              String(
-                item.orderItemId ??
-                  `${item.productId}-${item.itemStateId}-${item.quantity}-${item.unitPrice}`,
-              )
-            }
-            getRowLabel={(item) => item.productName}
-            renderCard={renderCard}
-            rows={items}
-          />
-        </div>
-      )}
-    </section>
-  );
 }
 
 function InvoicePaymentHistorySection({

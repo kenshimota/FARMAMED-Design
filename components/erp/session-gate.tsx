@@ -28,8 +28,9 @@ type SessionState =
   | { status: "forbidden" }
   | { status: "error" };
 
-// CLI-03, CLI-04 y CLI-05 completan tienda, carrito y mis pedidos. Las rutas
-// ya están admitidas para que el portal del cliente no bloquee su navegación.
+// CLI-03, CLI-04, CLI-05 y CLI-06 completan tienda, carrito, mis pedidos,
+// billetera y detalle de factura. El listado /app/facturas sigue reservado al
+// personal interno.
 const CUSTOMER_ROUTES = new Set([
   "/app",
   "/app/cuenta",
@@ -37,15 +38,21 @@ const CUSTOMER_ROUTES = new Set([
   "/app/tienda",
   "/app/carrito",
   "/app/finalizar-pedido",
+  "/app/billetera",
 ]);
 
 const CUSTOMER_ROUTE_PREFIXES = ["/app/tienda", "/app/mis-pedidos"];
+
+function isCustomerInvoiceDetail(pathname: string) {
+  return /^\/app\/facturas\/[^/]+$/.test(pathname);
+}
 
 function isCustomerRoute(pathname: string) {
   const normalized =
     pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   return (
     CUSTOMER_ROUTES.has(normalized) ||
+    isCustomerInvoiceDetail(normalized) ||
     CUSTOMER_ROUTE_PREFIXES.some(
       (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
     )

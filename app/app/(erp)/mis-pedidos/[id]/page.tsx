@@ -741,13 +741,32 @@ export default function MisPedidoDetailPage({
               </div>
             )}
 
-            {invoiceLabel && (
+            {invoiceLabel ? (
               <div className="mt-4 rounded-xl border border-olive/30 bg-soft-lime px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                   Factura
                 </p>
                 <p className="mt-1 text-[14px] font-semibold text-ink">
                   {invoiceLabel}
+                </p>
+                {order.invoice?.id !== null &&
+                  order.invoice?.id !== undefined && (
+                    <Link
+                      className="mt-2 inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                      href={`/app/facturas/${order.invoice.id}`}
+                    >
+                      Ver factura
+                      <Icon name="arrow-up-right" size={14} />
+                    </Link>
+                  )}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-line bg-background px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Factura
+                </p>
+                <p className="mt-1 text-[13px] leading-6 text-muted">
+                  Todavía no tiene factura.
                 </p>
               </div>
             )}
