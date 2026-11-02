@@ -20,6 +20,7 @@ export type ModuleKey =
   | "lotes"
   | "costos"
   | "compras"
+  | "pedidos"
   | "monedas"
   | "impuestos"
   | "listas_precios"
@@ -74,6 +75,10 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
     read: ["admin", "seller", "manager_warehouse"],
     write: CATALOG_WRITE,
   },
+  pedidos: {
+    read: ["admin", "seller"],
+    write: ["admin", "seller"],
+  },
   monedas: {
     read: ["admin", "seller", "manager_warehouse", "dispatcher"],
     write: ["admin"],
@@ -110,11 +115,11 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
-    "Administra usuarios, roles, catálogos, operación, inventario, compras, monedas, impuestos, métodos de pago y listas de precios.",
+    "Administra usuarios, roles, catálogos, operación, pedidos, inventario, compras, monedas, impuestos, métodos de pago y listas de precios.",
   customer:
-    "Consulta el catálogo en modo lectura. No tiene pedidos ni checkout en esta versión.",
+    "Consulta el catálogo en modo lectura. La vista de pedidos del cliente se incorpora en otro módulo.",
   seller:
-    "Gestiona catálogo, clientes, costos, compras y listas de precios; consulta existencias, lotes, monedas, estantes, impuestos y métodos de pago.",
+    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, costos, compras y listas de precios; consulta existencias, lotes, monedas, estantes, impuestos y métodos de pago.",
   dispatcher:
     "Consulta clientes, bodegas, estantes, lotes, asignaciones, monedas, impuestos y métodos de pago.",
   manager_warehouse:
@@ -166,6 +171,7 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "lotes",
   "costos",
   "compras",
+  "pedidos",
   "monedas",
   "impuestos",
   "listas_precios",
@@ -200,6 +206,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Lotes", module: "lotes" },
   { label: "Costos", module: "costos" },
   { label: "Compras", module: "compras" },
+  { label: "Pedidos", module: "pedidos" },
   { label: "Monedas", module: "monedas" },
   { label: "Impuestos", module: "impuestos" },
   { label: "Listas de precios", module: "listas_precios" },
