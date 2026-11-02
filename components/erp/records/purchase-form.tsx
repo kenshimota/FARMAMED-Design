@@ -38,12 +38,14 @@ import {
   headerSummaryItems,
   mapBulkLineErrors,
   mapHeaderFieldErrors,
+  missingLotsError,
   purchaseErrorMessage,
   type BulkLineError,
   type PurchaseHeaderFieldKey,
 } from "@/components/erp/records/purchase-errors";
 import {
   PurchaseLinesEditor,
+  findDuplicateLotLineKeys,
   validateLineValues,
   type PurchaseLineRow,
   type PurchaseLineValues,
@@ -66,6 +68,7 @@ import {
   resolvePurchaseCurrency,
   type PurchaseDisplayCurrency,
 } from "@/components/erp/records/purchase-shared";
+import { normalizeDateInput } from "@/components/erp/records/lot-shared";
 import {
   SelectField,
   TextAreaField,
@@ -113,6 +116,7 @@ const EMPTY_VALUES: PurchaseFormValues = {
 const NO_SUPPLIERS: SupplierRecord[] = [];
 const NO_PRODUCTS: ProductRecord[] = [];
 const NO_ITEM_STATES: ItemStateRecord[] = [];
+const DUPLICATE_NOTICE_KEY = "__duplicate__";
 
 type PurchaseFormPageProps = {
   mode: "create" | "edit";
@@ -170,6 +174,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
   const [showSummary, setShowSummary] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<BulkLineError[]>([]);
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const currencyUnavailable = useSyncExternalStore(
     subscribeCurrencyNotice,
@@ -324,6 +329,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       setShowSummary(false);
       setMessage(null);
       setBulkErrors([]);
+      setRowErrors({});
     };
   }, []);
 
@@ -360,6 +366,8 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       quantity: row.quantity,
       unit_cost: row.unit_cost,
       tax_amount: row.tax_amount,
+      lot_number: row.lot_number.trim(),
+      expiration_date: normalizeDateInput(row.expiration_date),
     };
   }
 
@@ -370,22 +378,30 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       quantity: Number(line.quantity.trim()),
       unit_cost: Number(line.unit_cost.trim().replace(",", ".")),
       tax_amount: Number(line.tax_amount.trim().replace(",", ".")),
+      lot_number: line.lot_number.trim(),
+      expiration_date: normalizeDateInput(line.expiration_date),
     };
   }
 
   function applyServerPurchase(updated: PurchaseRecord) {
     setRows(rowsFromItems(updated));
     setRowsInitializedFor(String(updated.id));
+    setRowErrors({});
   }
 
   function handleAddLine(line: PurchaseLineValues) {
+    setMessage(null);
+    setBulkErrors([]);
+    setRowErrors({});
     if (!editing) {
+      const input = valuesToInput(line);
       setRows((current) => [
         ...current,
         {
           key: `local-${localKey}`,
           id: null,
-          ...valuesToInput(line),
+          ...input,
+          received_lot_id: null,
         },
       ]);
       setLocalKey((current) => current + 1);
@@ -410,6 +426,9 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
   function handleUpdateLine(key: string, line: PurchaseLineValues) {
     const currentRow = rows.find((row) => row.key === key);
     if (!currentRow) return;
+    setMessage(null);
+    setBulkErrors([]);
+    setRowErrors({});
     const taxTrimmed = line.tax_amount.trim();
     const nextRow: PurchaseLineRow = {
       ...currentRow,
@@ -420,6 +439,9 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       tax_amount: taxTrimmed
         ? Number(taxTrimmed.replace(",", "."))
         : currentRow.tax_amount,
+      lot_number: line.lot_number.trim(),
+      expiration_date: normalizeDateInput(line.expiration_date),
+      received_lot_id: currentRow.received_lot_id,
     };
 
     if (!editing) {
@@ -437,6 +459,8 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
           item_state_id: nextRow.item_state_id,
           quantity: nextRow.quantity,
           unit_cost: nextRow.unit_cost,
+          lot_number: nextRow.lot_number,
+          expiration_date: nextRow.expiration_date,
         };
         if (taxTrimmed) patch.tax_amount = nextRow.tax_amount;
         const updated = await updatePurchaseItem(
@@ -455,6 +479,9 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
   }
 
   function handleDeleteLine(row: PurchaseLineRow) {
+    setMessage(null);
+    setBulkErrors([]);
+    setRowErrors({});
     if (!editing) {
       setRows((current) => current.filter((item) => item.key !== row.key));
       return;
@@ -503,6 +530,8 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
             quantity: String(row.quantity),
             unit_cost: String(row.unit_cost),
             tax_amount: String(row.tax_amount),
+            lot_number: row.lot_number,
+            expiration_date: row.expiration_date,
           },
           { requireTax: true },
         );
@@ -511,6 +540,17 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
           return;
         }
       }
+
+      const duplicateKeys = findDuplicateLotLineKeys(rows);
+      if (duplicateKeys.length > 0) {
+        setRowErrors(
+          Object.fromEntries(
+            duplicateKeys.map((key) => [key, PURCHASE_COPY.duplicateLot]),
+          ),
+        );
+        setMessage(null);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -518,6 +558,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     setShowSummary(false);
     setMessage(null);
     setBulkErrors([]);
+    setRowErrors({});
 
     try {
       if (editing && purchaseId) {
@@ -549,12 +590,31 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
       shouldResetOnHideRef.current = true;
       router.push(`/app/compras/${created.id}`);
     } catch (caught) {
-      const mapped = mapHeaderFieldErrors(caught);
-      const bulk = mapBulkLineErrors(caught);
+      const needsLots = missingLotsError(caught);
+      const duplicateConflict =
+        caught instanceof ApiError &&
+        caught.status === 409 &&
+        caught.message.toLowerCase().includes("item already exists");
+      const mapped = needsLots ? {} : mapHeaderFieldErrors(caught);
+      const bulk = needsLots ? [] : mapBulkLineErrors(caught);
       if (caught instanceof ApiError && caught.status === 409 && editing) {
         purchaseResource.reload();
       }
-      if (Object.keys(mapped).length > 0) {
+      if (duplicateConflict) {
+        const duplicateKeys = findDuplicateLotLineKeys(rows);
+        const keys =
+          duplicateKeys.length > 0 ? duplicateKeys : [DUPLICATE_NOTICE_KEY];
+        setRowErrors(
+          Object.fromEntries(
+            keys.map((key) => [key, PURCHASE_COPY.duplicateLot]),
+          ),
+        );
+      }
+      if (duplicateConflict) {
+        setMessage(null);
+      } else if (needsLots) {
+        setMessage(PURCHASE_COPY.confirmNeedLots);
+      } else if (Object.keys(mapped).length > 0) {
         setErrors(mapped);
         setShowSummary(true);
         window.requestAnimationFrame(() => focusFirstInvalidField());
@@ -574,8 +634,8 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     ? `Compra #${purchase?.number ?? ""}`
     : "Nueva compra";
   const headerDescription = editing
-    ? "Actualiza la cabecera del borrador y administra sus líneas. Los totales se recalculan con cada cambio."
-    : "Crea un borrador de compra con proveedor, moneda y líneas. Puedes guardarlo sin líneas y completarlo después.";
+    ? "Actualiza la cabecera del borrador y administra sus líneas con lote y vencimiento. Los totales se recalculan con cada cambio."
+    : "Crea un borrador de compra con proveedor, moneda y líneas con lote y vencimiento. Puedes guardarlo sin líneas y completarlo después.";
 
   const headerActions = (
     <>
@@ -711,6 +771,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     : undefined;
 
   const summaryItems = headerSummaryItems(errors);
+  const rowNotice = Object.values(rowErrors)[0] ?? null;
 
   return (
     <div className="space-y-5">
@@ -856,9 +917,15 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
               Líneas de la compra
             </h2>
             <p className="mt-3 text-[13px] leading-6 text-muted">
-              Agrega productos con su estado de ítem, cantidad, costo unitario e
-              impuesto como monto absoluto.
+              Agrega productos con su estado de ítem, cantidad, costo unitario,
+              impuesto como monto absoluto, número de lote y fecha de
+              vencimiento. El mismo producto puede repetirse con lotes distintos.
             </p>
+            {rowNotice && (
+              <NoticeBanner className="mt-4" role="alert" tone="danger">
+                {rowNotice}
+              </NoticeBanner>
+            )}
             <div className="mt-5">
               <PurchaseLinesEditor
                 currency={appliedCurrency}
@@ -883,6 +950,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
                     : null
                 }
                 productsLoading={productsResource.status === "loading"}
+                rowErrors={rowErrors}
                 rows={rows}
               />
             </div>
@@ -935,5 +1003,8 @@ function rowsFromItems(purchase: PurchaseRecord): PurchaseLineRow[] {
     quantity: item.quantity,
     unit_cost: item.unit_cost,
     tax_amount: item.tax_amount,
+    lot_number: item.lot_number ?? "",
+    expiration_date: normalizeDateInput(item.expiration_date ?? ""),
+    received_lot_id: item.received_lot_id,
   }));
 }

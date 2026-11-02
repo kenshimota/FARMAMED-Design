@@ -47,7 +47,7 @@ import {
   fetchProducts,
 } from "@/components/erp/records/records-api";
 import { fetchItemStates } from "@/components/erp/records/item-states-api";
-import { formatDateTime, formatInteger } from "@/lib/format";
+import { formatDateOnly, formatDateTime, formatInteger } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 
 type PurchaseDialog = "confirm" | "cancel" | "delete" | null;
@@ -80,6 +80,9 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
   const currencyStatus = useCurrencyStatusContext();
   const activityVisible = useActivityVisible();
   const canWrite = canWriteModule(user.role, "compras");
+  // TODO(INV-06 #98): cambiar a "bandeja_almacen" cuando el módulo exista en
+  // lib/permissions.ts. La ruta /app/almacen/bandeja también depende de #98.
+  const canOpenInbox = canReadModule(user.role, "compras");
   const [dialog, setDialog] = useState<PurchaseDialog>(null);
 
   const loader = useCallback(() => fetchPurchase(purchaseId), [purchaseId]);
@@ -176,6 +179,29 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
     );
   }
 
+  function lotNumberLabel(item: PurchaseItem) {
+    return item.lot_number || PURCHASE_COPY.noLot;
+  }
+
+  function expirationLabel(item: PurchaseItem) {
+    return item.expiration_date
+      ? formatDateOnly(item.expiration_date)
+      : "Sin vencimiento";
+  }
+
+  function receivedLotLabel(item: PurchaseItem) {
+    if (item.received_lot_id !== null) {
+      return `Lote #${item.received_lot_id}`;
+    }
+    return purchase.status === "draft"
+      ? PURCHASE_COPY.lotPendingConfirmation
+      : "—";
+  }
+
+  const missingLotLines = items.filter(
+    (item) => !item.lot_number || !item.expiration_date,
+  ).length;
+
   const columns: RecordsTableColumn<PurchaseItem>[] = [
     {
       key: "producto",
@@ -234,6 +260,38 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
       className: "whitespace-nowrap font-semibold tabular-nums",
       render: (item) => purchaseMoney(item.total, currency),
     },
+    {
+      key: "lote",
+      header: "Lote",
+      className: "whitespace-nowrap",
+      render: (item) => (
+        <span className={item.lot_number ? "font-mono text-[12px] text-ink" : "text-muted"}>
+          {lotNumberLabel(item)}
+        </span>
+      ),
+    },
+    {
+      key: "vencimiento",
+      header: "Vencimiento",
+      className: "whitespace-nowrap tabular-nums",
+      render: (item) => expirationLabel(item),
+    },
+    {
+      key: "lote-recibido",
+      header: PURCHASE_COPY.lotReceived,
+      className: "whitespace-nowrap",
+      render: (item) => (
+        <span
+          className={
+            item.received_lot_id !== null
+              ? "font-mono text-[12px] font-semibold text-ink"
+              : "text-muted"
+          }
+        >
+          {receivedLotLabel(item)}
+        </span>
+      ),
+    },
   ];
 
   function renderItemCard(item: PurchaseItem) {
@@ -287,6 +345,44 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
               {purchaseMoney(item.tax_amount, currency)}
             </dd>
           </div>
+          <div>
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Lote
+            </dt>
+            <dd className="mt-1">
+              <span
+                className={
+                  item.lot_number
+                    ? "font-mono text-[12px] text-ink"
+                    : "text-muted"
+                }
+              >
+                {lotNumberLabel(item)}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Vencimiento
+            </dt>
+            <dd className="mt-1 tabular-nums text-ink">{expirationLabel(item)}</dd>
+          </div>
+          <div className="col-span-2">
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+              {PURCHASE_COPY.lotReceived}
+            </dt>
+            <dd className="mt-1">
+              <span
+                className={
+                  item.received_lot_id !== null
+                    ? "font-mono text-[12px] font-semibold text-ink"
+                    : "text-muted"
+                }
+              >
+                {receivedLotLabel(item)}
+              </span>
+            </dd>
+          </div>
           <div className="col-span-2">
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Total
@@ -311,12 +407,32 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
             Volver a compras
           </Link>
         }
-        description="Consulta la cabecera, las líneas y los totales de esta compra en Farmamed."
+        description="Consulta la cabecera, las líneas con lote y vencimiento, el lote recibido y los totales de esta compra en Farmamed."
         eyebrow="Inventario"
         title={purchaseNumberLabel(purchase.number)}
       />
 
       <CurrencyNoticeBanner />
+
+      {purchase.status === "confirmed" && (
+        <NoticeBanner
+          action={
+            canOpenInbox ? (
+              <Link
+                className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                href="/app/almacen/bandeja"
+              >
+                {PURCHASE_COPY.goToInbox}
+              </Link>
+            ) : undefined
+          }
+          role="status"
+          title="Compra confirmada"
+          tone="success"
+        >
+          Los lotes quedaron pendientes de ubicación.
+        </NoticeBanner>
+      )}
 
       <section
         aria-labelledby="datos-compra"
@@ -411,10 +527,17 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
 
         {isDraft && canWrite && (
           <>
+            {missingLotLines > 0 && (
+              <NoticeBanner className="mt-4" role="status" tone="warning">
+                {missingLotLines === 1
+                  ? "Hay una línea sin lote o fecha de vencimiento. Edita el borrador para completarla antes de confirmar."
+                  : `Hay ${missingLotLines} líneas sin lote o fecha de vencimiento. Edita el borrador para completarlas antes de confirmar.`}
+              </NoticeBanner>
+            )}
             <p className="mt-3 text-[13px] leading-6 text-muted">
               {items.length === 0
                 ? PURCHASE_COPY.noLines
-                : "Al confirmar la compra se actualizan costos y existencias de forma irreversible."}
+                : PURCHASE_COPY.confirmIrreversible}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link
@@ -482,7 +605,7 @@ function PurchaseDetailContent({ purchaseId }: { purchaseId: string }) {
               ) : (
                 <div className="rounded-[20px] border border-line bg-surface p-4">
                   <RecordsTable
-                    caption="Líneas de la compra con producto, estado de ítem, cantidad, costo unitario, subtotal, impuesto y total"
+                    caption="Líneas de la compra con producto, estado de ítem, cantidad, costo unitario, subtotal, impuesto, total, lote, vencimiento y lote recibido"
                     columns={columns}
                     getRowKey={(item) => String(item.id)}
                     getRowLabel={(item) =>

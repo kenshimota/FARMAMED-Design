@@ -35,6 +35,9 @@ export type PurchaseItem = {
   subtotal: number;
   tax_amount: number;
   total: number;
+  lot_number: string | null;
+  expiration_date: string | null;
+  received_lot_id: RecordId | null;
 };
 
 export type PurchaseRecord = {
@@ -77,6 +80,8 @@ export type PurchaseItemInput = {
   quantity: number;
   unit_cost: number;
   tax_amount: number;
+  lot_number: string;
+  expiration_date: string;
 };
 
 export type PurchaseItemPatch = {
@@ -85,6 +90,8 @@ export type PurchaseItemPatch = {
   quantity?: number;
   unit_cost?: number;
   tax_amount?: number;
+  lot_number?: string;
+  expiration_date?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -177,6 +184,9 @@ export function parsePurchaseItem(source: unknown): PurchaseItem | null {
     subtotal,
     tax_amount: taxAmount,
     total: readNumber(record.total, roundMoney(subtotal + taxAmount)),
+    lot_number: readText(record.lot_number) || null,
+    expiration_date: readText(record.expiration_date) || null,
+    received_lot_id: readId(record.received_lot_id),
   };
 }
 
