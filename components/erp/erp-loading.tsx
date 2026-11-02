@@ -17,7 +17,7 @@ export function ErpLoading() {
             <div className="h-3 w-32 rounded-full bg-line" />
             <div className="h-9 w-9 rounded-full bg-soft-blue" />
           </div>
-          <div className="mx-auto w-full max-w-[1280px] p-4 sm:p-6 xl:p-8">
+          <div className="w-full p-4 sm:p-6 xl:p-8">
             <section className="flex min-h-[340px] flex-col items-center justify-center rounded-[28px] border border-ink/[0.08] bg-surface p-8 text-center shadow-[0_18px_60px_rgba(27,12,104,0.06)]">
               <Brand />
               <div aria-hidden="true" className="mt-8 w-full max-w-xs space-y-3">
