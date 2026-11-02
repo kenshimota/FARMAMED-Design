@@ -32,6 +32,10 @@ NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 
 La variable se expone al navegador porque las llamadas de autenticación se realizan desde el cliente. No incluyas secretos ni credenciales en su valor. Los archivos `.env*` están ignorados; documenta cualquier configuración compartida sin datos sensibles.
 
+## Validación del catálogo demo
+
+La validación de CAT-10 con la semilla demo de 100+ productos está documentada en [`docs/validacion-catalogo-demo.md`](docs/validacion-catalogo-demo.md). Incluye dependencias pendientes, rutas por rol, estados de carga y error, miniaturas, responsive y los criterios para repetir la prueba con FDN-04 y CAT-09 ya integrados.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

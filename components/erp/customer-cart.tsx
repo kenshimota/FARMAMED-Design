@@ -298,7 +298,7 @@ export function CustomerCart() {
           </div>
 
           <ul className="space-y-4">
-            {lines.map((line) => {
+            {lines.map((line, index) => {
               const lineSubtotal = cartLineSubtotal(line);
               const current = orderMoney(lineSubtotal, {
                 code: line.currencyCode,
@@ -310,14 +310,15 @@ export function CustomerCart() {
                   className="rounded-3xl border border-line bg-surface p-4 shadow-[0_12px_38px_rgba(27,12,104,0.03)] sm:p-5"
                   key={`${line.productId}-${line.itemStateId}`}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex flex-wrap items-start gap-3 sm:gap-4">
                     <RecordThumbnail
                       label={line.name}
+                      priority={index < 2}
                       size="lg"
                       src={line.imageUrl}
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[15px] font-semibold text-ink">
+                    <div className="min-w-0 flex-1 basis-44">
+                      <p className="break-words text-[15px] font-semibold text-ink">
                         {line.name}
                       </p>
                       <p className="mt-1 font-mono text-[11px] text-muted">
@@ -332,7 +333,7 @@ export function CustomerCart() {
                     </div>
                     <button
                       aria-label={`Quitar ${line.name} del pedido`}
-                      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-alert/30 bg-surface px-3 text-[12px] font-semibold text-alert-ink transition-colors hover:border-alert hover:bg-alert/[0.06]"
+                      className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-alert/30 bg-surface px-3 text-[12px] font-semibold text-alert-ink transition-colors hover:border-alert hover:bg-alert/[0.06]"
                       onClick={() => removeLine(line)}
                       type="button"
                     >

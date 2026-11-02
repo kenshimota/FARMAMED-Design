@@ -5,9 +5,16 @@ import { useState } from "react";
 type ImagePreviewProps = {
   src: string | null;
   reference: string;
+  priority?: boolean;
+  original?: boolean;
 };
 
-export function ImagePreview({ src, reference }: ImagePreviewProps) {
+export function ImagePreview({
+  src,
+  reference,
+  priority = false,
+  original = false,
+}: ImagePreviewProps) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const unavailable = !src || failedSource === src;
   const initial = reference.trim().charAt(0).toLocaleUpperCase("es") || "?";
@@ -22,7 +29,7 @@ export function ImagePreview({ src, reference }: ImagePreviewProps) {
           {initial}
         </span>
         <span className="text-[12px] font-semibold leading-5 text-muted">
-          Vista previa no disponible
+          No pudimos cargar la imagen.
         </span>
       </div>
     );
@@ -32,10 +39,11 @@ export function ImagePreview({ src, reference }: ImagePreviewProps) {
     <div className="flex h-full w-full items-center justify-center bg-background">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        alt={`Miniatura de ${reference}`}
+        alt={`${original ? "Imagen" : "Miniatura"} de ${reference}`}
         className="h-full w-full object-contain p-4"
         decoding="async"
-        loading="lazy"
+        fetchPriority={priority ? "high" : "auto"}
+        loading={priority ? "eager" : "lazy"}
         onError={() => setFailedSource(src)}
         referrerPolicy="no-referrer"
         src={src}
