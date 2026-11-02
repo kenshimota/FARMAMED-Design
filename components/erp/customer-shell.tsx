@@ -16,7 +16,7 @@ type CustomerNavItem = {
   activeWhen?: readonly string[];
 };
 
-// CLI-05 habilitará "Mis pedidos": reemplazar el hint por href.
+// CLI-03, CLI-04 y CLI-05 completan tienda, carrito y mis pedidos.
 const NAV_ITEMS: readonly CustomerNavItem[] = [
   { label: "Inicio", href: "/app", icon: "home" },
   { label: "Tienda", href: "/app/tienda", icon: "cart" },
@@ -26,11 +26,7 @@ const NAV_ITEMS: readonly CustomerNavItem[] = [
     icon: "cart",
     activeWhen: ["/app/finalizar-pedido"],
   },
-  {
-    label: "Mis pedidos",
-    icon: "clipboard",
-    hint: "Disponible cuando el historial esté habilitado",
-  },
+  { label: "Mis pedidos", href: "/app/mis-pedidos", icon: "clipboard" },
   { label: "Mi cuenta", href: "/app/cuenta", icon: "user" },
 ];
 
@@ -38,10 +34,9 @@ function normalizePathname(pathname: string) {
   return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
 }
 
-function isItemActive(item: CustomerNavItem, pathname: string) {
-  if (!item.href) return false;
-  if (pathname === item.href) return true;
-  return item.href === "/app/tienda" && pathname.startsWith("/app/tienda/");
+function isActivePath(pathname: string, href: string) {
+  if (href === "/app") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function CustomerNavigation() {
@@ -51,8 +46,9 @@ function CustomerNavigation() {
     <ul className="grid grid-cols-2 gap-1 md:flex md:flex-wrap md:items-center md:gap-1">
       {NAV_ITEMS.map((item) => {
         const active =
-          isItemActive(item, pathname) ||
-          item.activeWhen?.includes(pathname) === true;
+          item.href !== undefined &&
+          (isActivePath(pathname, item.href) ||
+            item.activeWhen?.includes(pathname) === true);
 
         return (
           <li className="min-w-0" key={item.label}>
