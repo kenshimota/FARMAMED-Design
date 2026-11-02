@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
 import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { SelectField } from "@/components/erp/records/form-controls";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
@@ -26,13 +30,12 @@ import {
 } from "@/components/erp/records/records-table";
 import {
   deleteSupplier,
-  fetchSuppliers,
+  fetchSupplierPage,
   type SupplierRecord,
 } from "@/components/erp/records/suppliers-api";
+import { fetchCities, fetchStates } from "@/components/erp/records/locations-api";
 import { canWriteModule } from "@/lib/permissions";
 import { formatInteger } from "@/lib/format";
-
-const NO_SUPPLIERS: SupplierRecord[] = [];
 
 type StateOption = {
   value: string;
@@ -46,102 +49,98 @@ type CityOption = {
   stateId: string;
 };
 
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function supplierCountLabel(count: number) {
-  return count === 1 ? "1 proveedor" : `${formatInteger(count)} proveedores`;
-}
-
 export function SupplierListPage() {
   const { user } = useSession();
   const toast = useToast();
   const canWrite = canWriteModule(user.role, "catalogo");
-  const suppliersResource = useAsyncResource(fetchSuppliers);
-  const [query, setQuery] = useState("");
-  const [stateFilter, setStateFilter] = useState("");
-  const [cityFilter, setCityFilter] = useState("");
+  const list = useServerList<SupplierRecord>({
+    loader: (request) => fetchSupplierPage(request),
+    filterKeys: ["state_id", "city_id"],
+    defaultSort: "name",
+    defaultOrder: "asc",
+  });
   const [deleteTarget, setDeleteTarget] = useState<SupplierRecord | null>(null);
+  const stateFilter = list.filters.state_id ?? "";
+  const cityFilter = list.filters.city_id ?? "";
+  const suppliers = list.items;
 
-  const suppliers = suppliersResource.data ?? NO_SUPPLIERS;
+  const statesResource = useAsyncResource(fetchStates);
+  const citiesLoader = useCallback(
+    () => fetchCities(stateFilter || undefined),
+    [stateFilter],
+  );
+  const citiesResource = useAsyncResource(citiesLoader);
+  const previousStateId = useRef(stateFilter);
+  const reloadCities = citiesResource.reload;
 
-  const stateOptions = useMemo<StateOption[]>(() => {
-    const map = new Map<string, StateOption>();
-    for (const supplier of suppliers) {
-      const key = String(supplier.state_id);
-      if (map.has(key)) continue;
-      const name = supplier.state?.name ?? `Estado #${supplier.state_id}`;
-      map.set(key, {
-        value: key,
-        label: supplier.state?.code ? `${name} · ${supplier.state.code}` : name,
-        name,
-      });
-    }
-    return Array.from(map.values()).sort((first, second) =>
-      first.name.localeCompare(second.name, "es", { sensitivity: "base" }),
-    );
-  }, [suppliers]);
+  useEffect(() => {
+    if (previousStateId.current === stateFilter) return;
+    previousStateId.current = stateFilter;
+    reloadCities();
+  }, [reloadCities, stateFilter]);
 
-  const cityOptions = useMemo<CityOption[]>(() => {
-    const map = new Map<string, CityOption>();
-    for (const supplier of suppliers) {
-      const key = String(supplier.city_id);
-      if (map.has(key)) continue;
-      const cityName = supplier.city?.name ?? `Ciudad #${supplier.city_id}`;
-      const stateName = supplier.state?.name ?? `Estado #${supplier.state_id}`;
-      map.set(key, {
-        value: key,
-        label: `${cityName} · ${stateName}`,
-        stateId: String(supplier.state_id),
-      });
-    }
-    return Array.from(map.values()).sort((first, second) =>
-      first.label.localeCompare(second.label, "es", { sensitivity: "base" }),
-    );
-  }, [suppliers]);
+  const stateOptions = useMemo<StateOption[]>(
+    () =>
+      (statesResource.data ?? []).map((state) => ({
+        value: String(state.id),
+        label: state.code ? `${state.name} · ${state.code}` : state.name,
+        name: state.name,
+      })),
+    [statesResource.data],
+  );
 
-  const visibleCityOptions = stateFilter
-    ? cityOptions.filter((city) => city.stateId === stateFilter)
-    : cityOptions;
+  const cityOptions = useMemo<CityOption[]>(
+    () =>
+      (citiesResource.data ?? []).map((city) => ({
+        value: String(city.id),
+        label: `${city.name} · ${
+          city.state?.name ?? stateOptions.find(
+            (state) => state.value === String(city.state_id),
+          )?.name ?? `Estado #${city.state_id}`
+        }`,
+        stateId: String(city.state_id),
+      })),
+    [citiesResource.data, stateOptions],
+  );
 
-  const filteredSuppliers = useMemo(() => {
-    const normalizedQuery = normalizeSearch(query);
-    return suppliers.filter((supplier) => {
-      if (stateFilter && String(supplier.state_id) !== stateFilter) return false;
-      if (cityFilter && String(supplier.city_id) !== cityFilter) return false;
-      if (!normalizedQuery) return true;
-      return (
-        normalizeSearch(supplier.name).includes(normalizedQuery) ||
-        normalizeSearch(supplier.identification).includes(normalizedQuery)
-      );
+  const filtersActive = Boolean(
+    list.request.q || stateFilter || cityFilter,
+  );
+
+  const chips: FilterChip[] = [];
+  if (list.request.q) {
+    chips.push({
+      id: "q",
+      label: `Búsqueda: ${list.request.q}`,
+      onRemove: () => {
+        list.setSearch("");
+        list.commitSearch();
+      },
     });
-  }, [cityFilter, query, stateFilter, suppliers]);
-
-  const filtersActive = Boolean(query.trim() || stateFilter || cityFilter);
-  const totalLabel = supplierCountLabel(suppliers.length);
-  const countLabel = filtersActive
-    ? `Mostrando ${formatInteger(filteredSuppliers.length)} de ${totalLabel}`
-    : totalLabel;
-
-  function clearFilters() {
-    setQuery("");
-    setStateFilter("");
-    setCityFilter("");
+  }
+  if (stateFilter) {
+    chips.push({
+      id: "state_id",
+      label: `Estado: ${
+        stateOptions.find((option) => option.value === stateFilter)?.name ??
+        `#${stateFilter}`
+      }`,
+      onRemove: () => list.setFilter("state_id", ""),
+    });
+  }
+  if (cityFilter) {
+    chips.push({
+      id: "city_id",
+      label: `Ciudad: ${
+        cityOptions.find((option) => option.value === cityFilter)?.label ??
+        `#${cityFilter}`
+      }`,
+      onRemove: () => list.setFilter("city_id", ""),
+    });
   }
 
   function handleStateFilter(value: string) {
-    setStateFilter(value);
-    if (!value) return;
-    setCityFilter((current) => {
-      if (!current) return current;
-      const city = cityOptions.find((option) => option.value === current);
-      return city?.stateId === value ? current : "";
-    });
+    list.setFilters({ state_id: value, city_id: "" });
   }
 
   function cityNameFor(supplier: SupplierRecord) {
@@ -291,7 +290,88 @@ export function SupplierListPage() {
         title="Proveedores"
       />
 
-      {suppliersResource.status === "loading" && (
+      <FilterBar
+        activeCount={
+          Number(Boolean(list.request.q)) +
+          Number(Boolean(stateFilter)) +
+          Number(Boolean(cityFilter))
+        }
+        chips={chips}
+        id="proveedores-filtros"
+        loading={list.status === "loading"}
+        onClear={list.clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando proveedores…"
+            : list.status === "error" && suppliers.length === 0
+              ? "No pudieron cargarse los proveedores"
+              : list.meta.total === 0
+                ? "Sin proveedores"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="La búsqueda se aplica en el servidor sobre nombre e identificación."
+            id="buscar-proveedores"
+            label="Buscar"
+            loadOptions={async (query) => {
+              const page = await fetchSupplierPage({ q: query, pageSize: 10 });
+              return page.data.map((supplier) => ({
+                value: String(supplier.id),
+                label: supplier.name,
+                description: supplier.identification,
+              }));
+            }}
+            onSelect={(option) => {
+              list.setSearch(option.label);
+              list.commitSearch();
+            }}
+            onValueChange={list.setSearch}
+            placeholder="Buscar por nombre o identificación"
+            value={list.searchDraft}
+          />
+        }
+      >
+        <SelectField
+          emptyLabel="Todos los estados"
+          id="filtro-estado-proveedores"
+          label="Estado"
+          loadError={
+            statesResource.status === "error"
+              ? "No pudimos cargar los estados."
+              : null
+          }
+          loading={statesResource.status === "loading"}
+          loadingLabel="Cargando estados…"
+          onChange={handleStateFilter}
+          onRetry={statesResource.reload}
+          options={stateOptions}
+          placeholder="Todos los estados"
+          value={stateFilter}
+        />
+
+        <SelectField
+          emptyLabel="Todas las ciudades"
+          id="filtro-ciudad-proveedores"
+          label="Ciudad"
+          loadError={
+            citiesResource.status === "error"
+              ? "No pudimos cargar las ciudades."
+              : null
+          }
+          loading={citiesResource.status === "loading"}
+          loadingLabel="Cargando ciudades…"
+          onChange={(value) => list.setFilter("city_id", value)}
+          onRetry={reloadCities}
+          options={cityOptions}
+          placeholder="Todas las ciudades"
+          value={cityFilter}
+        />
+      </FilterBar>
+
+      {list.status === "loading" && (
         <RecordsTableSkeleton
           columns={6}
           label="Cargando proveedores…"
@@ -299,29 +379,28 @@ export function SupplierListPage() {
         />
       )}
 
-      {suppliersResource.status === "error" && suppliers.length === 0 && (
+      {list.status === "error" && suppliers.length === 0 && (
         <RecordsLoadError
           description={
-            suppliersResource.error?.message ??
-            "No pudimos cargar los proveedores."
+            list.error?.message ?? "No pudimos cargar los proveedores."
           }
-          onRetry={suppliersResource.reload}
+          onRetry={list.reload}
           title="No pudimos cargar los proveedores"
         />
       )}
 
-      {suppliersResource.status !== "loading" &&
-        !(suppliersResource.status === "error" && suppliers.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && suppliers.length === 0) && (
           <section aria-label="Listado de proveedores" className="space-y-4">
-            {suppliersResource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <div aria-hidden="true" className="reload-bar" />
             )}
-            {suppliersResource.status === "error" && suppliers.length > 0 && (
+            {list.status === "error" && suppliers.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={suppliersResource.reload}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -329,118 +408,78 @@ export function SupplierListPage() {
                 }
                 tone="warning"
               >
-                {suppliersResource.error?.message ??
+                {list.error?.message ??
                   "No pudimos actualizar los proveedores. Mostramos los datos disponibles."}
               </NoticeBanner>
             )}
 
-            <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(200px,250px)_minmax(220px,280px)] lg:items-end">
-                <div className="sm:col-span-2 lg:col-span-1">
-                  <label
-                    className="mb-2 block text-[12px] font-semibold text-ink"
-                    htmlFor="buscar-proveedores"
-                  >
-                    Buscar
-                  </label>
-                  <div className="relative">
-                    <Icon
-                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
-                      name="search"
-                      size={17}
-                    />
-                    <input
-                      className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-11 pr-4 text-[14px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
-                      id="buscar-proveedores"
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Buscar por nombre o identificación"
-                      type="search"
-                      value={query}
-                    />
-                  </div>
-                </div>
-
-                <SelectField
-                  emptyLabel="Todos los estados"
-                  id="filtro-estado-proveedores"
-                  label="Estado"
-                  onChange={handleStateFilter}
-                  options={stateOptions}
-                  placeholder="Todos los estados"
-                  value={stateFilter}
-                />
-
-                <SelectField
-                  emptyLabel="Todas las ciudades"
-                  id="filtro-ciudad-proveedores"
-                  label="Ciudad"
-                  onChange={setCityFilter}
-                  options={visibleCityOptions}
-                  placeholder="Todas las ciudades"
-                  value={cityFilter}
-                />
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-                <p
-                  aria-live="polite"
-                  className="text-[12px] font-semibold text-muted"
-                >
-                  {countLabel}
-                </p>
-                {filtersActive && (
-                  <button
-                    className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                    onClick={clearFilters}
-                    type="button"
-                  >
-                    Limpiar filtros
-                  </button>
-                )}
-              </div>
-            </div>
-
             {suppliers.length === 0 ? (
-              <EmptyState
-                action={
-                  canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/proveedores/nuevo"
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/proveedores/nuevo"
+                      >
+                        Nuevo proveedor
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="Registra el primero para usarlo en compras."
+                  title="Todavía no hay proveedores."
+                />
+              ) : (
+                <EmptyState
+                  action={
+                    <button
+                      className="button-base button-secondary min-h-11 px-5"
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : list.clearFilters
+                      }
+                      type="button"
                     >
-                      Nuevo proveedor
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description="Registra el primero para usarlo en compras."
-                title="Todavía no hay proveedores."
-              />
-            ) : filteredSuppliers.length === 0 ? (
-              <EmptyState
-                action={
-                  <button
-                    className="button-base button-secondary min-h-11 px-5"
-                    onClick={clearFilters}
-                    type="button"
-                  >
-                    Limpiar filtros
-                  </button>
-                }
-                description="Ajusta la búsqueda o los filtros para encontrar el proveedor."
-                title="No hay proveedores que coincidan con la búsqueda."
-              />
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
+                    </button>
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} proveedores en total, pero esta página no tiene filas.`
+                      : "Ajusta la búsqueda o los filtros para encontrar el proveedor."
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : "Sin resultados con estos filtros."
+                  }
+                />
+              )
             ) : (
               <RecordsTable
+                busy={list.status === "refreshing"}
                 caption="Proveedores con su identificación, correo, teléfono y ubicación"
                 columns={columns}
                 getRowKey={(supplier) => String(supplier.id)}
                 getRowLabel={(supplier) => supplier.name}
                 renderCard={renderCard}
                 rowActions={renderActions}
-                rows={filteredSuppliers}
+                rows={suppliers}
               />
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
 
@@ -464,7 +503,7 @@ export function SupplierListPage() {
           if (!deleteTarget) return;
           await deleteSupplier(deleteTarget.id);
           toast.success("Proveedor eliminado.");
-          suppliersResource.reload();
+          list.reload();
         }}
         onError={(error) => toast.error(error.message)}
         open={deleteTarget !== null}

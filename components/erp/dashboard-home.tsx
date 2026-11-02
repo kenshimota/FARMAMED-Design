@@ -12,17 +12,18 @@ import {
 import { LotsExpiryPanel } from "@/components/erp/lots-expiry-panel";
 import { PendingPurchasesPanel } from "@/components/erp/pending-purchases-panel";
 import { useSession } from "@/components/erp/session-context";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
+import {
+  fetchSupplier,
+  type SupplierRecord,
+} from "@/components/erp/records/suppliers-api";
 import { StockStatesPanel } from "@/components/erp/stock-states-panel";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { useDashboardData } from "@/components/erp/ui/use-dashboard-data";
 import { useToast } from "@/components/erp/ui/toast";
 import { ApiError } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
-import {
-  confirmDraftPurchase,
-  type DraftPurchase,
-  type SupplierRow,
-} from "@/lib/dashboard";
+import { confirmDraftPurchase, type DraftPurchase } from "@/lib/dashboard";
 import { PURCHASE_WITHOUT_ITEMS, SUCCESS_MESSAGES } from "@/lib/feedback";
 import { formatCurrentDate } from "@/lib/format";
 import {
@@ -53,13 +54,29 @@ export function DashboardHome() {
   const firstName = displayName.trim().split(/\s+/)[0] || displayName;
   const primaryAction = getPrimaryAction(user.role);
 
+  const supplierIds = useMemo(
+    () => [
+      ...new Set(
+        (data.purchases.data?.items ?? [])
+          .map((purchase) => purchase.supplierId)
+          .filter((id): id is number => id !== null),
+      ),
+    ],
+    [data.purchases.data],
+  );
+  const supplierRecords = useRecordsById<SupplierRecord>({
+    ids: supplierIds,
+    load: fetchSupplier,
+    getId: (supplier) => supplier.id,
+  }).records;
   const suppliersById = useMemo(() => {
-    const map = new Map<number, SupplierRow>();
-    for (const supplier of data.suppliers.data ?? []) {
-      map.set(supplier.id, supplier);
+    const map = new Map<number, { id: number; name: string }>();
+    for (const supplier of Object.values(supplierRecords)) {
+      const id = Number(supplier.id);
+      if (Number.isFinite(id)) map.set(id, { id, name: supplier.name });
     }
     return map;
-  }, [data.suppliers.data]);
+  }, [supplierRecords]);
 
   const currenciesById = useMemo(() => {
     const map = new Map<number, { code: string; symbol: string }>();
@@ -79,7 +96,9 @@ export function DashboardHome() {
       await confirmDraftPurchase(purchase.id);
       toast.success(SUCCESS_MESSAGES.purchaseConfirmed);
       data.purchases.reload();
+      data.purchaseCount.reload();
       data.stocks.reload();
+      data.stockCount.reload();
     } catch (caught) {
       const uiError = translateApiError(caught);
       const message =
@@ -91,6 +110,7 @@ export function DashboardHome() {
       });
       if (caught instanceof ApiError && (caught.status === 404 || caught.status === 409)) {
         data.purchases.reload();
+        data.purchaseCount.reload();
       }
     } finally {
       confirmingRef.current = false;

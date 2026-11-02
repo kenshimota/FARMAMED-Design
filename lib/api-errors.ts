@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/api";
 import { CURRENCY_NOT_CONFIGURED } from "@/lib/feedback";
 import { formatWaitPhrase } from "@/lib/format";
+import { ListPayloadError } from "@/lib/pagination";
 
 export type UiErrorKind =
   | "network"
@@ -79,6 +80,9 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "lot already exists": "Ya existe un lote con ese número para el producto.",
   "lot has stock or reservations":
     "Solo puedes eliminar lotes con existencia y reservado en cero.",
+  "lot is being located by another user":
+    "Otro usuario está ubicando este lote.",
+  "lot is already located": "Este lote ya fue ubicado.",
   "customer already exists": "Ya existe un cliente con ese correo.",
   "customer already has a seller": "Este cliente ya tiene un vendedor asignado.",
   "customer is already linked to a user": CUSTOMER_ALREADY_LINKED_MESSAGE,
@@ -120,6 +124,16 @@ export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caract
 export const INVALID_EMAIL_MESSAGE = "Ingresa un correo válido.";
 
 const KNOWN_MESSAGES: Record<string, string> = {
+  "page must be greater than zero": "La página debe ser mayor que cero.",
+  "page must be an integer": "La página debe ser un número entero.",
+  "page must be greater than or equal to 1": "La página debe ser mayor que cero.",
+  "page_size must be between 1 and 100":
+    "El tamaño de página debe estar entre 1 y 100.",
+  "page_size must be an integer": "El tamaño de página debe ser un número entero.",
+  "invalid page": "La página no es válida.",
+  "invalid page_size": "El tamaño de página no es válido.",
+  "invalid sort": "El campo de orden no es válido.",
+  "invalid order": "El orden debe ser ascendente o descendente.",
   "default transaction currency is not configured": CURRENCY_NOT_CONFIGURED,
   "password must be at least 8 characters long": PASSWORD_MIN_MESSAGE,
   "invalid email": INVALID_EMAIL_MESSAGE,
@@ -182,6 +196,10 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El método de pago no se puede cambiar.",
   "currency_id cannot be changed": "La moneda del pago no se puede cambiar.",
   "amount cannot be changed": "El monto del pago no se puede cambiar.",
+  "shelf does not belong to the warehouse":
+    "El estante no pertenece a la bodega.",
+  "section does not belong to the shelf":
+    "La sección no pertenece al estante.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
@@ -212,7 +230,72 @@ export function customerAlreadyLinkedMessage(error: unknown) {
     : null;
 }
 
+const LIST_FILTER_LABELS: Record<string, string> = {
+  page: "la página",
+  page_size: "el tamaño de página",
+  sort: "el orden",
+  order: "el orden",
+  q: "la búsqueda",
+  category_id: "la categoría",
+  tax_id: "el impuesto",
+  image_id: "la imagen",
+  reference: "la referencia",
+  state_id: "el estado",
+  city_id: "la ciudad",
+  seller_id: "el vendedor",
+  role: "el rol",
+  is_active: "el estado",
+  customer_id: "el cliente",
+  supplier_id: "el proveedor",
+  product_id: "el producto",
+  item_state_id: "el estado del ítem",
+  currency_id: "la moneda",
+  warehouse_id: "la bodega",
+  shelf_id: "el estante",
+  section_id: "la sección",
+  number: "el número",
+  expired: "el vencimiento",
+  expiring_before: "el vencimiento",
+  expires_from: "el vencimiento",
+  expires_to: "el vencimiento",
+  location_status: "la ubicación",
+  in_stock: "la disponibilidad",
+  low_stock: "el stock mínimo",
+  from: "la fecha desde",
+  to: "la fecha hasta",
+  created_from: "la fecha desde",
+  created_to: "la fecha hasta",
+  due_from: "el vencimiento desde",
+  due_to: "el vencimiento hasta",
+  order_id: "el pedido",
+  invoice_id: "la factura",
+  payment_status: "el estado de pago",
+  status: "el estado",
+  method_payment_id: "el método de pago",
+  paid_from: "la fecha desde",
+  paid_to: "la fecha hasta",
+};
+
+function filterParameterMessage(error: ApiError) {
+  const entry = Object.entries(error.fieldErrors)[0];
+  if (!entry) return null;
+  const label = LIST_FILTER_LABELS[entry[0]];
+  if (!label) return null;
+  return `Revisa ${label}: el valor del filtro no es válido.`;
+}
+
 export function translateApiError(error: unknown): UiError {
+  if (error instanceof ListPayloadError) {
+    return {
+      kind: "server",
+      message: COPY.server,
+      fieldErrors: {},
+      canRetry: true,
+      status: null,
+      retryAfterSeconds: null,
+    };
+  }
+
   if (!(error instanceof ApiError)) {
     return {
       kind: "network",
@@ -293,7 +376,9 @@ export function translateApiError(error: unknown): UiError {
       return {
         kind: "validation",
         message:
-          translateKnownMessage(readApiMessage(error)) ?? COPY.validation,
+          translateKnownMessage(readApiMessage(error)) ??
+          filterParameterMessage(error) ??
+          COPY.validation,
         fieldErrors,
         canRetry: false,
         status: 422,

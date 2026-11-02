@@ -23,6 +23,7 @@ import {
   getImageSource,
   isPositiveRecordId,
 } from "@/components/erp/records/records-api";
+import { fetchTaxes, formatTaxRate } from "@/lib/finance/taxes-api";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 
 type ProductDetailPageProps = {
@@ -34,12 +35,16 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const router = useRouter();
   const toast = useToast();
   const canWrite = canWriteModule(user.role, "catalogo");
+  const canReadTaxes = canReadModule(user.role, "impuestos");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const validId = isPositiveRecordId(productId);
   const productLoader = useCallback(() => fetchProduct(productId), [productId]);
   const productResource = useAsyncResource(productLoader, { enabled: validId });
   const categoriesResource = useAsyncResource(fetchCategories, { enabled: validId });
+  const taxesResource = useAsyncResource(fetchTaxes, {
+    enabled: validId && canReadTaxes,
+  });
   const imagesResource = useAsyncResource(fetchImages, { enabled: validId });
 
   if (!validId) {
@@ -95,11 +100,17 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
   const product = productResource.data;
   const category = findById(categoriesResource.data ?? [], product.category_id);
+  const tax =
+    product.tax_id === null
+      ? null
+      : findById(taxesResource.data ?? [], product.tax_id);
   const image = findById(imagesResource.data ?? [], product.image_id);
   const imageSource = getImageSource(image);
   const imageName = getImageDisplayName(image);
   const relatedError =
-    categoriesResource.status === "error" || imagesResource.status === "error";
+    categoriesResource.status === "error" ||
+    (canReadTaxes && taxesResource.status === "error") ||
+    imagesResource.status === "error";
 
   type RelatedModule = {
     href: string;
@@ -173,6 +184,9 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
               onClick={() => {
                 if (categoriesResource.status === "error") categoriesResource.reload();
+                if (canReadTaxes && taxesResource.status === "error") {
+                  taxesResource.reload();
+                }
                 if (imagesResource.status === "error") imagesResource.reload();
               }}
               type="button"
@@ -182,8 +196,10 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           }
           tone="warning"
         >
-          No pudimos cargar la categoría o la imagen relacionada. Mostramos la información
-          disponible.
+          {canReadTaxes
+            ? "No pudimos cargar la categoría, el impuesto o la imagen relacionada."
+            : "No pudimos cargar la categoría o la imagen relacionada."}{" "}
+          Mostramos la información disponible.
         </NoticeBanner>
       )}
 
@@ -282,6 +298,58 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               </dd>
             </div>
 
+            {canReadTaxes && (
+              <div className="sm:col-span-2">
+                <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Impuesto
+                </dt>
+                <dd className="mt-2 rounded-2xl border border-line bg-background p-4">
+                  {tax ? (
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[14px] font-semibold text-ink">{tax.name}</p>
+                        <p className="mt-1">
+                          <span className="inline-flex rounded-lg bg-soft-blue px-2 py-1 font-mono text-[11px] font-semibold text-brand">
+                            {tax.code}
+                          </span>
+                        </p>
+                        {tax.description && (
+                          <p className="mt-2 text-[12px] leading-5 text-muted">
+                            {tax.description}
+                          </p>
+                        )}
+                      </div>
+                      <span className="rounded-full bg-soft-lime px-3 py-1 text-[11px] font-semibold text-ink">
+                        Tasa {formatTaxRate(tax.rate)}
+                      </span>
+                    </div>
+                  ) : product.tax_id === null ? (
+                    <p className="text-[14px] text-ink">Sin impuesto registrado.</p>
+                  ) : taxesResource.status === "loading" ? (
+                    <p className="text-[14px] text-ink">Cargando impuesto…</p>
+                  ) : (
+                    <p className="text-[14px] text-ink">Impuesto #{product.tax_id}</p>
+                  )}
+
+                  {product.tax_id !== null && (
+                    <p className="mt-3 border-t border-line pt-3 text-[12px] leading-5 text-muted">
+                      Este impuesto se aplica al producto. No calcula totales en pedidos ni
+                      facturas.
+                    </p>
+                  )}
+
+                  <Link
+                    aria-label="Ir a impuestos para consultar el catálogo fiscal"
+                    className="mt-2 inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                    href="/app/impuestos"
+                  >
+                    Ir a impuestos
+                    <Icon name="arrow-up-right" size={14} />
+                  </Link>
+                </dd>
+              </div>
+            )}
+
             <div className="sm:col-span-2">
               <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                 Descripción
@@ -293,8 +361,10 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           </dl>
 
           <p className="mt-6 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
-            El catálogo solo guarda nombre, descripción, referencia, categoría e imagen. No
-            incluye precio, impuesto, presentación ni existencias.
+            {canReadTaxes
+              ? "El catálogo guarda nombre, descripción, referencia, categoría, impuesto e imagen."
+              : "El catálogo guarda nombre, descripción, referencia, categoría e imagen."}{" "}
+            No incluye precio, presentación ni existencias.
           </p>
         </div>
       </section>

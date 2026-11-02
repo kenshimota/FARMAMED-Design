@@ -27,6 +27,17 @@ export async function fetchImage(id: string) {
   return image;
 }
 
+export async function fetchImagesByIds(
+  ids: RecordId[],
+): Promise<ImageRecord[]> {
+  const unique = [...new Set(ids.map(String))].filter(Boolean);
+  if (unique.length === 0) return [];
+  const results = await Promise.allSettled(unique.map((id) => fetchImage(id)));
+  return results.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+}
+
 export async function createImage(input: ImageInput) {
   const payload = await apiFetch<unknown>("/images", {
     ...authOptions(),

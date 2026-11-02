@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import type {
+  LotActor,
+  LotLocationStatus,
   LotProduct,
   LotRecord,
   LotShelf,
@@ -15,6 +17,54 @@ const CARACAS_TIME_ZONE = "America/Caracas";
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const LOT_EXPIRING_DAYS = 30;
+
+export const LOT_LOCATION_STATUS_LABELS: Record<LotLocationStatus, string> = {
+  pending: "Pendiente de ubicar",
+  in_progress: "Ubicando",
+  located: "Ubicado",
+};
+
+export function lotLocationStatusLabel(
+  lot: Pick<LotRecord, "location_status">,
+  startedBy?: LotActor | null,
+) {
+  if (lot.location_status === "in_progress" && startedBy?.username) {
+    return `Ubicando por ${startedBy.username}`;
+  }
+  return LOT_LOCATION_STATUS_LABELS[lot.location_status];
+}
+
+export function LotLocationStatusBadge({
+  lot,
+  label,
+}: {
+  lot: Pick<LotRecord, "location_status">;
+  label?: string;
+}) {
+  const text = label ?? lotLocationStatusLabel(lot);
+  if (lot.location_status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-olive/35 bg-soft-lime px-2.5 py-1 text-[11px] font-semibold text-ink">
+        <Icon name="clock" size={13} />
+        {text}
+      </span>
+    );
+  }
+  if (lot.location_status === "in_progress") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
+        <Icon name="warehouse" size={13} />
+        {text}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-background px-2.5 py-1 text-[11px] font-semibold text-ink">
+      <Icon name="check" size={13} />
+      {text}
+    </span>
+  );
+}
 
 const caracasDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: CARACAS_TIME_ZONE,
@@ -110,50 +160,75 @@ export function lotItemStateLabel(
 export function lotWarehouseName(
   lot: Pick<LotRecord, "warehouse" | "warehouse_id">,
 ) {
-  return lot.warehouse?.name || `Bodega #${lot.warehouse_id}`;
+  return lot.warehouse?.name || (lot.warehouse_id !== null
+    ? `Bodega #${lot.warehouse_id}`
+    : "Sin bodega");
 }
 
 export function lotShelfLabel(
   shelf: LotShelf | null,
-  shelfId?: string | number,
+  shelfId?: string | number | null,
 ) {
   if (shelf) {
     return shelf.name && shelf.name !== shelf.code
       ? `${shelf.code} — ${shelf.name}`
       : shelf.code;
   }
-  return shelfId !== undefined ? `Estante #${shelfId}` : "Estante";
+  return shelfId !== undefined && shelfId !== null
+    ? `Estante #${shelfId}`
+    : "Estante";
 }
 
 export function lotSectionLabel(
   section: LotShelfSection | null,
-  sectionId?: string | number,
+  sectionId?: string | number | null,
 ) {
   if (section) {
     return section.name && section.name !== section.code
       ? `${section.code} — ${section.name}`
       : section.code;
   }
-  return sectionId !== undefined ? `Sección #${sectionId}` : "Sección";
+  return sectionId !== undefined && sectionId !== null
+    ? `Sección #${sectionId}`
+    : "Sección";
 }
 
 export function lotLocationLabel(
   lot: Pick<
     LotRecord,
-    "warehouse" | "warehouse_id" | "shelf" | "shelf_id" | "section" | "section_id"
+    | "warehouse"
+    | "warehouse_id"
+    | "shelf"
+    | "shelf_id"
+    | "section"
+    | "section_id"
+    | "location_status"
   >,
 ) {
+  if (lot.location_status !== "located") {
+    return LOT_LOCATION_STATUS_LABELS[lot.location_status];
+  }
   const shelf = lot.shelf;
   const section = lot.section;
   return [
     lotWarehouseName(lot),
-    shelf?.name || shelf?.code || `Estante #${lot.shelf_id}`,
-    section?.name || section?.code || `Sección #${lot.section_id}`,
+    shelf?.name || shelf?.code || (lot.shelf_id !== null
+      ? `Estante #${lot.shelf_id}`
+      : "Estante"),
+    section?.name || section?.code || (lot.section_id !== null
+      ? `Sección #${lot.section_id}`
+      : "Sección"),
   ].join(" · ");
 }
 
 export function lotCountLabel(count: number) {
   return count === 1 ? "1 lote" : `${formatInteger(count)} lotes`;
+}
+
+export function lotActorLabel(actor: LotActor | null | undefined) {
+  if (!actor) return "";
+  if (actor.username) return actor.username;
+  return actor.id !== null ? `Usuario #${actor.id}` : "";
 }
 
 export function LotSyncNotice({

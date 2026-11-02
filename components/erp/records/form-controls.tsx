@@ -28,6 +28,7 @@ type TextFieldProps = {
   autoComplete?: string;
   autoFocus?: boolean;
   inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
+  inputType?: "text" | "search";
   mono?: boolean;
   readOnly?: boolean;
 };
@@ -47,6 +48,7 @@ export function TextField({
   autoComplete = "off",
   autoFocus = false,
   inputMode,
+  inputType = "text",
   mono = false,
   readOnly = false,
 }: TextFieldProps) {
@@ -67,7 +69,7 @@ export function TextField({
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           readOnly={readOnly}
-          type="text"
+          type={inputType}
           value={value}
         />
       )}
