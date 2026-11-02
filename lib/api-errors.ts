@@ -100,6 +100,9 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "payment type already exists": "Ya existe un tipo con ese código.",
   "payment type has methods":
     "No puedes cambiar la moneda ni los campos porque el tipo ya tiene métodos.",
+  "payment term already exists": "Ya existe un término de pago con ese código.",
+  "payment term is in use":
+    "No puedes eliminar este término porque está asignado a clientes, pedidos o facturas.",
   "system order status cannot be deleted":
     "Los estados del sistema no se pueden eliminar.",
   "order status is in use": "Un estado en uso no se puede eliminar.",
@@ -131,6 +134,14 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El código debe tener entre 2 y 30 caracteres y usar solo mayúsculas, números o guion bajo.",
   "description must have at most 255 characters":
     "La descripción no puede superar los 255 caracteres.",
+  "code must match ^[a-z][a-z0-9_]{1,29}$":
+    "El código debe empezar con una letra y usar solo minúsculas, números o guion bajo, entre 2 y 30 caracteres.",
+  "invalid days": "Los días deben ser un entero entre 0 y 3650.",
+  "days must be an integer between 0 and 3650":
+    "Los días deben ser un entero entre 0 y 3650.",
+  "payment term is required":
+    "Debes asignar un término de pago antes de solicitar o generar el pedido.",
+  "invalid payment term": "Selecciona un término de pago activo.",
   "invalid status transition":
     "El siguiente estado no puede ser el mismo ni generar un ciclo.",
   "next status code does not exist":
@@ -139,13 +150,13 @@ const KNOWN_MESSAGES: Record<string, string> = {
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
 
-export function translateFieldMessage(message: string) {
+function translateKnownMessage(message: string) {
   const key = message.trim();
-  return (
-    KNOWN_MESSAGES[key] ??
-    KNOWN_MESSAGES[key.toLowerCase()] ??
-    FIELD_MESSAGE_FALLBACK
-  );
+  return KNOWN_MESSAGES[key] ?? KNOWN_MESSAGES[key.toLowerCase()] ?? null;
+}
+
+export function translateFieldMessage(message: string) {
+  return translateKnownMessage(message) ?? FIELD_MESSAGE_FALLBACK;
 }
 
 function readApiMessage(error: ApiError) {
@@ -245,7 +256,8 @@ export function translateApiError(error: unknown): UiError {
     case 422:
       return {
         kind: "validation",
-        message: COPY.validation,
+        message:
+          translateKnownMessage(readApiMessage(error)) ?? COPY.validation,
         fieldErrors,
         canRetry: false,
         status: 422,

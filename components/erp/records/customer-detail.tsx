@@ -27,6 +27,7 @@ import {
   fetchAssignments,
 } from "@/components/erp/records/assignments-api";
 import { isPositiveRecordId } from "@/components/erp/records/records-api";
+import { paymentTermDayCountLabel } from "@/lib/finance/payment-terms-api";
 import { formatCoordinate, formatDateTime } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 
@@ -126,6 +127,8 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
   const customer = customerResource.data;
   const hasPriceList =
     customer.price_list !== null || customer.price_list_id !== null;
+  const hasPaymentTerm =
+    customer.payment_term !== null || customer.payment_term_id !== null;
   const located = hasCoordinates(customer);
   const assignment = assignmentResource.data?.[0] ?? null;
   const assignmentResolved = assignmentResource.data !== null;
@@ -265,6 +268,30 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
             </dd>
           </div>
 
+          <div>
+            <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Término de pago
+            </dt>
+            <dd className="mt-1.5 text-[14px] text-ink">
+              {customer.payment_term ? (
+                <span>
+                  {customer.payment_term.name}
+                  <span className="mt-0.5 block text-[12px] text-muted">
+                    <span className="font-mono">
+                      #{customer.payment_term.id} ·{" "}
+                      {customer.payment_term.code}
+                    </span>{" "}
+                    · {paymentTermDayCountLabel(customer.payment_term.days)}
+                  </span>
+                </span>
+              ) : hasPaymentTerm ? (
+                `Término #${customer.payment_term_id}`
+              ) : (
+                "Sin término asignado"
+              )}
+            </dd>
+          </div>
+
           <div className="sm:col-span-2">
             <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
               Dirección
@@ -322,6 +349,11 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
             </NoticeBanner>
           </div>
         )}
+
+        <p className="mt-4 text-[12px] leading-5 text-muted">
+          El término de pago del cliente se copia a los pedidos nuevos. Cada
+          pedido conserva el término con el que fue creado.
+        </p>
 
         <p className="mt-6 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
           Los clientes son terceros a los que se les vende; no son usuarios del

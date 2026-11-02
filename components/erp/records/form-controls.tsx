@@ -6,7 +6,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
 } from "react";
-import { Icon } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
 import { FormField } from "@/components/erp/ui/form";
 import { formatDateOnly } from "@/lib/format";
 
@@ -185,6 +185,10 @@ type SwitchFieldProps = {
   help?: ReactNode;
   error?: string;
   disabled?: boolean;
+  onLabel?: string;
+  offLabel?: string;
+  onIcon?: IconName;
+  offIcon?: IconName;
 };
 
 export function SwitchField({
@@ -195,15 +199,20 @@ export function SwitchField({
   help,
   error,
   disabled = false,
+  onLabel = "Sí, se puede vender.",
+  offLabel = "No se puede vender.",
+  onIcon = "check",
+  offIcon = "close",
 }: SwitchFieldProps) {
   const [interacted, setInteracted] = useState(false);
   const labelId = `${id}-etiqueta`;
   const helpId = `${id}-ayuda`;
   const errorId = `${id}-error`;
-  const describedBy = [help ? helpId : null, error ? errorId : null]
+  const stateId = `${id}-estado`;
+  const describedBy = [help ? helpId : null, error ? errorId : null, stateId]
     .filter(Boolean)
     .join(" ");
-  const stateLabel = checked ? "Sí, se puede vender." : "No se puede vender.";
+  const stateLabel = checked ? onLabel : offLabel;
 
   return (
     <div>
@@ -230,7 +239,7 @@ export function SwitchField({
           aria-describedby={describedBy || undefined}
           aria-invalid={error ? true : undefined}
           aria-labelledby={labelId}
-          className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`relative inline-flex h-11 min-h-11 w-14 min-w-11 shrink-0 items-center rounded-full border transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${
             checked
               ? "border-olive bg-olive hover:bg-[color-mix(in_srgb,var(--olive)_85%,var(--ink))]"
               : "border-ink/60 bg-ink/50 hover:bg-ink/60"
@@ -256,10 +265,11 @@ export function SwitchField({
         className={`mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold ${
           checked ? "text-ink" : "text-muted"
         }`}
+        id={stateId}
       >
         <Icon
           className={checked ? "text-olive" : undefined}
-          name={checked ? "check" : "close"}
+          name={checked ? onIcon : offIcon}
           size={14}
         />
         {stateLabel}

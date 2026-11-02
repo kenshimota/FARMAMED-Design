@@ -805,6 +805,50 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/tipos-metodo-pago",
   },
   {
+    path: "/app/terminos-de-pago",
+    title: "Términos de pago",
+    label: "Términos de pago",
+    group: "Finanzas",
+    module: "terminos_pago",
+    icon: "clock",
+    description:
+      "Condiciones de contado y crédito que definen el vencimiento de las facturas.",
+    navigation: true,
+  },
+  {
+    path: "/app/terminos-de-pago/nueva",
+    title: "Nuevo término de pago",
+    label: "Nuevo término",
+    group: "Finanzas",
+    module: "terminos_pago",
+    icon: "clock",
+    description:
+      "Registra un término de contado o crédito con su código y días.",
+    parent: "/app/terminos-de-pago",
+  },
+  {
+    path: "/app/terminos-de-pago/[id]",
+    title: "Detalle del término de pago",
+    label: "Detalle del término",
+    group: "Finanzas",
+    module: "terminos_pago",
+    icon: "clock",
+    description:
+      "Consulta el código, los días y el estado de un término de pago.",
+    parent: "/app/terminos-de-pago",
+  },
+  {
+    path: "/app/terminos-de-pago/[id]/editar",
+    title: "Editar término de pago",
+    label: "Editar término",
+    group: "Finanzas",
+    module: "terminos_pago",
+    icon: "clock",
+    description:
+      "Actualiza el nombre, la descripción, los días y el estado de un término.",
+    parent: "/app/terminos-de-pago/[id]",
+  },
+  {
     path: "/app/usuarios",
     title: "Usuarios",
     label: "Usuarios",
