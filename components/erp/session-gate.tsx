@@ -28,14 +28,18 @@ type SessionState =
   | { status: "forbidden" }
   | { status: "error" };
 
-// CLI-03 agregará "/app/tienda" cuando exista.
+// CLI-03, CLI-04 y CLI-05 completan tienda, carrito y mis pedidos. Las rutas
+// ya están admitidas para que el portal del cliente no bloquee su navegación.
 const CUSTOMER_ROUTES = new Set([
   "/app",
   "/app/cuenta",
   "/app/cuenta-incompleta",
+  "/app/tienda",
+  "/app/carrito",
+  "/app/finalizar-pedido",
 ]);
 
-const CUSTOMER_ROUTE_PREFIXES = ["/app/mis-pedidos"];
+const CUSTOMER_ROUTE_PREFIXES = ["/app/tienda", "/app/mis-pedidos"];
 
 function isCustomerRoute(pathname: string) {
   const normalized =

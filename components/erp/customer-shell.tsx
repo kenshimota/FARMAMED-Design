@@ -13,15 +13,18 @@ type CustomerNavItem = {
   href?: string;
   icon: IconName;
   hint?: string;
+  activeWhen?: readonly string[];
 };
 
-// CLI-03 habilitará "Tienda": reemplazar el hint por href.
+// CLI-03, CLI-04 y CLI-05 completan tienda, carrito y mis pedidos.
 const NAV_ITEMS: readonly CustomerNavItem[] = [
   { label: "Inicio", href: "/app", icon: "home" },
+  { label: "Tienda", href: "/app/tienda", icon: "cart" },
   {
-    label: "Tienda",
+    label: "Carrito",
+    href: "/app/carrito",
     icon: "cart",
-    hint: "Disponible cuando el catálogo esté habilitado",
+    activeWhen: ["/app/finalizar-pedido"],
   },
   { label: "Mis pedidos", href: "/app/mis-pedidos", icon: "clipboard" },
   { label: "Mi cuenta", href: "/app/cuenta", icon: "user" },
@@ -43,7 +46,9 @@ function CustomerNavigation() {
     <ul className="grid grid-cols-2 gap-1 md:flex md:flex-wrap md:items-center md:gap-1">
       {NAV_ITEMS.map((item) => {
         const active =
-          item.href !== undefined && isActivePath(pathname, item.href);
+          item.href !== undefined &&
+          (isActivePath(pathname, item.href) ||
+            item.activeWhen?.includes(pathname) === true);
 
         return (
           <li className="min-w-0" key={item.label}>
