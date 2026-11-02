@@ -140,6 +140,18 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El código debe tener entre 2 y 30 caracteres y usar solo mayúsculas, números o guion bajo.",
   "description must have at most 255 characters":
     "La descripción no puede superar los 255 caracteres.",
+  "rate must be between 0 and 100":
+    "La tasa debe estar entre 0 y 100.",
+  "rate must have at most 2 decimals":
+    "La tasa debe tener máximo dos decimales.",
+  "rate must be a number": "La tasa debe ser un número.",
+  "name must be between 2 and 100 characters":
+    "El nombre debe tener entre 2 y 100 caracteres.",
+  "code must match ^[A-Za-z0-9_]{2,20}$":
+    "El código debe tener entre 2 y 20 caracteres y usar solo letras, números o guion bajo.",
+  "is_active must be a boolean": "El estado debe ser activo o inactivo.",
+  "code, name and rate are required": "Completa código, nombre y tasa.",
+  "at least one field is required": "Indica al menos un cambio para guardar.",
   "code must match ^[a-z][a-z0-9_]{1,29}$":
     "El código debe empezar con una letra y usar solo minúsculas, números o guion bajo, entre 2 y 30 caracteres.",
   "invalid days": "Los días deben ser un entero entre 0 y 3650.",

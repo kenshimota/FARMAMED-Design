@@ -5,11 +5,14 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import {
+  activateTax,
+  deactivateTax,
   deleteTax,
   fetchTaxes,
   formatTaxRate,
   type Tax,
 } from "@/lib/finance/taxes-api";
+import { translateApiError, type UiError } from "@/lib/api-errors";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import { RecordsTable, type RecordsTableColumn } from "@/components/erp/records/records-table";
 import { RecordActionButton, RecordActionLink, RecordActions } from "@/components/erp/records/record-actions";
@@ -22,6 +25,14 @@ import { canWriteModule } from "@/lib/permissions";
 import { formatInteger } from "@/lib/format";
 
 const NO_TAXES: Tax[] = [];
+
+type StatusFilter = "all" | "active" | "inactive";
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "active", label: "Activos" },
+  { value: "inactive", label: "Inactivos" },
+];
 
 function taxesLabel(count: number) {
   return count === 1 ? "1 impuesto" : `${formatInteger(count)} impuestos`;
@@ -52,12 +63,16 @@ export default function TaxesPage() {
 
 function TaxesContent({ canWrite }: { canWrite: boolean }) {
   const toast = useToast();
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const resource = useAsyncResource(() => fetchTaxes(statusFilter ? statusFilter === "activos" : undefined), {
-    enabled: true,
-  });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const resource = useAsyncResource(
+    () => fetchTaxes(statusFilter === "all" ? undefined : statusFilter === "active"),
+    { enabled: true },
+  );
   const [query, setQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Tax | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Tax | null>(null);
+  const [inUseTarget, setInUseTarget] = useState<Tax | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const taxes = resource.data ?? NO_TAXES;
 
@@ -71,12 +86,70 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
     );
   }, [query, taxes]);
 
+  function changeStatusFilter(value: StatusFilter) {
+    if (value === statusFilter) return;
+    setStatusFilter(value);
+    resource.reload();
+  }
+
+  function clearFilters() {
+    if (query.trim()) {
+      setQuery("");
+      return;
+    }
+    if (statusFilter !== "all") {
+      setStatusFilter("all");
+      resource.reload();
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     await deleteTax(String(deleteTarget.id));
     toast.success("Impuesto eliminado.");
     resource.reload();
     setDeleteTarget(null);
+  }
+
+  function handleDeleteError(error: UiError) {
+    if (error.status === 409 && deleteTarget) {
+      setInUseTarget(deleteTarget);
+      return;
+    }
+    toast.error(error.message);
+  }
+
+  async function deactivate(tax: Tax) {
+    await deactivateTax(String(tax.id));
+    toast.success("Impuesto desactivado.");
+    resource.reload();
+  }
+
+  async function handleDeactivate() {
+    if (!deactivateTarget) return;
+    await deactivate(deactivateTarget);
+    setDeactivateTarget(null);
+  }
+
+  async function handleDeactivateInUse() {
+    if (!inUseTarget) return;
+    await deactivate(inUseTarget);
+    setInUseTarget(null);
+  }
+
+  async function handleActivate(tax: Tax) {
+    const id = String(tax.id);
+    if (activatingId) return;
+    setActivatingId(id);
+    try {
+      await activateTax(id);
+      toast.success("Impuesto activado.");
+      resource.reload();
+    } catch (caught) {
+      toast.error(translateApiError(caught).message);
+    } finally {
+      setActivatingId(null);
+    }
   }
 
   function renderActions(tax: Tax) {
@@ -89,6 +162,24 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
         >
           Editar
         </RecordActionLink>
+        {tax.is_active ? (
+          <RecordActionButton
+            aria-label={`Desactivar ${tax.code}`}
+            icon="eye-off"
+            onClick={() => setDeactivateTarget(tax)}
+          >
+            Desactivar
+          </RecordActionButton>
+        ) : (
+          <RecordActionButton
+            aria-label={`Activar ${tax.code}`}
+            disabled={activatingId === String(tax.id)}
+            icon="check"
+            onClick={() => void handleActivate(tax)}
+          >
+            Activar
+          </RecordActionButton>
+        )}
         <RecordActionButton
           aria-label={`Eliminar ${tax.code}`}
           danger
@@ -170,7 +261,7 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
             </Link>
           ) : undefined
         }
-        description="Mantén las definiciones de impuestos que se usarán en pedidos futuros. Las compras registran el impuesto como monto por línea y no usan este catálogo."
+        description="Este catálogo se usará en pedidos futuros. Las compras registran el impuesto como monto por línea y no usan este catálogo."
         eyebrow="Finanzas"
         title="Impuestos"
       />
@@ -198,7 +289,7 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
           {resource.status === "refreshing" && <div aria-hidden="true" className="reload-bar" />}
 
           <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(170px,220px)] sm:items-end">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <div className="relative w-full">
                 <label className="sr-only" htmlFor="buscar-impuestos">Buscar impuestos</label>
                 <Icon className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" name="search" size={17} />
@@ -212,24 +303,24 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-[12px] font-semibold text-ink" htmlFor="filtro-estado">
-                  Estado
-                </label>
-                <select
-                  className="h-12 w-full rounded-xl border border-ink/15 bg-surface px-4 text-[14px] text-ink transition-colors hover:border-brand/45 focus:border-brand"
-                  id="filtro-estado"
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value);
-                    resource.reload();
-                  }}
-                  value={statusFilter}
-                >
-                  <option value="">Todos</option>
-                  <option value="activos">Activos</option>
-                  <option value="inactivos">Inactivos</option>
-                </select>
-              </div>
+              <fieldset>
+                <legend className="mb-2 text-[12px] font-semibold text-ink">Estado</legend>
+                <div aria-label="Filtrar impuestos por estado" className="flex flex-wrap gap-2" role="group">
+                  {STATUS_FILTERS.map((filter) => (
+                    <button
+                      aria-pressed={statusFilter === filter.value}
+                      className={`button-base min-h-11 px-4 text-[13px] ${
+                        statusFilter === filter.value ? "button-primary" : "button-secondary"
+                      }`}
+                      key={filter.value}
+                      onClick={() => changeStatusFilter(filter.value)}
+                      type="button"
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
             </div>
 
             <p aria-live="polite" className="mt-4 text-[12px] font-semibold text-muted">
@@ -239,7 +330,7 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
             </p>
           </div>
 
-          {taxes.length === 0 ? (
+          {taxes.length === 0 && statusFilter === "all" ? (
             <EmptyState
               action={
                 canWrite ? (
@@ -257,13 +348,13 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
               action={
                 <button
                   className="button-base button-secondary min-h-11 px-5"
-                  onClick={() => setQuery("")}
+                  onClick={clearFilters}
                   type="button"
                 >
-                  Limpiar búsqueda
+                  {query.trim() ? "Limpiar búsqueda" : "Ver todos"}
                 </button>
               }
-              description="No hay impuestos que coincidan con la búsqueda."
+              description="No hay impuestos que coincidan con el filtro."
               title="Sin resultados"
             />
           ) : (
@@ -294,9 +385,49 @@ function TaxesContent({ canWrite }: { canWrite: boolean }) {
         }
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        onError={(error) => toast.error(error.message)}
+        onError={handleDeleteError}
         open={deleteTarget !== null}
-        title={deleteTarget ? `¿Eliminar ${deleteTarget.code}?` : "Eliminar impuesto"}
+        title={deleteTarget ? `¿Eliminar el impuesto ${deleteTarget.code}?` : "Eliminar impuesto"}
+      />
+
+      <ConfirmDialog
+        cancelLabel="Cancelar"
+        confirmLabel="Desactivar impuesto"
+        description={
+          inUseTarget ? (
+            <div className="space-y-2">
+              <p>
+                El impuesto <span className="font-semibold text-ink">{inUseTarget.code}</span> está en uso y no se
+                puede eliminar.
+              </p>
+              <p>Puedes desactivarlo para dejar de ofrecerlo en pedidos futuros; no se borrará.</p>
+            </div>
+          ) : undefined
+        }
+        onClose={() => setInUseTarget(null)}
+        onConfirm={handleDeactivateInUse}
+        onError={(error) => toast.error(error.message)}
+        open={inUseTarget !== null}
+        title={inUseTarget ? `No puedes eliminar el impuesto ${inUseTarget.code}` : "Impuesto en uso"}
+      />
+
+      <ConfirmDialog
+        confirmLabel="Desactivar impuesto"
+        description={
+          deactivateTarget ? (
+            <div className="space-y-2">
+              <p>
+                Código: <span className="font-semibold text-ink">{deactivateTarget.code}</span>
+              </p>
+              <p>Dejará de ofrecerse en pedidos futuros, pero no se borrará.</p>
+            </div>
+          ) : undefined
+        }
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={handleDeactivate}
+        onError={(error) => toast.error(error.message)}
+        open={deactivateTarget !== null}
+        title={deactivateTarget ? `¿Desactivar el impuesto ${deactivateTarget.code}?` : "Desactivar impuesto"}
       />
     </div>
   );

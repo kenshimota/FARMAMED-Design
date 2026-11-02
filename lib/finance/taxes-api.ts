@@ -149,6 +149,14 @@ export async function deleteTax(id: string) {
   });
 }
 
+export function deactivateTax(id: string) {
+  return updateTax(id, { is_active: false });
+}
+
+export function activateTax(id: string) {
+  return updateTax(id, { is_active: true });
+}
+
 export function formatTaxRate(value: number) {
   return value.toFixed(2).replace(".", ",") + " %";
 }

@@ -11,7 +11,7 @@ import {
   type TaxUpdate,
 } from "@/lib/finance/taxes-api";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
-import { TextAreaField, TextField } from "@/components/erp/records/form-controls";
+import { SwitchField, TextAreaField, TextField } from "@/components/erp/records/form-controls";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import {
   focusFirstInvalidField,
@@ -31,16 +31,32 @@ function normalizeCode(value: string) {
   return value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "");
 }
 
+function normalizeRate(value: string) {
+  return value.replace(/,/g, ".");
+}
+
 function validateRate(value: string) {
-  if (value.trim() === "") return "La tasa es obligatoria.";
-  const parsed = Number(value);
-  if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+  const trimmed = value.trim();
+  if (trimmed === "") return "La tasa es obligatoria.";
+  if (!/^\d+(\.\d*)?$/.test(trimmed)) {
+    return "La tasa debe ser un número entre 0 y 100.";
+  }
+  const decimals = trimmed.split(".")[1]?.length ?? 0;
+  if (decimals > 2) return "La tasa debe tener máximo dos decimales.";
+  const parsed = Number(trimmed);
+  if (parsed < 0 || parsed > 100) {
     return "La tasa debe estar entre 0 y 100.";
   }
-  const decimals = value.includes(".") ? value.split(".")[1].length : 0;
-  if (decimals > 2) return "La tasa debe tener máximo dos decimales.";
   return null;
 }
+
+const FIELD_LABELS: Record<string, string> = {
+  code: "Código",
+  name: "Nombre",
+  rate: "Tasa",
+  description: "Descripción",
+  is_active: "Disponibilidad",
+};
 
 export function TaxForm({ mode, tax }: TaxFormProps) {
   const router = useRouter();
@@ -63,7 +79,8 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
         rate !== String(tax?.rate ?? "") ||
         description !== (tax?.description ?? "") ||
         isActive !== (tax?.is_active ?? true))) ||
-      (!isEdit && (code.trim() || name.trim() || rate.trim() || description.trim())),
+      (!isEdit &&
+        (code.trim() || name.trim() || rate.trim() || description.trim() || !isActive)),
   );
 
   useUnsavedChangesWarning(hasChanges && !busy);
@@ -74,22 +91,36 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
   const descriptionId = useId();
   const activeId = useId();
 
+  const fieldIds = useMemo<Record<string, string>>(
+    () => ({
+      code: codeId,
+      name: nameId,
+      rate: rateId,
+      description: descriptionId,
+      is_active: activeId,
+    }),
+    [codeId, nameId, rateId, descriptionId, activeId],
+  );
+
   const errors: FormErrorItem[] = useMemo(() => {
     const list: FormErrorItem[] = [];
     if (!isEdit) {
       if (code.trim().length < 2 || code.trim().length > 20) {
-        list.push({ fieldId: codeId, label: "Código", message: "El código debe tener entre 2 y 20 caracteres alfanuméricos." });
+        list.push({ fieldId: codeId, label: "Código", message: "El código debe tener entre 2 y 20 caracteres y usar solo letras, números o guion bajo." });
       }
     }
-    if (name.trim().length < 2) {
-      list.push({ fieldId: nameId, label: "Nombre", message: "El nombre es obligatorio." });
+    if (name.trim().length < 2 || name.trim().length > 100) {
+      list.push({ fieldId: nameId, label: "Nombre", message: "El nombre debe tener entre 2 y 100 caracteres." });
     }
     const rateError = validateRate(rate);
     if (rateError) {
       list.push({ fieldId: rateId, label: "Tasa", message: rateError });
     }
+    if (description.trim().length > 255) {
+      list.push({ fieldId: descriptionId, label: "Descripción", message: "La descripción no puede superar los 255 caracteres." });
+    }
     return list;
-  }, [code, name, rate, isEdit, codeId, nameId, rateId]);
+  }, [code, name, rate, description, isEdit, codeId, nameId, rateId, descriptionId]);
 
   const visibleErrors = useMemo(() => {
     const result: Record<string, string> = {};
@@ -97,10 +128,32 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
       if (touched[error.fieldId]) result[error.fieldId] = error.message;
     }
     for (const [field, message] of Object.entries(fieldErrors)) {
-      result[field] = message;
+      const id = fieldIds[field];
+      if (id) result[id] = message;
     }
     return result;
-  }, [errors, touched, fieldErrors]);
+  }, [errors, touched, fieldErrors, fieldIds]);
+
+  const apiErrorItems = useMemo<FormErrorItem[]>(
+    () =>
+      Object.entries(fieldErrors)
+        .filter(([field]) => fieldIds[field])
+        .map(([field, message]) => ({
+          fieldId: fieldIds[field],
+          label: FIELD_LABELS[field] ?? field,
+          message,
+        })),
+    [fieldErrors, fieldIds],
+  );
+
+  function clearFieldError(field: string) {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -170,15 +223,30 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
             </div>
           )}
 
-          <FormErrorSummary errors={errors.filter((error) => touched[error.fieldId])} />
+          <FormErrorSummary
+            errors={[...errors.filter((error) => touched[error.fieldId]), ...apiErrorItems]}
+          />
 
-          {!isEdit && (
+          {isEdit ? (
+            <TextField
+              help="El código no se puede cambiar."
+              id={codeId}
+              label="Código"
+              onChange={() => undefined}
+              readOnly
+              value={tax?.code ?? ""}
+            />
+          ) : (
             <TextField
               error={visibleErrors[codeId]}
               id={codeId}
               label="Código"
+              maxLength={20}
               onBlur={() => setTouched((current) => ({ ...current, [codeId]: true }) as Record<string, boolean>)}
-              onChange={(value) => setCode(normalizeCode(value))}
+              onChange={(value) => {
+                clearFieldError("code");
+                setCode(normalizeCode(value));
+              }}
               placeholder="IVA"
               required
               value={code}
@@ -189,8 +257,12 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
             error={visibleErrors[nameId]}
             id={nameId}
             label="Nombre"
+            maxLength={100}
             onBlur={() => setTouched((current) => ({ ...current, [nameId]: true }) as Record<string, boolean>)}
-            onChange={setName}
+            onChange={(value) => {
+              clearFieldError("name");
+              setName(value);
+            }}
             placeholder="Impuesto al valor agregado"
             required
             value={name}
@@ -198,13 +270,15 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
 
           <TextField
             error={visibleErrors[rateId]}
-            help="Porcentaje con hasta dos decimales. Ejemplo: 16,00 significa 16 %."
+            help="Porcentaje entre 0 y 100 con hasta dos decimales. Acepta coma o punto; en el listado se mostrará como 16,00 %."
             id={rateId}
+            inputMode="decimal"
             label="Tasa"
+            maxLength={6}
             onBlur={() => setTouched((current) => ({ ...current, [rateId]: true }) as Record<string, boolean>)}
             onChange={(value) => {
-              const sanitized = value.replace(/[^0-9.]/g, "");
-              setRate(sanitized);
+              clearFieldError("rate");
+              setRate(normalizeRate(value));
             }}
             placeholder="16,00"
             required
@@ -212,41 +286,35 @@ export function TaxForm({ mode, tax }: TaxFormProps) {
           />
 
           <TextAreaField
+            error={visibleErrors[descriptionId]}
             id={descriptionId}
             label="Descripción"
-            onChange={setDescription}
+            maxLength={255}
+            onChange={(value) => {
+              clearFieldError("description");
+              setDescription(value);
+            }}
             placeholder="Descripción opcional del impuesto"
             value={description}
           />
 
-          {isEdit && (
-            <div className="flex items-center justify-between rounded-xl border border-line bg-background p-4">
-              <div>
-                <label className="block text-[13px] font-semibold text-ink" htmlFor={activeId}>
-                  Disponible para futuros pedidos
-                </label>
-                <p className="mt-1 text-[12px] leading-5 text-muted">
-                  Los impuestos inactivos no se ofrecerán en pedidos futuros.
-                </p>
-              </div>
-              <button
-                aria-checked={isActive}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                  isActive ? "bg-brand" : "bg-muted/40"
-                }`}
-                id={activeId}
-                onClick={() => setIsActive((current) => !current)}
-                role="switch"
-                type="button"
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-surface shadow transition-transform ${
-                    isActive ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-          )}
+          <SwitchField
+            checked={isActive}
+            error={visibleErrors[activeId]}
+            help={
+              isEdit
+                ? "Los impuestos inactivos no se ofrecerán en pedidos futuros."
+                : "Puedes crearlo inactivo y activarlo más adelante."
+            }
+            id={activeId}
+            label="Disponible para futuros pedidos"
+            offLabel="No disponible"
+            onChange={(checked) => {
+              clearFieldError("is_active");
+              setIsActive(checked);
+            }}
+            onLabel="Disponible"
+          />
         </div>
 
         <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
