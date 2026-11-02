@@ -264,7 +264,7 @@ export function ErpShell({ children }: { children: ReactNode }) {
             <AccountMenu onLogout={logout} user={user} />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1280px] p-4 sm:p-6 xl:p-8" id="contenido" tabIndex={-1}>
+        <main className="w-full p-4 sm:p-6 xl:p-8" id="contenido" tabIndex={-1}>
           {allowed ? children : <AccessState />}
         </main>
       </div>

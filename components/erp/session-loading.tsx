@@ -1,19 +1,30 @@
 import { Brand } from "@/components/brand";
 import { Skeleton, SkeletonText } from "@/components/erp/ui/skeleton";
 
-export function SessionLoading() {
+type SessionLoadingVariant = "erp" | "customer";
+
+export function SessionLoading({
+  variant = "erp",
+}: {
+  variant?: SessionLoadingVariant;
+}) {
+  const containerClassName =
+    variant === "customer" ? "mx-auto w-full max-w-[1180px]" : "w-full";
+
   return (
     <div aria-busy="true" className="min-h-screen bg-background">
       <a className="skip-link" href="#contenido">
         Saltar al contenido
       </a>
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex min-h-16 w-full max-w-[1180px] items-center px-4 sm:px-6 lg:px-8">
+        <div
+          className={`${containerClassName} flex min-h-16 items-center px-4 sm:px-6 lg:px-8`}
+        >
           <Brand />
         </div>
       </header>
       <main
-        className="mx-auto w-full max-w-[1180px] px-4 py-6 outline-none sm:px-6 sm:py-8 lg:px-8 lg:py-10"
+        className={`${containerClassName} px-4 py-6 outline-none sm:px-6 sm:py-8 lg:px-8 lg:py-10`}
         id="contenido"
         tabIndex={-1}
       >
