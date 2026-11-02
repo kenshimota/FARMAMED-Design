@@ -9,16 +9,19 @@ import {
 
 type ImageDeleteDialogProps = {
   image: ImageRecord | null;
+  imageName: string | null;
   onClose: () => void;
   onDeleted: () => void;
 };
 
 export function ImageDeleteDialog({
   image,
+  imageName,
   onClose,
   onDeleted,
 }: ImageDeleteDialogProps) {
   const toast = useToast();
+  const displayName = imageName ?? "seleccionada";
 
   return (
     <ConfirmDialog
@@ -28,8 +31,8 @@ export function ImageDeleteDialog({
         image ? (
           <div className="space-y-2">
             <p>
-              Referencia:{" "}
-              <span className="font-semibold text-ink">{image.reference}</span>
+              Imagen:{" "}
+              <span className="font-semibold text-ink">{displayName}</span>
             </p>
             <p>Esta acción no se puede deshacer.</p>
           </div>
@@ -51,9 +54,7 @@ export function ImageDeleteDialog({
       }
       open={image !== null}
       title={
-        image
-          ? `¿Eliminar la imagen ${image.reference}?`
-          : "Eliminar imagen"
+        image ? `¿Eliminar la imagen ${displayName}?` : "Eliminar imagen"
       }
     />
   );

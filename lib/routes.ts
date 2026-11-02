@@ -59,7 +59,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     group: "Catálogo",
     module: "catalogo",
     icon: "package",
-    description: "Registra un producto con su categoría e imagen.",
+    description: "Registra un producto con su categoría y una imagen nueva o existente.",
     parent: "/app/productos",
   },
   {
@@ -79,7 +79,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     group: "Catálogo",
     module: "catalogo",
     icon: "package",
-    description: "Actualiza los datos registrados de un producto.",
+    description: "Actualiza los datos de un producto y su imagen.",
     parent: "/app/productos",
   },
   {

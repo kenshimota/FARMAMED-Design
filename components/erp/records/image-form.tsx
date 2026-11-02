@@ -38,7 +38,10 @@ import {
   RecordsFormSkeleton,
   RecordsLoadError,
 } from "@/components/erp/records/record-states";
-import { isPositiveRecordId } from "@/components/erp/records/records-api";
+import {
+  isOpaqueImageReference,
+  isPositiveRecordId,
+} from "@/components/erp/records/records-api";
 import { ApiError } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
 import { canWriteModule } from "@/lib/permissions";
@@ -329,6 +332,24 @@ function ImageFormContent({ mode, imageId }: ImageFormPageProps) {
               ? "No encontramos esta imagen"
               : "No pudimos cargar la imagen"
           }
+        />
+      </div>
+    );
+  }
+
+  if (
+    editing &&
+    imageResource.data &&
+    isOpaqueImageReference(imageResource.data.reference)
+  ) {
+    return (
+      <div className="space-y-5">
+        {header}
+        <RecordsLoadError
+          backHref="/app/imagenes"
+          backLabel="Volver a imágenes"
+          description="Esta imagen se generó al subir un archivo desde el formulario de producto. Para reemplazarla, edita el producto y sube una imagen nueva."
+          title="Imagen generada desde un producto"
         />
       </div>
     );

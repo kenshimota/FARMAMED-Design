@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -21,9 +28,13 @@ import {
   productSummaryItems,
   type ProductFieldKey,
 } from "@/components/erp/records/product-errors";
+import {
+  ProductImageField,
+  type ProductImageMode,
+  type ProductImageValidation,
+} from "@/components/erp/records/product-image-field";
 import { SelectField, TextAreaField, TextField } from "@/components/erp/records/form-controls";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
-import { RecordThumbnail } from "@/components/erp/records/record-thumbnail";
 import {
   RecordsFormSkeleton,
   RecordsLoadError,
@@ -32,8 +43,6 @@ import {
   fetchCategories,
   fetchImages,
   fetchProduct,
-  findById,
-  getImagePreviewSource,
   isPositiveRecordId,
   parseProduct,
   toApiId,
@@ -69,10 +78,13 @@ const COPY = {
   referenceRequired: "Ingresa la referencia.",
   referenceTooLong: `La referencia no puede superar los ${REFERENCE_MAX_LENGTH} caracteres.`,
   categoryRequired: "Selecciona una categoría.",
-  imageRequired: "Selecciona una imagen.",
+  imageRequired: "Selecciona una imagen o elige una existente.",
+  imageTooLarge: "La imagen supera los 5 MB.",
+  unexpectedFile:
+    "No pudimos enviar el archivo. Revisa los datos del formulario e intenta de nuevo.",
   missingData: "Faltan datos obligatorios. Revisa el formulario.",
   duplicate: "Ya existe un producto con esa referencia.",
-  forbidden: "No tienes permisos para guardar productos.",
+  forbidden: "No tienes permiso para editar productos.",
   notFound: "No encontramos este producto. Puede que haya sido eliminado.",
   session: "Tu sesión expiró. Inicia sesión de nuevo.",
   validation: "Revisa los datos del formulario.",
@@ -119,6 +131,25 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
   const [showSummary, setShowSummary] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [imageMode, setImageMode] = useState<ProductImageMode>("upload");
+  const [initialImageMode, setInitialImageMode] =
+    useState<ProductImageMode>("upload");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [fileValidation, setFileValidation] = useState<ProductImageValidation>({
+    checking: false,
+    error: null,
+  });
+  const filePreviewUrlRef = useRef<string | null>(null);
+  const fileChecking = fileValidation.checking;
+
+  useEffect(() => {
+    return () => {
+      if (filePreviewUrlRef.current) {
+        URL.revokeObjectURL(filePreviewUrlRef.current);
+      }
+    };
+  }, []);
 
   const product = productResource.data;
   const categories = categoriesResource.data ?? [];
@@ -126,7 +157,6 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
   const categoriesReady = categoriesResource.data !== null && categoriesResource.status !== "error";
   const imagesReady = imagesResource.data !== null && imagesResource.status !== "error";
   const categoriesLoading = categoriesResource.status === "loading";
-  const imagesLoading = imagesResource.status === "loading";
 
   if (product) {
     const key = String(product.id);
@@ -138,30 +168,31 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
         category_id: String(product.category_id),
         image_id: String(product.image_id),
       };
+      const nextImageMode: ProductImageMode = product.image_id
+        ? "existing"
+        : "upload";
       setValues(next);
       setInitialValues(next);
+      setImageMode(nextImageMode);
+      setInitialImageMode(nextImageMode);
+      setSelectedFile(null);
+      setFileValidation({ checking: false, error: null });
       setInitializedFor(key);
     }
   }
 
   const dirty = useMemo(
-    () => JSON.stringify(values) !== JSON.stringify(initialValues),
-    [initialValues, values],
+    () =>
+      JSON.stringify(values) !== JSON.stringify(initialValues) ||
+      imageMode !== initialImageMode ||
+      selectedFile !== null,
+    [imageMode, initialImageMode, initialValues, selectedFile, values],
   );
   useUnsavedChangesWarning(dirty && !submitting);
-
-  const selectedImage = findById(images, values.image_id);
-  const selectedImageSource = getImagePreviewSource(selectedImage);
-  const hasSelectedImageId = Boolean(values.image_id);
-  const previewLoading = imagesLoading;
 
   const categoryOptions = categories.map((category) => ({
     value: String(category.id),
     label: category.name,
-  }));
-  const imageOptions = images.map((image) => ({
-    value: String(image.id),
-    label: image.reference,
   }));
 
   function clearFieldError(field: ProductFieldKey) {
@@ -179,6 +210,51 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
     clearFieldError(field);
   }
 
+  function handleImageModeChange(nextMode: ProductImageMode) {
+    setImageMode(nextMode);
+    setMessage(null);
+  }
+
+  function handleSelectedImageIdChange(imageId: string) {
+    setValues((current) => ({ ...current, image_id: imageId }));
+    setMessage(null);
+    clearFieldError("image");
+  }
+
+  function releaseFilePreview() {
+    if (filePreviewUrlRef.current) {
+      URL.revokeObjectURL(filePreviewUrlRef.current);
+      filePreviewUrlRef.current = null;
+    }
+  }
+
+  function handleFileSelected(file: File | null) {
+    setSelectedFile(file);
+    setMessage(null);
+    releaseFilePreview();
+    if (file) {
+      const url = URL.createObjectURL(file);
+      filePreviewUrlRef.current = url;
+      setFilePreviewUrl(url);
+    } else {
+      setFilePreviewUrl(null);
+    }
+    clearFieldError("image");
+  }
+
+  function handleFileValidationChange(validation: ProductImageValidation) {
+    setFileValidation(validation);
+    setErrors((current) => {
+      if (!validation.error) {
+        if (!current.image) return current;
+        const next = { ...current };
+        delete next.image;
+        return next;
+      }
+      return { ...current, image: validation.error };
+    });
+  }
+
   function validate() {
     const next: Record<string, string> = {};
     if (!values.name.trim()) next.name = COPY.nameRequired;
@@ -192,14 +268,22 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
     }
 
     if (!values.category_id) next.category_id = COPY.categoryRequired;
-    if (!values.image_id) next.image_id = COPY.imageRequired;
+
+    if (imageMode === "upload") {
+      if (fileValidation.error) next.image = fileValidation.error;
+      else if (!selectedFile) next.image = COPY.imageRequired;
+    } else if (!values.image_id) {
+      next.image = COPY.imageRequired;
+    }
+
     return next;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
-    if (!categoriesReady || !imagesReady) return;
+    if (submitting || fileChecking) return;
+    if (!categoriesReady) return;
+    if (imageMode === "existing" && !imagesReady) return;
 
     const nextErrors = validate();
     if (Object.keys(nextErrors).length > 0) {
@@ -215,13 +299,29 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
     setShowSummary(false);
     setMessage(null);
 
-    const payload = {
-      name: values.name.trim(),
-      description: values.description.trim(),
-      reference: values.reference.trim(),
-      category_id: toApiId(values.category_id),
-      image_id: toApiId(values.image_id),
-    };
+    const name = values.name.trim();
+    const description = values.description.trim();
+    const reference = values.reference.trim();
+    const categoryId = String(toApiId(values.category_id));
+
+    let body: FormData | string;
+    if (imageMode === "upload" && selectedFile) {
+      const formData = new FormData();
+      formData.set("name", name);
+      formData.set("description", description);
+      formData.set("reference", reference);
+      formData.set("category_id", categoryId);
+      formData.set("image", selectedFile);
+      body = formData;
+    } else {
+      body = JSON.stringify({
+        name,
+        description,
+        reference,
+        category_id: toApiId(values.category_id),
+        image_id: toApiId(values.image_id),
+      });
+    }
 
     try {
       const response = await apiFetch<unknown>(
@@ -229,18 +329,37 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
         {
           method: editing ? "PUT" : "POST",
           token: getStoredToken() ?? undefined,
-          body: JSON.stringify(payload),
+          body,
         },
       );
       const saved = parseProduct(response);
-      toast.success(editing ? "Cambios guardados." : "Producto creado.");
-      setInitialValues(values);
+      const savedImageId = saved?.image_id
+        ? String(saved.image_id)
+        : values.image_id;
+      const nextValues = { ...values, image_id: savedImageId };
+      toast.success("Producto guardado.");
+      setValues(nextValues);
+      setInitialValues(nextValues);
+      setInitialImageMode(imageMode);
+      setSelectedFile(null);
+      releaseFilePreview();
+      setFilePreviewUrl(null);
+      setFileValidation({ checking: false, error: null });
       const targetId = saved?.id ?? productId;
       router.push(targetId ? `/app/productos/${targetId}` : "/app/productos");
     } catch (caught) {
       if (caught instanceof ApiError) {
         if (caught.status === 400) {
-          setMessage(COPY.missingData);
+          const rawMessage = caught.message.toLowerCase();
+          if (rawMessage.includes("image or image_id")) {
+            setErrors({ image: COPY.imageRequired });
+            setShowSummary(true);
+            window.requestAnimationFrame(() => focusFirstInvalidField());
+          } else if (rawMessage.includes("unexpected field")) {
+            setMessage(COPY.unexpectedFile);
+          } else {
+            setMessage(COPY.missingData);
+          }
         } else if (caught.status === 401) {
           setMessage(COPY.session);
         } else if (caught.status === 403) {
@@ -253,12 +372,17 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
             caught.message.toLowerCase().includes("already exists");
           if (duplicate) {
             setErrors({ reference: COPY.duplicate });
-            setShowSummary(true);
-            setMessage(COPY.duplicate);
+            setShowSummary(false);
+            setMessage(null);
             window.requestAnimationFrame(() => focusFirstInvalidField());
           } else {
             setMessage(translateApiError(caught).message);
           }
+        } else if (caught.status === 413) {
+          setErrors({ image: COPY.imageTooLarge });
+          setShowSummary(false);
+          setMessage(null);
+          window.requestAnimationFrame(() => focusFirstInvalidField());
         } else if (caught.status === 422) {
           const mapped = mapProductFieldErrors(caught);
           if (Object.keys(mapped).length > 0) {
@@ -275,6 +399,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
       } else {
         setMessage(COPY.generic);
       }
+    } finally {
       setSubmitting(false);
     }
   }
@@ -292,8 +417,8 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
       }
       description={
         editing
-          ? "Actualiza los datos reales del producto. Los cambios reemplazan los cinco campos."
-          : "Registra un producto con su categoría y su imagen existentes."
+          ? "Actualiza los datos reales del producto. Puedes subir una imagen nueva o conservar una existente."
+          : "Registra un producto con su categoría y una imagen nueva o existente."
       }
       eyebrow="Catálogo"
       title={headerTitle}
@@ -330,7 +455,9 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
   }
 
   const summaryItems = productSummaryItems(errors);
-  const selectorsReady = categoriesReady && imagesReady;
+  const selectorsReady =
+    categoriesReady && (imageMode === "upload" || imagesReady);
+  const busy = submitting || fileChecking;
 
   return (
     <div className="space-y-5">
@@ -370,109 +497,96 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
           noValidate
           onSubmit={handleSubmit}
         >
-          <div className="grid gap-5 lg:grid-cols-2">
-            <TextField
-              disabled={submitting}
-              error={errors.name}
-              help={`Obligatorio. Máximo ${NAME_MAX_LENGTH} caracteres.`}
-              id={PRODUCT_FIELD_IDS.name}
-              label="Nombre del producto"
-              maxLength={NAME_MAX_LENGTH}
-              onChange={(value) => updateField("name", value)}
-              placeholder="Ej. Ibuprofeno 400 mg"
-              required
-              value={values.name}
-            />
-
-            <TextField
-              disabled={submitting}
-              error={errors.reference}
-              help="Obligatoria y única. Máximo 100 caracteres."
-              id={PRODUCT_FIELD_IDS.reference}
-              label="Referencia"
-              maxLength={REFERENCE_MAX_LENGTH}
-              onChange={(value) => updateField("reference", value)}
-              placeholder="Ej. IBU-400"
-              required
-              value={values.reference}
-            />
-
-            <div className="lg:col-span-2">
-              <TextAreaField
+          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] md:items-start">
+            <div className="grid gap-5 xl:grid-cols-2">
+              <TextField
                 disabled={submitting}
-                error={errors.description}
-                help={`Texto libre. ${values.description.length} caracteres.`}
-                id={PRODUCT_FIELD_IDS.description}
-                label="Descripción"
-                onChange={(value) => updateField("description", value)}
-                placeholder="Describe el producto sin agregar precio, impuesto ni existencias."
+                error={errors.name}
+                help={`Obligatorio. Máximo ${NAME_MAX_LENGTH} caracteres.`}
+                id={PRODUCT_FIELD_IDS.name}
+                label="Nombre del producto"
+                maxLength={NAME_MAX_LENGTH}
+                onChange={(value) => updateField("name", value)}
+                placeholder="Ej. Ibuprofeno 400 mg"
                 required
-                rows={5}
-                value={values.description}
-              />
-            </div>
-
-            <SelectField
-              createHref="/app/categorias"
-              createLabel="Crear categoría"
-              disabled={submitting}
-              error={errors.category_id}
-              help="Selecciona una categoría existente del catálogo."
-              id={PRODUCT_FIELD_IDS.category_id}
-              label="Categoría"
-              loadError={
-                categoriesResource.status === "error" ? COPY.categoriesError : null
-              }
-              loading={categoriesLoading}
-              loadingLabel="Cargando categorías…"
-              onChange={(value) => updateField("category_id", value)}
-              onRetry={categoriesResource.reload}
-              options={categoryOptions}
-              placeholder="Selecciona una categoría"
-              required
-              value={values.category_id}
-            />
-
-            <div>
-              <SelectField
-                createHref="/app/imagenes"
-                createLabel="Registrar imagen"
-                disabled={submitting}
-                error={errors.image_id}
-                help="La imagen se reutiliza desde el catálogo de imágenes."
-                id={PRODUCT_FIELD_IDS.image_id}
-                label="Imagen"
-                loadError={imagesResource.status === "error" ? COPY.imagesError : null}
-                loading={imagesLoading}
-                loadingLabel="Cargando imágenes…"
-                onChange={(value) => updateField("image_id", value)}
-                onRetry={imagesResource.reload}
-                options={imageOptions}
-                placeholder="Selecciona una imagen"
-                required
-                value={values.image_id}
+                value={values.name}
               />
 
-              <div className="mt-3 rounded-2xl border border-line bg-background p-3">
-                <p className="text-[12px] font-semibold text-ink">Vista previa</p>
-                <RecordThumbnail
-                  className="mt-2 h-40 w-full"
-                  label={selectedImage?.reference ?? "vista previa"}
-                  loading={previewLoading}
-                  size="lg"
-                  src={selectedImageSource}
+              <TextField
+                disabled={submitting}
+                error={errors.reference}
+                help="Obligatoria y única. Máximo 100 caracteres."
+                id={PRODUCT_FIELD_IDS.reference}
+                label="Referencia"
+                maxLength={REFERENCE_MAX_LENGTH}
+                onChange={(value) => updateField("reference", value)}
+                placeholder="Ej. IBU-400"
+                required
+                value={values.reference}
+              />
+
+              <div className="xl:col-span-2">
+                <TextAreaField
+                  disabled={submitting}
+                  error={errors.description}
+                  help={`Texto libre. ${values.description.length} caracteres.`}
+                  id={PRODUCT_FIELD_IDS.description}
+                  label="Descripción"
+                  onChange={(value) => updateField("description", value)}
+                  placeholder="Describe el producto sin agregar precio, impuesto ni existencias."
+                  required
+                  rows={5}
+                  value={values.description}
                 />
-                <p aria-live="polite" className="mt-2 text-[11px] leading-5 text-muted">
-                  {previewLoading
-                    ? "Cargando vista previa…"
-                    : selectedImage
-                      ? `Referencia de la imagen: ${selectedImage.reference}`
-                      : hasSelectedImageId
-                        ? "No pudimos cargar la imagen seleccionada."
-                        : "Selecciona una imagen para verla aquí."}
-                </p>
+              </div>
+
+              <div className="xl:col-span-2">
+                <SelectField
+                  createHref="/app/categorias"
+                  createLabel="Crear categoría"
+                  disabled={submitting}
+                  error={errors.category_id}
+                  help="Selecciona una categoría existente del catálogo."
+                  id={PRODUCT_FIELD_IDS.category_id}
+                  label="Categoría"
+                  loadError={
+                    categoriesResource.status === "error"
+                      ? COPY.categoriesError
+                      : null
+                  }
+                  loading={categoriesLoading}
+                  loadingLabel="Cargando categorías…"
+                  onChange={(value) => updateField("category_id", value)}
+                  onRetry={categoriesResource.reload}
+                  options={categoryOptions}
+                  placeholder="Selecciona una categoría"
+                  required
+                  value={values.category_id}
+                />
               </div>
             </div>
+
+            <ProductImageField
+              disabled={submitting}
+              editing={editing}
+              fieldError={errors.image}
+              file={selectedFile}
+              fileChecking={fileChecking}
+              id={PRODUCT_FIELD_IDS.image}
+              images={images}
+              imagesError={
+                imagesResource.status === "error" ? COPY.imagesError : null
+              }
+              imagesStatus={imagesResource.status}
+              mode={imageMode}
+              onFileSelected={handleFileSelected}
+              onFileValidationChange={handleFileValidationChange}
+              onModeChange={handleImageModeChange}
+              onRetryImages={imagesResource.reload}
+              onSelectedImageIdChange={handleSelectedImageIdChange}
+              previewUrl={filePreviewUrl}
+              selectedImageId={values.image_id}
+            />
           </div>
 
           <div className="flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -480,13 +594,13 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
               Cancelar
             </Link>
             <BusyButton
-              busy={submitting}
-              busyLabel="Guardando…"
+              busy={busy}
+              busyLabel={fileChecking ? "Revisando imagen…" : "Guardando…"}
               className="sm:min-w-[180px]"
               disabled={!selectorsReady}
               type="submit"
             >
-              {editing ? "Guardar cambios" : "Crear producto"}
+              {editing ? "Guardar cambios" : "Guardar producto"}
               <Icon name="arrow-right" size={18} />
             </BusyButton>
           </div>

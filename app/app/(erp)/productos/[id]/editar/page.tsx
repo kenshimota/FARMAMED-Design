@@ -3,7 +3,8 @@ import { ProductFormPage } from "@/components/erp/records/product-form";
 
 export const metadata: Metadata = {
   title: "Editar producto",
-  description: "Actualiza los datos registrados de un producto del catálogo de Farmamed.",
+  description:
+    "Actualiza los datos de un producto del catálogo de Farmamed y sube o elige su imagen.",
 };
 
 type EditProductRouteProps = {

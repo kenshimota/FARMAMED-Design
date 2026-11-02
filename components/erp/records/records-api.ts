@@ -136,8 +136,24 @@ export function getImageSource(image: ImageRecord | null | undefined) {
   return image?.thumbnail || image?.url || null;
 }
 
-export function getImagePreviewSource(image: ImageRecord | null | undefined) {
-  return image?.url || image?.thumbnail || null;
+const UUID_PATTERN =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+export function isOpaqueImageReference(reference: string) {
+  return UUID_PATTERN.test(reference.trim());
+}
+
+export function getImageDisplayName(
+  image: ImageRecord | null | undefined,
+  index?: number,
+) {
+  const reference = image?.reference.trim() ?? "";
+  if (!reference || isOpaqueImageReference(reference)) {
+    return typeof index === "number"
+      ? `Imagen de producto ${index + 1}`
+      : "Imagen de producto";
+  }
+  return reference;
 }
 
 export function findById<T extends { id: RecordId }>(items: T[], id: RecordId) {
