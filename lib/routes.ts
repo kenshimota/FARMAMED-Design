@@ -718,6 +718,16 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/usuarios",
   },
   {
+    path: "/app/usuarios/[id]",
+    title: "Detalle del usuario",
+    label: "Detalle del usuario",
+    group: "Administración",
+    module: "usuarios",
+    icon: "users",
+    description: "Consulta la cuenta, su rol y el cliente vinculado al portal.",
+    parent: "/app/usuarios",
+  },
+  {
     path: "/app/roles",
     title: "Roles",
     label: "Roles",
