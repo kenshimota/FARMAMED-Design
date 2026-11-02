@@ -17,6 +17,7 @@ type FormDialogProps = {
   description?: string;
   onClose: () => void;
   closeDisabled?: boolean;
+  mobileFullscreen?: boolean;
   children: ReactNode;
 };
 
@@ -29,6 +30,7 @@ export function FormDialog({
   description,
   onClose,
   closeDisabled = false,
+  mobileFullscreen = false,
   children,
 }: FormDialogProps) {
   const titleId = useId();
@@ -127,9 +129,16 @@ export function FormDialog({
 
   if (!open || typeof document === "undefined") return null;
 
+  const overlayClassName = mobileFullscreen
+    ? "fixed inset-0 z-[95] flex items-stretch justify-center bg-ink/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+    : "fixed inset-0 z-[95] flex items-end justify-center bg-ink/35 p-4 backdrop-blur-[2px] sm:items-center";
+  const panelClassName = mobileFullscreen
+    ? "h-full max-h-full w-full max-w-none overflow-y-auto rounded-none border border-line bg-surface p-6 shadow-[0_24px_80px_rgba(27,12,104,0.24)] sm:h-auto sm:max-h-[min(88vh,860px)] sm:max-w-2xl sm:rounded-[24px] sm:p-8"
+    : "max-h-[min(88vh,860px)] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-line bg-surface p-6 shadow-[0_24px_80px_rgba(27,12,104,0.24)] sm:p-8";
+
   return createPortal(
     <div
-      className="fixed inset-0 z-[95] flex items-end justify-center bg-ink/35 p-4 backdrop-blur-[2px] sm:items-center"
+      className={overlayClassName}
       onClick={handleClose}
       ref={overlayRef}
     >
@@ -138,7 +147,7 @@ export function FormDialog({
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="max-h-[min(88vh,860px)] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-line bg-surface p-6 shadow-[0_24px_80px_rgba(27,12,104,0.24)] sm:p-8"
+        className={panelClassName}
         onClick={(event) => event.stopPropagation()}
         ref={panelRef}
         role="dialog"
