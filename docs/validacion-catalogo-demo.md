@@ -2,15 +2,15 @@
 
 Esta guía reproduce la validación de CAT-10 sobre un entorno con la semilla demo del API (HU-45) cargada. No crea pantallas ni datos: comprueba el comportamiento real de catálogo, tienda, detalle, imágenes y carrito con 100 o más productos.
 
-> **Estado:** pendiente de validación con volumen real. La semilla demo (HU-45), FDN-04 (#94) y CAT-09 (#95) todavía no están integrados. Mientras falten, CAT-10 no debe presentarse como validado con 100+ productos reales: esta rama solo deja preparados los criterios y los ajustes de interfaz que no dependen de esas historias.
+> **Estado:** pendiente de validación con volumen real. FDN-04 (#94) y CAT-09 (#95) ya están integrados en esta rama. La semilla demo (HU-45) sigue pendiente, así que CAT-10 no debe presentarse como validado con 100+ productos reales: quedan preparados los criterios y los ajustes de interfaz.
 
 ## Dependencias
 
 | Dependencia | Estado en esta rama | Efecto en la validación |
 | --- | --- | --- |
 | HU-45 del API y `seed:demo` ejecutada | Pendiente | Sin la semilla no hay 100+ productos que validar; la validación con volumen real queda bloqueada. |
-| FDN-04 (paginación y filtros en servidor, #94) | Pendiente | La interfaz sigue descargando listas planas y filtrando en el navegador. No se validan páginas, rangos ni `meta.total` todavía. |
-| CAT-09 (impuesto por producto, #95) | Pendiente | El detalle y el listado no muestran impuesto en esta rama. |
+| FDN-04 (paginación y filtros en servidor, #94) | Integrada | La interfaz solicita páginas, búsqueda y filtros al servidor. Falta validar páginas, rangos y `meta.total` con la semilla cargada. |
+| CAT-09 (impuesto por producto, #95) | Integrada | El listado y el detalle muestran el impuesto del producto. |
 | CAT-08 y CLI-03 | Integradas | Aportan miniaturas, tienda y carrito. |
 | Entorno con la semilla cargada | Pendiente | Requiere acceso autenticado a la API de demostración. |
 
@@ -60,7 +60,8 @@ done
 ### Catálogo interno (`/app/productos`)
 
 - [ ] Con 100+ productos, la primera pantalla muestra la tabla en escritorio y tarjetas en móvil.
-- [ ] Hasta que se integre FDN-04, `/app/productos` sigue descargando `/products` y `/images` completos y filtrando en el navegador. No se validan paginación, `meta.total` ni el tamaño de la respuesta.
+- [ ] La primera página se solicita con `page` y `page_size`; no se descargan los 100+ productos ni el catálogo completo de imágenes.
+- [ ] El contador muestra el rango «Mostrando {desde}–{hasta} de {total}» y la paginación permite recorrer todas las páginas.
 - [ ] La búsqueda por nombre o referencia reduce el listado y el contador cambia.
 - [ ] El filtro de categoría reduce el listado y el contador cambia.
 - [ ] «Limpiar filtros» restaura el listado y el contador.
@@ -76,7 +77,7 @@ done
 ### Tienda del cliente (`/app/tienda`)
 
 - [ ] Con 100+ productos, la retícula muestra 1 columna en móvil, 2 en tableta y 3–4 en escritorio.
-- [ ] Hasta que se integre FDN-04, `/app/tienda` sigue descargando `/store/products` completo y filtrando en el navegador.
+- [ ] `/app/tienda` solicita solo la página visible con `page` y `page_size`, y la paginación respeta el tamaño elegido.
 - [ ] El esqueleto de carga muestra 12 tarjetas y conserva la retícula.
 - [ ] La búsqueda y el filtro de categoría actualizan el contador visible.
 - [ ] El filtro de estado vendible recarga el listado y conserva el estado del formulario.
@@ -111,7 +112,7 @@ done
 
 ### Accesibilidad y movimiento
 
-- [ ] Todos los filtros, paginación futura, tarjetas y acciones se pueden usar con teclado.
+- [ ] Todos los filtros, la paginación, las tarjetas y las acciones se pueden usar con teclado.
 - [ ] El foco visible se conserva en enlaces, botones y campos.
 - [ ] Los contadores se anuncian con `aria-live="polite"`.
 - [ ] Las imágenes tienen texto alternativo útil y los marcadores tienen nombre accesible.
@@ -127,15 +128,14 @@ done
 
 Comprueba que las miniaturas mantengan su espacio antes y después de cargar. No debe haber saltos de layout al aparecer las imágenes.
 
-## Pendiente de la semilla demo, FDN-04 y CAT-09
+## Pendiente de la semilla demo
 
-CAT-10 queda documentado, pero **no validado con volumen real**. La semilla demo (HU-45), FDN-04 (#94) y CAT-09 (#95) siguen pendientes. Cuando se integren, repite la validación con estos criterios adicionales:
+CAT-10 queda documentado, pero **no validado con volumen real**. La semilla demo (HU-45) sigue pendiente. FDN-04 y CAT-09 ya están integrados; con la semilla cargada, repite la validación con estos criterios:
 
-- `/app/productos` deja de descargar `/products` y `/images` completos; solicita solo la página visible.
-- La primera página se solicita con `page` y `page_size`; no se descargan los 100+ productos.
+- `/app/productos` solicita solo la página visible en lugar de `/products` y `/images` completos.
 - Búsqueda, categoría e impuesto usan parámetros del API y actualizan `meta.total`.
 - Los contadores muestran el rango «Mostrando {desde}–{hasta} de {total}».
-- La paginación permite recorrer todas las páginas y volver a la primera.
+- La paginación permite recorrer todas las páginas, cambiar el tamaño y volver a la primera.
 - Una página fuera de rango ofrece volver a la primera página.
 - El impuesto del producto se muestra en listado y detalle.
 - El aviso global de demostración solo aparece si existe una variable de entorno aprobada.
@@ -145,5 +145,4 @@ CAT-10 queda documentado, pero **no validado con volumen real**. La semilla demo
 - La semilla demo todavía no se ha ejecutado en un entorno accesible; las comprobaciones con 100+ productos reales quedan pendientes.
 - La API de demostración puede no estar disponible o no tener la semilla cargada; en ese caso las comprobaciones autenticadas quedan pendientes.
 - Sin credenciales de demostración no se pueden ejercitar los estados con datos reales desde una petición HTTP simple. Las rutas se validan por código de respuesta y la interacción queda documentada para repetirla con sesión.
-- Esta rama no implementa paginación, filtros de servidor ni impuesto por producto; esos cambios pertenecen a FDN-04 (#94) y CAT-09 (#95).
-- Mientras FDN-04 siga pendiente, `/app/productos` continúa descargando el catálogo y las imágenes completos aunque la semilla tenga 100+ productos.
+- FDN-04 (#94) y CAT-09 (#95) ya están integrados, pero sin la semilla demo no se han ejercitado páginas, rangos ni impuestos con 100+ productos reales.

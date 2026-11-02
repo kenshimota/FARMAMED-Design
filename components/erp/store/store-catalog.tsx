@@ -20,72 +20,47 @@ import {
   StoreItemStateBadge,
   describeStoreError,
   formatStoreMoney,
-  storeCountLabel,
   storeQuantityLabel,
   type StoreFeedback,
 } from "@/components/erp/store/store-shared";
 import { useStoreResource } from "@/components/erp/store/use-store-resource";
 import { EmptyState } from "@/components/erp/ui/empty-state";
+import { NoticeBanner } from "@/components/erp/ui/banner";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { ApiError } from "@/lib/api";
 import { CART_MAX_LINES, addCartLine, readCart } from "@/lib/cart";
 import { getCustomerAccessIssue } from "@/lib/customer";
 import { formatInteger } from "@/lib/format";
 import {
-  fetchStoreProducts,
+  fetchStoreProductPage,
   type StoreProduct,
 } from "@/lib/store";
-
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
 
 function StoreCatalogContent({
   customerId,
 }: {
   customerId: number | string;
 }) {
-  const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [itemStateFilter, setItemStateFilter] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [feedback, setFeedback] = useState<StoreFeedback | null>(null);
 
-  const productsLoader = useCallback(
-    () => fetchStoreProducts(itemStateFilter || null),
-    [itemStateFilter],
-  );
   const itemStatesLoader = useCallback(
     () => fetchItemStates({ isSellable: true }),
     [],
   );
 
-  const productsResource = useStoreResource(
-    productsLoader,
-    `productos:${itemStateFilter || "todos"}`,
-  );
+  const list = useServerList<StoreProduct>({
+    loader: (request) => fetchStoreProductPage(request),
+    filterKeys: ["item_state_id"],
+    defaultPageSize: 12,
+  });
   const itemStatesResource = useStoreResource(itemStatesLoader, "estados");
 
-  const products = useMemo(
-    () => (productsResource.data ?? []).filter((product) => product.available),
-    [productsResource.data],
-  );
-
-  const categoryOptions = useMemo(() => {
-    const categories = new Map<string, string>();
-    for (const product of products) {
-      if (!product.category) continue;
-      categories.set(String(product.category.id), product.category.name);
-    }
-    return [...categories.entries()]
-      .sort((first, second) =>
-        first[1].localeCompare(second[1], "es", { sensitivity: "base" }),
-      )
-      .map(([value, label]) => ({ value, label }));
-  }, [products]);
+  const products = list.items;
+  const itemStateFilter = list.filters.item_state_id ?? "";
+  const hasQuery = Boolean(list.request.q);
+  const hasFilters = hasQuery || Boolean(itemStateFilter);
 
   const stateOptions = useMemo(
     () =>
@@ -96,35 +71,29 @@ function StoreCatalogContent({
     [itemStatesResource.data],
   );
 
-  const filteredProducts = useMemo(() => {
-    const normalizedQuery = normalizeSearch(query);
-    return products.filter((product) => {
-      if (
-        categoryFilter &&
-        String(product.category?.id ?? "") !== categoryFilter
-      ) {
-        return false;
-      }
-      if (!normalizedQuery) return true;
-      return normalizeSearch(`${product.name} ${product.reference}`).includes(
-        normalizedQuery,
-      );
+  const loading = list.status === "loading";
+  const refreshing = list.status === "refreshing";
+
+  const chips: FilterChip[] = [];
+  if (hasQuery) {
+    chips.push({
+      id: "q",
+      label: `Búsqueda: ${list.request.q}`,
+      onRemove: () => {
+        list.setSearch("");
+        list.commitSearch();
+      },
     });
-  }, [categoryFilter, products, query]);
-
-  const hasLocalFilters = Boolean(query.trim() || categoryFilter);
-  const hasFilters = hasLocalFilters || Boolean(itemStateFilter);
-  const activeFilterCount =
-    Number(Boolean(query.trim())) +
-    Number(Boolean(categoryFilter)) +
-    Number(Boolean(itemStateFilter));
-  const loading = productsResource.status === "loading";
-  const refreshing = productsResource.status === "refreshing";
-
-  function clearFilters() {
-    setQuery("");
-    setCategoryFilter("");
-    setItemStateFilter("");
+  }
+  if (itemStateFilter) {
+    chips.push({
+      id: "item_state_id",
+      label: `Estado: ${
+        stateOptions.find((option) => option.value === itemStateFilter)?.label ??
+        `#${itemStateFilter}`
+      }`,
+      onRemove: () => list.setFilter("item_state_id", ""),
+    });
   }
 
   function addProduct(product: StoreProduct) {
@@ -169,16 +138,13 @@ function StoreCatalogContent({
     });
   }
 
-  const error = productsResource.error;
+  const error = list.error;
 
-  if (error) {
+  if (error && products.length === 0) {
     const accessIssue = getCustomerAccessIssue(error);
     if (accessIssue) {
       return (
-        <StoreAccountIssue
-          onRetry={productsResource.reload}
-          reason={accessIssue}
-        />
+        <StoreAccountIssue onRetry={list.reload} reason={accessIssue} />
       );
     }
 
@@ -190,9 +156,9 @@ function StoreCatalogContent({
         headingLevel="h1"
         onRetry={
           invalidFilter && itemStateFilter
-            ? () => setItemStateFilter("")
+            ? () => list.setFilter("item_state_id", "")
             : copy.canRetry
-              ? productsResource.reload
+              ? list.reload
               : undefined
         }
         retryLabel={
@@ -207,103 +173,81 @@ function StoreCatalogContent({
   return (
     <div className="space-y-5">
       <RecordsPageHeader
-        description="Consulta los productos con existencia y el precio de tu lista. La búsqueda y el filtro de categoría se aplican a los productos cargados."
+        description="Consulta los productos con existencia y el precio de tu lista. La búsqueda y los filtros se aplican en el servidor."
         eyebrow="Tienda"
         title="Catálogo"
       />
 
       <StoreFeedbackBanner feedback={feedback} />
 
-      <section aria-label="Búsqueda y filtros del catálogo" className="space-y-3">
-        <button
-          aria-controls="tienda-filtros"
-          aria-expanded={filtersOpen}
-          className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-line bg-surface px-4 text-left text-[13px] font-semibold text-ink transition-colors hover:border-brand/40 md:hidden"
-          onClick={() => setFiltersOpen((current) => !current)}
-          type="button"
-        >
-          <span className="flex items-center gap-2">
-            <Icon aria-hidden="true" name="search" size={17} />
-            Buscar y filtrar
-          </span>
-          <span className="flex items-center gap-2 text-[12px] font-medium text-muted">
-            {hasFilters
-              ? `${activeFilterCount} ${activeFilterCount === 1 ? "filtro activo" : "filtros activos"}`
-              : "Sin filtros"}
-            <Icon
-              aria-hidden="true"
-              name="chevron-down"
-              className={`transition-transform motion-reduce:transition-none ${filtersOpen ? "rotate-180" : ""}`}
-              size={15}
-            />
-          </span>
-        </button>
-
-        <div
-          className={`rounded-[24px] border border-line bg-surface p-4 sm:p-5 ${
-            filtersOpen ? "block" : "hidden"
-          } md:block`}
-          id="tienda-filtros"
-        >
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_220px] lg:items-start">
-            <TextField
-              help="Busca por nombre o referencia en los productos cargados."
-              id="tienda-buscar"
-              label="Buscar productos"
-              onChange={setQuery}
-              placeholder="Nombre o referencia"
-              value={query}
-            />
-
-            <SelectField
-              emptyLabel="Todas las categorías"
-              id="tienda-categoria"
-              label="Categoría"
-              loading={loading}
-              loadingLabel="Cargando categorías…"
-              onChange={setCategoryFilter}
-              options={categoryOptions}
-              placeholder="Todas las categorías"
-              value={categoryFilter}
-            />
-
-            <SelectField
-              emptyLabel="Todos los estados"
-              id="tienda-estado"
-              label="Estado"
-              loadError={
-                itemStatesResource.status === "error"
-                  ? "No pudimos cargar los estados vendibles."
-                  : null
+      {error && products.length > 0 && (
+        <NoticeBanner
+          action={
+            <button
+              className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+              onClick={
+                error instanceof ApiError && error.status === 422 && itemStateFilter
+                  ? () => list.setFilter("item_state_id", "")
+                  : list.reload
               }
-              loading={itemStatesResource.status === "loading"}
-              loadingLabel="Cargando estados…"
-              onChange={setItemStateFilter}
-              onRetry={itemStatesResource.reload}
-              options={stateOptions}
-              placeholder="Todos los estados"
-              value={itemStateFilter}
-            />
-          </div>
+              type="button"
+            >
+              {error instanceof ApiError && error.status === 422 && itemStateFilter
+                ? "Quitar filtro de estado"
+                : "Reintentar"}
+            </button>
+          }
+          tone="warning"
+        >
+          {error.message}
+        </NoticeBanner>
+      )}
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-            <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-              {hasLocalFilters
-                ? `Mostrando ${formatInteger(filteredProducts.length)} de ${storeCountLabel(products.length)}`
-                : storeCountLabel(filteredProducts.length)}
-            </p>
-            {hasFilters && (
-              <button
-                className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                onClick={clearFilters}
-                type="button"
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        id="tienda-filtros"
+        loading={loading}
+        onClear={list.clearFilters}
+        results={
+          loading
+            ? "Cargando productos…"
+            : list.meta.total === 0
+              ? "Sin productos disponibles"
+              : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                  list.range.to,
+                )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <TextField
+            help="Busca por nombre o referencia. La búsqueda se aplica en el servidor."
+            id="tienda-buscar"
+            inputType="search"
+            label="Buscar productos"
+            onChange={list.setSearch}
+            placeholder="Nombre o referencia"
+            value={list.searchDraft}
+          />
+        }
+      >
+        <SelectField
+          emptyLabel="Todos los estados"
+          id="tienda-estado"
+          label="Estado"
+          loadError={
+            itemStatesResource.status === "error"
+              ? "No pudimos cargar los estados vendibles."
+              : null
+          }
+          loading={itemStatesResource.status === "loading"}
+          loadingLabel="Cargando estados…"
+          onChange={(value) => list.setFilter("item_state_id", value)}
+          onRetry={itemStatesResource.reload}
+          options={stateOptions}
+          placeholder="Todos los estados"
+          value={itemStateFilter}
+        />
+      </FilterBar>
 
       {loading && <StoreGridSkeleton />}
 
@@ -312,55 +256,52 @@ function StoreCatalogContent({
       )}
 
       {!loading && !refreshing && products.length === 0 && (
-        <EmptyState
-          action={
-            itemStateFilter ? (
+        list.meta.total === 0 && !hasFilters ? (
+          <EmptyState
+            description="Cuando tu lista tenga productos disponibles, aparecerán aquí."
+            title="No hay productos con existencia en este momento."
+          />
+        ) : (
+          <EmptyState
+            action={
               <button
                 className="button-base button-secondary min-h-11 px-5"
-                onClick={() => setItemStateFilter("")}
+                onClick={
+                  list.isPageOutOfRange
+                    ? list.goToFirstPage
+                    : list.clearFilters
+                }
                 type="button"
               >
-                Quitar filtro de estado
+                {list.isPageOutOfRange
+                  ? "Ir a la primera página"
+                  : "Limpiar filtros"}
               </button>
-            ) : (
-              <button
-                className="button-base button-secondary min-h-11 px-5"
-                onClick={productsResource.reload}
-                type="button"
-              >
-                Reintentar
-              </button>
-            )
-          }
-          description={
-            itemStateFilter
-              ? "No hay productos disponibles para el estado seleccionado. Prueba con otro estado o vuelve más tarde."
-              : "Cuando tu lista tenga productos disponibles, aparecerán aquí."
-          }
-          title="No hay productos con existencia en este momento."
-        />
+            }
+            description={
+              list.isPageOutOfRange
+                ? `Hay ${formatInteger(
+                    list.meta.total,
+                  )} productos disponibles en total, pero esta página no tiene filas.`
+                : "Ajusta la búsqueda o el estado para ver otros productos."
+            }
+            title={
+              list.isPageOutOfRange
+                ? "No hay resultados en esta página"
+                : "Sin resultados con estos filtros."
+            }
+          />
+        )
       )}
 
-      {!loading && !refreshing && products.length > 0 && filteredProducts.length === 0 && (
-        <EmptyState
-          action={
-            <button
-              className="button-base button-secondary min-h-11 px-5"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          }
-          description="Ajusta la búsqueda, la categoría o el estado para ver otros productos."
-          title="No hay productos con estos filtros."
-        />
-      )}
-
-      {!loading && filteredProducts.length > 0 && (
-        <section aria-label="Productos disponibles" className="space-y-4">
+      {!loading && products.length > 0 && (
+        <section
+          aria-busy={refreshing || undefined}
+          aria-label="Productos disponibles"
+          className="space-y-4"
+        >
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts.map((product, index) => (
+            {products.map((product, index) => (
               <li className="min-w-0" key={`${product.id}:${product.itemState.id}`}>
                 <article className="flex h-full flex-col overflow-hidden rounded-[24px] border border-line bg-surface shadow-[0_18px_60px_rgba(27,12,104,0.04)]">
                   <StoreImage
@@ -435,6 +376,14 @@ function StoreCatalogContent({
               </li>
             ))}
           </ul>
+
+          <PaginationControls
+            meta={list.meta}
+            onFirstPage={list.goToFirstPage}
+            onPageChange={list.setPage}
+            onPageSizeChange={list.setPageSize}
+            pageSizeOptions={[12, 24, 48]}
+          />
         </section>
       )}
     </div>

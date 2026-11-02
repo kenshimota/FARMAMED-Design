@@ -34,7 +34,7 @@ La variable se expone al navegador porque las llamadas de autenticación se real
 
 ## Validación del catálogo demo
 
-La validación de CAT-10 con la semilla demo de 100+ productos está documentada en [`docs/validacion-catalogo-demo.md`](docs/validacion-catalogo-demo.md). Incluye dependencias pendientes, rutas por rol, estados de carga y error, miniaturas, responsive y criterios para repetir la prueba cuando se integren FDN-04 y CAT-09.
+La validación de CAT-10 con la semilla demo de 100+ productos está documentada en [`docs/validacion-catalogo-demo.md`](docs/validacion-catalogo-demo.md). Incluye dependencias pendientes, rutas por rol, estados de carga y error, miniaturas, responsive y los criterios para repetir la prueba con FDN-04 y CAT-09 ya integrados.
 
 ## Learn More
 

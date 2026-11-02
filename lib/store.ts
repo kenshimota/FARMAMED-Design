@@ -1,5 +1,12 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type StoreCurrency = {
   id: number;
@@ -265,6 +272,27 @@ export async function fetchStoreProducts(
     authOptions(),
   );
   return parseStoreProductList(payload);
+}
+
+/**
+ * Lista paginada del catálogo del cliente. El API de la tienda solo devuelve
+ * variantes disponibles, igual que `parseStoreProductList`, por lo que no se
+ * filtra de nuevo en cliente ni se altera `meta.total`.
+ */
+export async function fetchStoreProductPage(
+  query: ListQuery = {},
+): Promise<Paginated<StoreProduct>> {
+  const payload = await apiFetch<unknown>(
+    `/store/products${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, ["item_state_id"]),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseStoreProduct, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchStoreProduct(

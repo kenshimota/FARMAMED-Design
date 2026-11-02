@@ -11,7 +11,7 @@ import {
   RecordActionLink,
   RecordActions,
 } from "@/components/erp/records/record-actions";
-import { SelectField } from "@/components/erp/records/form-controls";
+import { SelectField, TextField } from "@/components/erp/records/form-controls";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import { RecordsLoadError } from "@/components/erp/records/record-states";
 import {
@@ -21,17 +21,18 @@ import {
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
 import { EmptyState } from "@/components/erp/ui/empty-state";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { Skeleton, SkeletonTable } from "@/components/erp/ui/skeleton";
 import { useToast } from "@/components/erp/ui/toast";
-import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import {
   deleteUser,
-  fetchUsers,
+  fetchUserPage,
   setUserBlocked,
   userErrorMessage,
   type UserRecord,
 } from "@/components/erp/users-api";
-import { LARGE_LIST_NOTICE, LARGE_LIST_THRESHOLD } from "@/lib/feedback";
 import { formatInteger } from "@/lib/format";
 import {
   canReadModule,
@@ -39,8 +40,6 @@ import {
   ROLES,
   ROLE_LABELS,
 } from "@/lib/permissions";
-
-const NO_USERS: UserRecord[] = [];
 
 type DialogKind = "block" | "unblock" | "delete";
 
@@ -55,10 +54,6 @@ function displayNameOf(user: UserRecord) {
 
 function usersLabel(count: number) {
   return count === 1 ? "1 usuario" : `${formatInteger(count)} usuarios`;
-}
-
-function blockedLabel(count: number) {
-  return count === 1 ? "1 bloqueado" : `${formatInteger(count)} bloqueados`;
 }
 
 type UserActionButtonsProps = {
@@ -153,26 +148,31 @@ export function UserListPage() {
 function UserListContent() {
   const { user } = useSession();
   const toast = useToast();
-  const resource = useAsyncResource(fetchUsers);
-  const countRef = useRef<HTMLParagraphElement>(null);
-  const focusAfterDeleteRef = useRef(false);
-  const [query, setQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const list = useServerList<UserRecord>({
+    loader: (request) => fetchUserPage(request),
+    filterKeys: ["role", "is_active"],
+  });
   const [dialog, setDialog] = useState<DialogTarget | null>(null);
   const [pendingUserId, setPendingUserId] = useState<UserRecord["id"] | null>(
     null,
   );
   const [updates, setUpdates] = useState<Record<string, UserRecord>>({});
   const [removed, setRemoved] = useState<Record<string, boolean>>({});
+  const [focusResults, setFocusResults] = useState(false);
+  const resultsRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
-    if (dialog !== null || !focusAfterDeleteRef.current) return;
-    focusAfterDeleteRef.current = false;
-    countRef.current?.focus();
-  }, [dialog]);
+    if (!focusResults) return;
+    const timer = window.setTimeout(() => {
+      resultsRef.current?.focus();
+      setFocusResults(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusResults]);
 
-  const baseUsers = resource.data ?? NO_USERS;
+  const roleFilter = list.filters.role ?? "";
+  const statusFilter = list.filters.is_active ?? "";
+  const baseUsers = list.items;
   const users = useMemo(
     () =>
       baseUsers
@@ -220,27 +220,8 @@ function UserListContent() {
     return null;
   }
 
-  const filteredUsers = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return users.filter((entry) => {
-      if (roleFilter && entry.role !== roleFilter) return false;
-      if (statusFilter === "activos" && entry.isBlocked) return false;
-      if (statusFilter === "bloqueados" && !entry.isBlocked) return false;
-      if (!normalized) return true;
-      return [
-        entry.username,
-        entry.name ?? "",
-        entry.email,
-        entry.customer?.fullName ?? "",
-      ].some((value) => value.toLowerCase().includes(normalized));
-    });
-  }, [query, roleFilter, statusFilter, users]);
-
-  const filtersActive = Boolean(query.trim() || roleFilter || statusFilter);
-  const blockedCount = users.filter((entry) => entry.isBlocked).length;
-  const countLabel = filtersActive
-    ? `Mostrando ${formatInteger(filteredUsers.length)} de ${usersLabel(users.length)}`
-    : `${usersLabel(users.length)}, ${blockedLabel(blockedCount)}`;
+  const filtersActive = Boolean(list.request.q || roleFilter || statusFilter);
+  const countLabel = usersLabel(list.meta.total);
 
   function isPending(entry: UserRecord) {
     return pendingUserId !== null && String(pendingUserId) === String(entry.id);
@@ -465,13 +446,8 @@ function UserListContent() {
     }
     setRemoved((current) => ({ ...current, [String(target.id)]: true }));
     toast.success("Usuario eliminado.");
-    focusAfterDeleteRef.current = true;
-  }
-
-  function resetFilters() {
-    setQuery("");
-    setRoleFilter("");
-    setStatusFilter("");
+    list.reload();
+    setFocusResults(true);
   }
 
   const columns: RecordsTableColumn<UserRecord>[] = [
@@ -522,11 +498,97 @@ function UserListContent() {
         title="Usuarios"
       />
 
-      {resource.status === "loading" && <UsersListSkeleton />}
+      <FilterBar
+        activeCount={
+          Number(Boolean(list.request.q)) +
+          Number(Boolean(roleFilter)) +
+          Number(Boolean(statusFilter))
+        }
+        chips={[
+          ...(list.request.q
+            ? [
+                {
+                  id: "q",
+                  label: `Búsqueda: ${list.request.q}`,
+                  onRemove: () => {
+                    list.setSearch("");
+                    list.commitSearch();
+                  },
+                } satisfies FilterChip,
+              ]
+            : []),
+          ...(roleFilter
+            ? [
+                {
+                  id: "role",
+                  label: `Rol: ${getRoleLabel(roleFilter)}`,
+                  onRemove: () => list.setFilter("role", ""),
+                } satisfies FilterChip,
+              ]
+            : []),
+          ...(statusFilter
+            ? [
+                {
+                  id: "is_active",
+                  label:
+                    statusFilter === "true"
+                      ? "Estado: Activos"
+                      : "Estado: Bloqueados",
+                  onRemove: () => list.setFilter("is_active", ""),
+                } satisfies FilterChip,
+              ]
+            : []),
+        ]}
+        id="usuarios-filtros"
+        loading={list.status === "loading"}
+        onClear={list.clearFilters}
+        resultsRef={resultsRef}
+        results={
+          list.status === "loading"
+            ? "Cargando usuarios…"
+            : list.status === "error" && users.length === 0
+              ? "No se pudieron cargar los usuarios"
+              : countLabel
+        }
+        search={
+          <TextField
+            help="La búsqueda y los filtros se aplican en el servidor."
+            id="buscar-usuarios"
+            inputType="search"
+            label="Buscar"
+            onChange={list.setSearch}
+            placeholder="Buscar por usuario, nombre, correo o cliente"
+            value={list.searchDraft}
+          />
+        }
+      >
+        <SelectField
+          id="filtro-rol"
+          label="Rol"
+          onChange={(value) => list.setFilter("role", value)}
+          options={roleOptions}
+          placeholder="Todos los roles"
+          value={roleFilter}
+        />
 
-      {resource.status === "error" && (
+        <SelectField
+          id="filtro-estado"
+          label="Estado"
+          onChange={(value) => list.setFilter("is_active", value)}
+          options={[
+            { value: "true", label: "Activos" },
+            { value: "false", label: "Bloqueados" },
+          ]}
+          placeholder="Todos los estados"
+          value={statusFilter}
+        />
+      </FilterBar>
+
+      {list.status === "loading" && <UsersListSkeleton />}
+
+      {list.status === "error" && users.length === 0 && (
         <>
-          {resource.error?.kind === "forbidden" ? (
+          {list.error?.kind === "forbidden" ? (
             <AccessState
               description="Solo un administrador puede gestionar usuarios."
               headingLevel="h2"
@@ -534,130 +596,102 @@ function UserListContent() {
           ) : (
             <RecordsLoadError
               description={
-                resource.error
-                  ? userErrorMessage(resource.error, "load")
+                list.error
+                  ? userErrorMessage(list.error, "load")
                   : "No pudimos cargar los usuarios."
               }
-              onRetry={resource.reload}
+              onRetry={list.reload}
               title="No pudimos cargar los usuarios."
             />
           )}
         </>
       )}
 
-      {resource.status !== "loading" && resource.status !== "error" && (
-        <section aria-label="Listado de usuarios" className="space-y-4">
-          {resource.status === "refreshing" && (
-            <div aria-hidden="true" className="reload-bar" />
-          )}
+      {list.status !== "loading" &&
+        !(list.status === "error" && users.length === 0) && (
+          <section aria-label="Listado de usuarios" className="space-y-4">
+            {list.status === "refreshing" && (
+              <div aria-hidden="true" className="reload-bar" />
+            )}
 
-          <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(170px,220px)_minmax(160px,210px)] md:items-end">
-              <div>
-                <label
-                  className="mb-2 block text-[12px] font-semibold text-ink"
-                  htmlFor="buscar-usuarios"
-                >
-                  Buscar
-                </label>
-                <div className="relative">
-                  <Icon
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
-                    name="search"
-                    size={17}
-                  />
-                  <input
-                    className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-11 pr-4 text-[14px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
-                    id="buscar-usuarios"
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar por usuario, nombre, correo o cliente"
-                    type="search"
-                    value={query}
-                  />
-                </div>
-              </div>
-
-              <SelectField
-                id="filtro-rol"
-                label="Rol"
-                onChange={setRoleFilter}
-                options={roleOptions}
-                placeholder="Todos los roles"
-                value={roleFilter}
-              />
-
-              <SelectField
-                id="filtro-estado"
-                label="Estado"
-                onChange={setStatusFilter}
-                options={[
-                  { value: "activos", label: "Activos" },
-                  { value: "bloqueados", label: "Bloqueados" },
-                ]}
-                placeholder="Todos los estados"
-                value={statusFilter}
-              />
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-              <p
-                aria-live="polite"
-                className="text-[12px] font-semibold text-muted"
-                ref={countRef}
-                tabIndex={-1}
+            {list.status === "error" && users.length > 0 && (
+              <NoticeBanner
+                action={
+                  <button
+                    className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+                    onClick={list.reload}
+                    type="button"
+                  >
+                    Reintentar
+                  </button>
+                }
+                tone="warning"
               >
-                {countLabel}
-              </p>
-              {filtersActive && (
-                <button
-                  className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                  onClick={resetFilters}
-                  type="button"
-                >
-                  Limpiar filtros
-                </button>
-              )}
-            </div>
-          </div>
+                {list.error?.message ??
+                  "No pudimos actualizar los usuarios. Mostramos los datos disponibles."}
+              </NoticeBanner>
+            )}
 
-          {filteredUsers.length > LARGE_LIST_THRESHOLD && (
-            <NoticeBanner tone="warning">{LARGE_LIST_NOTICE}</NoticeBanner>
-          )}
+            {users.length === 0 ? (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={<NewUserLink />}
+                  description="Crea la primera cuenta para empezar a controlar los accesos."
+                  title="Todavía no hay usuarios."
+                />
+              ) : (
+                <EmptyState
+                  action={
+                    <button
+                      className="button-base button-secondary min-h-11 px-5"
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : list.clearFilters
+                      }
+                      type="button"
+                    >
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
+                    </button>
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} usuarios en total, pero esta página no tiene filas.`
+                      : "No hay usuarios que coincidan con la búsqueda o los filtros seleccionados."
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : "Sin resultados con estos filtros."
+                  }
+                />
+              )
+            ) : (
+              <RecordsTable
+                busy={list.status === "refreshing"}
+                caption="Usuarios registrados con su correo, rol, cliente vinculado y estado de acceso"
+                cardActions={renderCardActions}
+                columns={columns}
+                getRowKey={(entry) => String(entry.id)}
+                getRowLabel={displayNameOf}
+                renderCard={renderCard}
+                rowActions={renderRowActions}
+                rows={users}
+              />
+            )}
 
-          {users.length === 0 ? (
-            <EmptyState
-              action={<NewUserLink />}
-              description="Crea la primera cuenta para empezar a controlar los accesos."
-              title="Todavía no hay usuarios."
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
             />
-          ) : filteredUsers.length === 0 ? (
-            <EmptyState
-              action={
-                <button
-                  className="button-base button-secondary min-h-11 px-5"
-                  onClick={resetFilters}
-                  type="button"
-                >
-                  Limpiar filtros
-                </button>
-              }
-              description="No hay usuarios que coincidan con la búsqueda o los filtros seleccionados."
-              title="Sin resultados"
-            />
-          ) : (
-            <RecordsTable
-              caption="Usuarios registrados con su correo, rol, cliente vinculado y estado de acceso"
-              cardActions={renderCardActions}
-              columns={columns}
-              getRowKey={(entry) => String(entry.id)}
-              getRowLabel={displayNameOf}
-              renderCard={renderCard}
-              rowActions={renderRowActions}
-              rows={filteredUsers}
-            />
-          )}
-        </section>
-      )}
+          </section>
+        )}
 
       <ConfirmDialog
         confirmBusyLabel={

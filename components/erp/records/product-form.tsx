@@ -49,6 +49,10 @@ import {
 } from "@/components/erp/records/records-api";
 import { ApiError, apiFetch } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
+import {
+  fetchTaxes,
+  formatTaxRate,
+} from "@/lib/finance/taxes-api";
 import { canWriteModule } from "@/lib/permissions";
 import { getStoredToken } from "@/lib/session";
 
@@ -57,6 +61,7 @@ type ProductFormValues = {
   description: string;
   reference: string;
   category_id: string;
+  tax_id: string;
   image_id: string;
 };
 
@@ -65,6 +70,7 @@ const EMPTY_VALUES: ProductFormValues = {
   description: "",
   reference: "",
   category_id: "",
+  tax_id: "",
   image_id: "",
 };
 
@@ -78,6 +84,7 @@ const COPY = {
   referenceRequired: "Ingresa la referencia.",
   referenceTooLong: `La referencia no puede superar los ${REFERENCE_MAX_LENGTH} caracteres.`,
   categoryRequired: "Selecciona una categoría.",
+  taxRequired: "Selecciona un impuesto.",
   imageRequired: "Selecciona una imagen o elige una existente.",
   imageTooLarge: "La imagen supera los 5 MB.",
   unexpectedFile:
@@ -90,6 +97,7 @@ const COPY = {
   validation: "Revisa los datos del formulario.",
   generic: "No pudimos guardar el producto. Revisa tu conexión e intenta de nuevo.",
   categoriesError: "No pudimos cargar las categorías.",
+  taxesError: "No pudimos cargar los impuestos.",
   imagesError: "No pudimos cargar las imágenes.",
 } as const;
 
@@ -118,10 +126,13 @@ export function ProductFormPage({ mode, productId }: ProductFormPageProps) {
 function ProductFormContent({ mode, productId }: ProductFormPageProps) {
   const router = useRouter();
   const toast = useToast();
+  const { user } = useSession();
+  const canManageTaxes = canWriteModule(user.role, "impuestos");
   const editing = mode === "edit";
   const productLoader = useCallback(() => fetchProduct(productId ?? ""), [productId]);
   const productResource = useAsyncResource(productLoader, { enabled: editing });
   const categoriesResource = useAsyncResource(fetchCategories);
+  const taxesResource = useAsyncResource(fetchTaxes);
   const imagesResource = useAsyncResource(fetchImages);
 
   const [values, setValues] = useState<ProductFormValues>(EMPTY_VALUES);
@@ -153,10 +164,20 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
 
   const product = productResource.data;
   const categories = categoriesResource.data ?? [];
+  const taxes = taxesResource.data ?? [];
   const images = imagesResource.data ?? [];
   const categoriesReady = categoriesResource.data !== null && categoriesResource.status !== "error";
+  const taxesReady =
+    taxesResource.data !== null &&
+    taxesResource.data.length > 0 &&
+    taxesResource.status !== "error";
   const imagesReady = imagesResource.data !== null && imagesResource.status !== "error";
   const categoriesLoading = categoriesResource.status === "loading";
+  const taxesLoading = taxesResource.status === "loading";
+  const taxesEmpty =
+    taxesResource.data !== null &&
+    taxesResource.data.length === 0 &&
+    taxesResource.status !== "error";
 
   if (product) {
     const key = String(product.id);
@@ -166,6 +187,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
         description: product.description,
         reference: product.reference,
         category_id: String(product.category_id),
+        tax_id: product.tax_id === null ? "" : String(product.tax_id),
         image_id: String(product.image_id),
       };
       const nextImageMode: ProductImageMode = product.image_id
@@ -194,6 +216,18 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
     value: String(category.id),
     label: category.name,
   }));
+
+  const taxOptions = taxes.map((tax) => ({
+    value: String(tax.id),
+    label: `${tax.code} — ${tax.name} (${formatTaxRate(tax.rate)})`,
+  }));
+
+  const selectedTax = taxes.find(
+    (tax) => String(tax.id) === values.tax_id,
+  );
+  const taxHelp = selectedTax
+    ? `Tasa ${formatTaxRate(selectedTax.rate)}. Este impuesto se aplica al producto. No calcula totales en pedidos ni facturas.`
+    : "Este impuesto se aplica al producto. No calcula totales en pedidos ni facturas.";
 
   function clearFieldError(field: ProductFieldKey) {
     setErrors((current) => {
@@ -269,6 +303,8 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
 
     if (!values.category_id) next.category_id = COPY.categoryRequired;
 
+    if (!values.tax_id || !selectedTax) next.tax_id = COPY.taxRequired;
+
     if (imageMode === "upload") {
       if (fileValidation.error) next.image = fileValidation.error;
       else if (!selectedFile) next.image = COPY.imageRequired;
@@ -282,7 +318,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting || fileChecking) return;
-    if (!categoriesReady) return;
+    if (!categoriesReady || !taxesReady) return;
     if (imageMode === "existing" && !imagesReady) return;
 
     const nextErrors = validate();
@@ -303,6 +339,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
     const description = values.description.trim();
     const reference = values.reference.trim();
     const categoryId = String(toApiId(values.category_id));
+    const taxId = String(toApiId(values.tax_id));
 
     let body: FormData | string;
     if (imageMode === "upload" && selectedFile) {
@@ -311,6 +348,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
       formData.set("description", description);
       formData.set("reference", reference);
       formData.set("category_id", categoryId);
+      formData.set("tax_id", taxId);
       formData.set("image", selectedFile);
       body = formData;
     } else {
@@ -319,6 +357,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
         description,
         reference,
         category_id: toApiId(values.category_id),
+        tax_id: toApiId(values.tax_id),
         image_id: toApiId(values.image_id),
       });
     }
@@ -351,12 +390,22 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
       if (caught instanceof ApiError) {
         if (caught.status === 400) {
           const rawMessage = caught.message.toLowerCase();
-          if (rawMessage.includes("image or image_id")) {
+          if (caught.fieldErrors.tax_id) {
+            setErrors({ tax_id: COPY.taxRequired });
+            setShowSummary(true);
+            setMessage(null);
+            window.requestAnimationFrame(() => focusFirstInvalidField());
+          } else if (rawMessage.includes("image or image_id")) {
             setErrors({ image: COPY.imageRequired });
             setShowSummary(true);
             window.requestAnimationFrame(() => focusFirstInvalidField());
           } else if (rawMessage.includes("unexpected field")) {
             setMessage(COPY.unexpectedFile);
+          } else if (rawMessage.includes("tax_id")) {
+            setErrors({ tax_id: COPY.taxRequired });
+            setShowSummary(true);
+            setMessage(null);
+            window.requestAnimationFrame(() => focusFirstInvalidField());
           } else {
             setMessage(COPY.missingData);
           }
@@ -417,8 +466,8 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
       }
       description={
         editing
-          ? "Actualiza los datos reales del producto. Puedes subir una imagen nueva o conservar una existente."
-          : "Registra un producto con su categoría y una imagen nueva o existente."
+          ? "Actualiza los datos reales del producto, su impuesto y su imagen."
+          : "Registra un producto con su impuesto, categoría y una imagen nueva o existente."
       }
       eyebrow="Catálogo"
       title={headerTitle}
@@ -456,7 +505,7 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
 
   const summaryItems = productSummaryItems(errors);
   const selectorsReady =
-    categoriesReady && (imageMode === "upload" || imagesReady);
+    categoriesReady && taxesReady && (imageMode === "upload" || imagesReady);
   const busy = submitting || fileChecking;
 
   return (
@@ -533,36 +582,100 @@ function ProductFormContent({ mode, productId }: ProductFormPageProps) {
                   id={PRODUCT_FIELD_IDS.description}
                   label="Descripción"
                   onChange={(value) => updateField("description", value)}
-                  placeholder="Describe el producto sin agregar precio, impuesto ni existencias."
+                  placeholder="Describe el producto sin agregar precio ni existencias."
                   required
                   rows={5}
                   value={values.description}
                 />
               </div>
 
-              <div className="xl:col-span-2">
+              <SelectField
+                createHref="/app/categorias"
+                createLabel="Crear categoría"
+                disabled={submitting}
+                error={errors.category_id}
+                help="Selecciona una categoría existente del catálogo."
+                id={PRODUCT_FIELD_IDS.category_id}
+                label="Categoría"
+                loadError={
+                  categoriesResource.status === "error"
+                    ? COPY.categoriesError
+                    : null
+                }
+                loading={categoriesLoading}
+                loadingLabel="Cargando categorías…"
+                onChange={(value) => updateField("category_id", value)}
+                onRetry={categoriesResource.reload}
+                options={categoryOptions}
+                placeholder="Selecciona una categoría"
+                required
+                value={values.category_id}
+              />
+
+              <div>
                 <SelectField
-                  createHref="/app/categorias"
-                  createLabel="Crear categoría"
                   disabled={submitting}
-                  error={errors.category_id}
-                  help="Selecciona una categoría existente del catálogo."
-                  id={PRODUCT_FIELD_IDS.category_id}
-                  label="Categoría"
+                  emptyLabel="No hay impuestos disponibles."
+                  error={errors.tax_id}
+                  help={taxHelp}
+                  id={PRODUCT_FIELD_IDS.tax_id}
+                  label="Impuesto"
                   loadError={
-                    categoriesResource.status === "error"
-                      ? COPY.categoriesError
+                    taxesResource.status === "error"
+                      ? COPY.taxesError
                       : null
                   }
-                  loading={categoriesLoading}
-                  loadingLabel="Cargando categorías…"
-                  onChange={(value) => updateField("category_id", value)}
-                  onRetry={categoriesResource.reload}
-                  options={categoryOptions}
-                  placeholder="Selecciona una categoría"
+                  loading={taxesLoading}
+                  loadingLabel="Cargando impuestos…"
+                  onChange={(value) => updateField("tax_id", value)}
+                  onRetry={taxesResource.reload}
+                  options={taxOptions}
+                  placeholder="Selecciona un impuesto"
                   required
-                  value={values.category_id}
+                  value={values.tax_id}
                 />
+
+                {taxesEmpty && (
+                  <div
+                    className="mt-2 rounded-xl border border-olive/35 bg-soft-lime px-3 py-3 text-[12px] leading-5 text-ink"
+                    role="status"
+                  >
+                    <p className="font-semibold">El catálogo de impuestos está vacío.</p>
+                    <p className="mt-1 text-muted">
+                      Un administrador debe crearlos antes de registrar productos.
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <button
+                        className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+                        onClick={taxesResource.reload}
+                        type="button"
+                      >
+                        Reintentar
+                      </button>
+                      {canManageTaxes && (
+                        <Link
+                          aria-label="Ir a impuestos para administrar el catálogo fiscal"
+                          className="inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                          href="/app/impuestos"
+                        >
+                          Ir a impuestos
+                          <Icon name="arrow-up-right" size={14} />
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!taxesEmpty && canManageTaxes && (
+                  <Link
+                    aria-label="Ir a impuestos para administrar el catálogo fiscal"
+                    className="mt-2 inline-flex min-h-11 items-center gap-1 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                    href="/app/impuestos"
+                  >
+                    Ir a impuestos
+                    <Icon name="arrow-up-right" size={14} />
+                  </Link>
+                )}
               </div>
             </div>
 
