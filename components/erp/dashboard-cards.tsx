@@ -6,7 +6,7 @@ import { PanelError } from "@/components/erp/ui/panel-error";
 import { SkeletonCard } from "@/components/erp/ui/skeleton";
 import type { CurrencyStatus } from "@/components/erp/ui/use-currency-status";
 import type { AsyncResource } from "@/components/erp/ui/use-async-resource";
-import { formatCount, isApproximateCount } from "@/lib/dashboard";
+import { formatCount } from "@/lib/dashboard";
 import { canReadModule, type ModuleKey } from "@/lib/permissions";
 
 type SummaryCard = {
@@ -114,9 +114,9 @@ function buildCards(
   const slots: Record<string, SummaryCardSlot | null> = {
     products: fromResource(data.products, (count) => count),
     customers: fromResource(data.customers, (count) => count),
-    purchases: fromResource(data.purchases, (list) => list.count),
+    purchases: fromResource(data.purchaseCount, (count) => count),
     lots: fromResource(data.expiredLots, (list) => list.count),
-    stocks: fromResource(data.stocks, (list) => list.count),
+    stocks: fromResource(data.stockCount, (count) => count),
     currencies: currencies ? fromCurrencyStatus(currencies) : null,
   };
 
@@ -207,9 +207,6 @@ export function DashboardCards({
                     </span>
                     <span className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-ink">
                       {formatCount(card.count)}
-                      {isApproximateCount(card.count) && (
-                        <span className="sr-only"> (cifra aproximada)</span>
-                      )}
                     </span>
                     <span className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand">
                       Ver listado

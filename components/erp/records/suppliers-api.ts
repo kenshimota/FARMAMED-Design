@@ -1,6 +1,13 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
 import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
+import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
@@ -130,9 +137,27 @@ function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
 }
 
+const SUPPLIER_FILTERS = ["state_id", "city_id"] as const;
+
 export async function fetchSuppliers() {
   const payload = await apiFetch<unknown>("/suppliers", authOptions());
   return parseSupplierList(payload);
+}
+
+export async function fetchSupplierPage(
+  query: ListQuery = {},
+): Promise<Paginated<SupplierRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/suppliers${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, SUPPLIER_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseSupplier, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchSupplier(id: string) {

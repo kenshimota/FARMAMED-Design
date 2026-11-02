@@ -4,6 +4,13 @@ import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type WalletCurrency = {
   id: RecordId;
@@ -158,6 +165,24 @@ export function parseWalletTransactionList(payload: unknown): WalletTransaction[
 
 function authOptions(): { token?: string } {
   return { token: getStoredToken() ?? undefined };
+}
+
+const WALLET_FILTERS = ["customer_id"] as const;
+
+export async function fetchWalletPage(
+  query: ListQuery = {},
+): Promise<Paginated<CustomerWallet>> {
+  const payload = await apiFetch<unknown>(
+    `/customer-wallets${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, WALLET_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseWallet, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchWallets(customerId?: string) {

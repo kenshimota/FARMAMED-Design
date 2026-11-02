@@ -1,5 +1,12 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
+import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
 
 export type RecordId = number | string;
 
@@ -512,6 +519,34 @@ function appendFilter(
 ) {
   const normalized = value?.trim();
   if (normalized) query.set(key, normalized);
+}
+
+const INVOICE_FILTERS = [
+  "customer_id",
+  "order_id",
+  "number",
+  "payment_status",
+  "status",
+  "from",
+  "to",
+  "due_from",
+  "due_to",
+] as const;
+
+export async function fetchInvoicePage(
+  query: ListQuery = {},
+): Promise<Paginated<Invoice>> {
+  const payload = await apiFetch<unknown>(
+    `/invoices${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, INVOICE_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseInvoice, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchInvoices(filters: InvoiceFilters = {}) {

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -14,14 +13,17 @@ import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { LotDeleteDialog } from "@/components/erp/records/lot-delete-dialog";
 import {
   addDaysIso,
   getLotExpiryStatus,
   LotExpiryBadge,
   LotLocationStatusBadge,
-  lotCountLabel,
   lotItemStateLabel,
   lotLocationLabel,
   lotProductName,
@@ -31,9 +33,8 @@ import {
   LotSyncNotice,
 } from "@/components/erp/records/lot-shared";
 import {
-  fetchLots,
+  fetchLotPage,
   lotAvailable,
-  type LotFilters,
   type LotLocationStatus,
   type LotRecord,
 } from "@/components/erp/records/lots-api";
@@ -53,7 +54,8 @@ import {
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
 import {
-  fetchProducts,
+  fetchProduct,
+  fetchProductPage,
   findById,
   type ProductRecord,
 } from "@/components/erp/records/records-api";
@@ -72,6 +74,7 @@ import {
 import { formatDateOnly, formatInteger } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import type { UiError } from "@/lib/api-errors";
+import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 
 export type LotExpirySelection =
   | ""
@@ -94,20 +97,6 @@ export type LotListFilters = {
   expiringBefore: string;
 };
 
-const EMPTY_FILTERS: LotListFilters = {
-  productId: "",
-  itemStateId: "",
-  warehouseId: "",
-  shelfId: "",
-  sectionId: "",
-  number: "",
-  locationStatus: "",
-  expired: "",
-  expiringBefore: "",
-};
-
-const NO_LOTS: LotRecord[] = [];
-const NO_PRODUCTS: ProductRecord[] = [];
 const NO_ITEM_STATES: ItemStateRecord[] = [];
 const NO_WAREHOUSES: WarehouseRecord[] = [];
 const NO_SHELVES: ShelfRecord[] = [];
@@ -136,71 +125,6 @@ function currentExpiryWindows() {
   };
 }
 
-function filtersKey(filters: LotListFilters) {
-  return [
-    filters.productId,
-    filters.itemStateId,
-    filters.warehouseId,
-    filters.shelfId,
-    filters.sectionId,
-    filters.number,
-    filters.locationStatus,
-    filters.expired,
-    filters.expiringBefore,
-  ].join("|");
-}
-
-function hasActiveFilters(filters: LotListFilters) {
-  return Boolean(
-    filters.productId ||
-      filters.itemStateId ||
-      filters.warehouseId ||
-      filters.shelfId ||
-      filters.sectionId ||
-      filters.number.trim() ||
-      filters.locationStatus ||
-      filters.expired ||
-      filters.expiringBefore,
-  );
-}
-
-function toApiFilters(filters: LotListFilters): LotFilters {
-  return {
-    product_id: filters.productId || undefined,
-    item_state_id: filters.itemStateId || undefined,
-    warehouse_id: filters.warehouseId || undefined,
-    shelf_id: filters.shelfId || undefined,
-    section_id: filters.sectionId || undefined,
-    number: filters.number.trim() || undefined,
-    location_status: filters.locationStatus || undefined,
-    expired:
-      filters.expired === "true"
-        ? true
-        : filters.expired === "false"
-          ? false
-          : undefined,
-    expiring_before: filters.expiringBefore || undefined,
-  };
-}
-
-function buildQuery(filters: LotListFilters) {
-  const params = new URLSearchParams();
-  if (filters.productId) params.set("product_id", filters.productId);
-  if (filters.itemStateId) params.set("item_state_id", filters.itemStateId);
-  if (filters.warehouseId) params.set("warehouse_id", filters.warehouseId);
-  if (filters.shelfId) params.set("shelf_id", filters.shelfId);
-  if (filters.sectionId) params.set("section_id", filters.sectionId);
-  if (filters.number.trim()) params.set("number", filters.number.trim());
-  if (filters.locationStatus) {
-    params.set("location_status", filters.locationStatus);
-  }
-  if (filters.expired) params.set("expired", filters.expired);
-  if (filters.expiringBefore) {
-    params.set("expiring_before", filters.expiringBefore);
-  }
-  return params;
-}
-
 function lotErrorMessage(error: UiError | null, fallback: string) {
   if (!error) return fallback;
   if (error.kind === "validation") {
@@ -211,6 +135,12 @@ function lotErrorMessage(error: UiError | null, fallback: string) {
 
 function productOptionLabel(product: ProductRecord) {
   return `${product.name} (${product.reference})`;
+}
+
+function normalizeLocationStatus(value: string): "" | LotLocationStatus {
+  return value === "pending" || value === "in_progress" || value === "located"
+    ? value
+    : "";
 }
 
 type LotListPageProps = {
@@ -228,33 +158,65 @@ export function LotListPage({ initialFilters }: LotListPageProps) {
 }
 
 function LotListContent({ initialFilters }: LotListPageProps) {
-  const router = useRouter();
-  const pathname = usePathname();
   const { user } = useSession();
   const canWrite = canWriteModule(user.role, "lotes");
   const canReadExistencias = canReadModule(user.role, "existencias");
   const canWriteBandeja = canWriteModule(user.role, "bandeja_almacen");
 
-  const [filters, setFilters] = useState<LotListFilters>(initialFilters);
+  const list = useServerList<LotRecord>({
+    loader: (request) => fetchLotPage(request),
+    filterKeys: [
+      "product_id",
+      "item_state_id",
+      "warehouse_id",
+      "shelf_id",
+      "section_id",
+      "number",
+      "location_status",
+      "expired",
+      "expiring_before",
+    ],
+    defaultSort: "expiration_date",
+    defaultOrder: "asc",
+    initial: {
+      filters: {
+        product_id: initialFilters.productId,
+        item_state_id: initialFilters.itemStateId,
+        warehouse_id: initialFilters.warehouseId,
+        shelf_id: initialFilters.shelfId,
+        section_id: initialFilters.sectionId,
+        number: initialFilters.number,
+        location_status: initialFilters.locationStatus,
+        expired: initialFilters.expired,
+        expiring_before: initialFilters.expiringBefore,
+      },
+    },
+  });
   const [dateWindows, setDateWindows] = useState<ReturnType<
     typeof currentExpiryWindows
   > | null>(null);
   const [numberDraft, setNumberDraft] = useState(initialFilters.number);
   const [deleteTarget, setDeleteTarget] = useState<LotRecord | null>(null);
   const [deleteConflict, setDeleteConflict] = useState(false);
-  const filtersRef = useRef(filters);
+  const [productDraft, setProductDraft] = useState("");
   const numberTimer = useRef<number | null>(null);
 
-  const initialFiltersKey = filtersKey(initialFilters);
-  const [appliedInitialFiltersKey, setAppliedInitialFiltersKey] =
-    useState(initialFiltersKey);
-  if (initialFiltersKey !== appliedInitialFiltersKey) {
-    setAppliedInitialFiltersKey(initialFiltersKey);
-    setFilters(initialFilters);
-    if (numberDraft === filters.number) {
-      setNumberDraft(initialFilters.number);
-    }
-  }
+  const productId = list.filters.product_id ?? "";
+  const itemStateId = list.filters.item_state_id ?? "";
+  const warehouseId = list.filters.warehouse_id ?? "";
+  const shelfId = list.filters.shelf_id ?? "";
+  const sectionId = list.filters.section_id ?? "";
+  const number = list.filters.number ?? "";
+  const locationStatus = normalizeLocationStatus(
+    list.filters.location_status ?? "",
+  );
+  const expired: "" | "true" | "false" =
+    list.filters.expired === "true"
+      ? "true"
+      : list.filters.expired === "false"
+        ? "false"
+        : "";
+  const expiringBefore = list.filters.expiring_before ?? "";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -263,59 +225,66 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const productsResource = useAsyncResource(fetchProducts);
+  const [appliedNumber, setAppliedNumber] = useState(number);
+  if (number !== appliedNumber) {
+    setAppliedNumber(number);
+    setNumberDraft(number);
+  }
+
   const itemStatesResource = useAsyncResource(fetchItemStates);
   const warehousesResource = useAsyncResource(fetchWarehouses);
 
   const shelvesLoader = useCallback(
-    () => fetchShelves(filters.warehouseId),
-    [filters.warehouseId],
+    () => fetchShelves(warehouseId),
+    [warehouseId],
   );
   const shelvesResource = useAsyncResource(shelvesLoader, {
-    enabled: Boolean(filters.warehouseId),
+    enabled: Boolean(warehouseId),
   });
-
+  const previousWarehouseId = useRef(warehouseId);
   const reloadShelves = shelvesResource.reload;
-  const previousWarehouseId = useRef(filters.warehouseId);
 
   useEffect(() => {
     const previous = previousWarehouseId.current;
-    previousWarehouseId.current = filters.warehouseId;
-    if (!filters.warehouseId || !previous) return;
+    previousWarehouseId.current = warehouseId;
+    if (previous === warehouseId) return;
     reloadShelves();
-  }, [filters.warehouseId, reloadShelves]);
+  }, [reloadShelves, warehouseId]);
 
-  const products = productsResource.data ?? NO_PRODUCTS;
   const itemStates = itemStatesResource.data ?? NO_ITEM_STATES;
   const warehouses = warehousesResource.data ?? NO_WAREHOUSES;
   const shelves = shelvesResource.data ?? NO_SHELVES;
 
   const selectedShelf = useMemo(
-    () => findById(shelves, filters.shelfId),
-    [filters.shelfId, shelves],
+    () => findById(shelves, shelfId),
+    [shelfId, shelves],
   );
   const sections = selectedShelf?.sections ?? NO_SECTIONS;
 
-  const lotsLoader = useCallback(
-    () => fetchLots(toApiFilters(filters)),
-    [filters],
+  const lots = list.items;
+  const productIds = useMemo(
+    () => [
+      ...(productId ? [productId] : []),
+      ...lots.map((lot) => String(lot.product_id)),
+    ],
+    [lots, productId],
   );
-  const lotsResource = useAsyncResource(lotsLoader);
-  const reloadLots = lotsResource.reload;
-  const lots = lotsResource.data ?? NO_LOTS;
+  const productsById = useRecordsById<ProductRecord>({
+    ids: productIds,
+    load: fetchProduct,
+    getId: (product) => product.id,
+  }).records;
 
-  const activeFilterKey = filtersKey(filters);
-  const appliedFilterKey = useRef(activeFilterKey);
-
-  useEffect(() => {
-    filtersRef.current = filters;
-  }, [filters]);
-
-  useEffect(() => {
-    if (appliedFilterKey.current === activeFilterKey) return;
-    appliedFilterKey.current = activeFilterKey;
-    reloadLots();
-  }, [activeFilterKey, reloadLots]);
+  const productLabel = productId
+    ? productsById[productId]
+      ? productOptionLabel(productsById[productId])
+      : `Producto #${productId}`
+    : "";
+  const [appliedProductLabel, setAppliedProductLabel] = useState(productLabel);
+  if (productLabel !== appliedProductLabel) {
+    setAppliedProductLabel(productLabel);
+    setProductDraft(productLabel);
+  }
 
   useEffect(() => {
     return () => {
@@ -325,28 +294,33 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     };
   }, []);
 
-  const filtersActive = hasActiveFilters(filters);
-  const countLabel = lotsResource.data
-    ? lotCountLabel(lots.length)
-    : lotsResource.status === "error"
-      ? "No se pudieron cargar los lotes"
-      : "Cargando lotes…";
+  const filtersActive = Boolean(
+    productId ||
+      itemStateId ||
+      warehouseId ||
+      shelfId ||
+      sectionId ||
+      number ||
+      locationStatus ||
+      expired ||
+      expiringBefore,
+  );
 
   const expirySelection = useMemo<LotExpirySelection>(() => {
-    if (filters.expired === "true") {
-      return filters.expiringBefore ? "personalizado" : "vencidos";
+    if (expired === "true") {
+      return expiringBefore ? "personalizado" : "vencidos";
     }
-    if (filters.expired === "false") {
-      if (!filters.expiringBefore) return "no-vencidos";
+    if (expired === "false") {
+      if (!expiringBefore) return "no-vencidos";
       if (dateWindows) {
-        if (filters.expiringBefore === dateWindows.d30) return "proximos-30";
-        if (filters.expiringBefore === dateWindows.d60) return "proximos-60";
-        if (filters.expiringBefore === dateWindows.d90) return "proximos-90";
+        if (expiringBefore === dateWindows.d30) return "proximos-30";
+        if (expiringBefore === dateWindows.d60) return "proximos-60";
+        if (expiringBefore === dateWindows.d90) return "proximos-90";
       }
       return "personalizado";
     }
-    return filters.expiringBefore ? "personalizado" : "";
-  }, [dateWindows, filters.expired, filters.expiringBefore]);
+    return expiringBefore ? "personalizado" : "";
+  }, [dateWindows, expired, expiringBefore]);
 
   const expiryOptions = useMemo(
     () =>
@@ -358,25 +332,14 @@ function LotListContent({ initialFilters }: LotListPageProps) {
 
   const customExpiryDescription = (() => {
     if (expirySelection !== "personalizado") return null;
-    const formatted = filters.expiringBefore
-      ? formatDateOnly(filters.expiringBefore)
-      : "";
+    const formatted = expiringBefore ? formatDateOnly(expiringBefore) : "";
     if (!formatted) return "Filtro personalizado de vencimiento.";
-    if (filters.expired === "true") return `Vencidos hasta el ${formatted}.`;
-    if (filters.expired === "false") {
+    if (expired === "true") return `Vencidos hasta el ${formatted}.`;
+    if (expired === "false") {
       return `Hasta el ${formatted}, sin vencidos.`;
     }
     return `Vence antes del ${formatted}.`;
   })();
-
-  const productOptions = useMemo(
-    () =>
-      products.map((product) => ({
-        value: String(product.id),
-        label: productOptionLabel(product),
-      })),
-    [products],
-  );
 
   const itemStateOptions = useMemo(
     () =>
@@ -400,13 +363,13 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     () =>
       shelves
         .filter(
-          (shelf) => String(shelf.warehouse_id) === filters.warehouseId,
+          (shelf) => String(shelf.warehouse_id) === warehouseId,
         )
         .map((shelf) => ({
           value: String(shelf.id),
           label: lotShelfLabel(shelf),
         })),
-    [filters.warehouseId, shelves],
+    [warehouseId, shelves],
   );
 
   const sectionOptions = useMemo(
@@ -418,54 +381,118 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     [sections],
   );
 
-  function commitFilters(next: LotListFilters) {
-    setFilters(next);
-    const query = buildQuery(next).toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {
-      scroll: false,
+  const chips: FilterChip[] = [];
+  if (productId) {
+    chips.push({
+      id: "product_id",
+      label: `Producto: ${productDraft || `#${productId}`}`,
+      onRemove: () => list.setFilter("product_id", ""),
+    });
+  }
+  if (itemStateId) {
+    chips.push({
+      id: "item_state_id",
+      label: `Estado: ${
+        itemStateOptions.find((option) => option.value === itemStateId)?.label ??
+        `#${itemStateId}`
+      }`,
+      onRemove: () => list.setFilter("item_state_id", ""),
+    });
+  }
+  if (warehouseId) {
+    chips.push({
+      id: "warehouse_id",
+      label: `Bodega: ${
+        warehouseOptions.find((option) => option.value === warehouseId)?.label ??
+        `#${warehouseId}`
+      }`,
+      onRemove: () => list.setFilter("warehouse_id", ""),
+    });
+  }
+  if (shelfId) {
+    chips.push({
+      id: "shelf_id",
+      label: `Estante: ${
+        shelfOptions.find((option) => option.value === shelfId)?.label ??
+        `#${shelfId}`
+      }`,
+      onRemove: () => list.setFilter("shelf_id", ""),
+    });
+  }
+  if (sectionId) {
+    chips.push({
+      id: "section_id",
+      label: `Sección: ${
+        sectionOptions.find((option) => option.value === sectionId)?.label ??
+        `#${sectionId}`
+      }`,
+      onRemove: () => list.setFilter("section_id", ""),
+    });
+  }
+  if (locationStatus) {
+    chips.push({
+      id: "location_status",
+      label: `Ubicación: ${
+        LOCATION_STATUS_OPTIONS.find(
+          (option) => option.value === locationStatus,
+        )?.label ?? locationStatus
+      }`,
+      onRemove: () => list.setFilter("location_status", ""),
+    });
+  }
+  if (expirySelection) {
+    chips.push({
+      id: "expiry",
+      label:
+        expirySelection === "personalizado"
+          ? customExpiryDescription ?? "Vencimiento personalizado"
+          : `Vencimiento: ${
+              EXPIRY_OPTIONS.find((option) => option.value === expirySelection)
+                ?.label ?? expirySelection
+            }`,
+      onRemove: () =>
+        list.setFilters({ expired: "", expiring_before: "" }),
+    });
+  }
+  if (number) {
+    chips.push({
+      id: "number",
+      label: `Número: ${number}`,
+      onRemove: () => {
+        setNumberDraft("");
+        list.setFilter("number", "");
+      },
     });
   }
 
-  function updateFilter(
-    key: "productId" | "itemStateId" | "sectionId",
-    value: string,
-  ) {
-    commitFilters({ ...filters, [key]: value });
-  }
-
   function updateWarehouse(value: string) {
-    commitFilters({
-      ...filters,
-      warehouseId: value,
-      shelfId: "",
-      sectionId: "",
+    list.setFilters({
+      warehouse_id: value,
+      shelf_id: "",
+      section_id: "",
     });
   }
 
   function updateShelf(value: string) {
-    commitFilters({ ...filters, shelfId: value, sectionId: "" });
+    list.setFilters({ shelf_id: value, section_id: "" });
   }
 
   function updateLocationStatus(value: string) {
-    const locationStatus: LotListFilters["locationStatus"] =
-      value === "pending" || value === "in_progress" || value === "located"
-        ? value
-        : "";
-    commitFilters({ ...filters, locationStatus });
+    list.setFilter("location_status", normalizeLocationStatus(value));
   }
 
   function updateExpiry(value: string) {
     if (value === "personalizado") return;
     if (value === "") {
-      commitFilters({ ...filters, expired: "", expiringBefore: "" });
+      list.setFilters({ expired: "", expiring_before: "" });
       return;
     }
     if (value === "vencidos") {
-      commitFilters({ ...filters, expired: "true", expiringBefore: "" });
+      list.setFilters({ expired: "true", expiring_before: "" });
       return;
     }
     if (value === "no-vencidos") {
-      commitFilters({ ...filters, expired: "false", expiringBefore: "" });
+      list.setFilters({ expired: "false", expiring_before: "" });
       return;
     }
 
@@ -477,25 +504,25 @@ function LotListContent({ initialFilters }: LotListPageProps) {
         : value === "proximos-60"
           ? windows.d60
           : windows.d90;
-    commitFilters({ ...filters, expired: "false", expiringBefore: before });
+    list.setFilters({ expired: "false", expiring_before: before });
   }
 
   function handleNumberChange(value: string) {
     setNumberDraft(value);
     if (numberTimer.current !== null) window.clearTimeout(numberTimer.current);
     numberTimer.current = window.setTimeout(() => {
-      commitFilters({ ...filtersRef.current, number: value.trim() });
-    }, 450);
+      list.setFilter("number", value.trim());
+    }, 300);
   }
 
   function clearFilters() {
     if (numberTimer.current !== null) window.clearTimeout(numberTimer.current);
     setNumberDraft("");
-    commitFilters(EMPTY_FILTERS);
+    list.clearFilters();
   }
 
   function productFor(lot: LotRecord) {
-    return lot.product ?? findById(products, lot.product_id);
+    return lot.product ?? productsById[String(lot.product_id)] ?? null;
   }
 
   const columns: RecordsTableColumn<LotRecord>[] = [
@@ -772,197 +799,189 @@ function LotListContent({ initialFilters }: LotListPageProps) {
         </NoticeBanner>
       )}
 
-      <section
-        aria-label="Filtros de lotes"
-        className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SelectField
-            emptyLabel="No hay productos registrados."
+      <FilterBar
+        activeCount={chips.length}
+        chips={chips}
+        extra={
+          customExpiryDescription ? (
+            <p className="mt-3 text-[12px] leading-5 text-muted">
+              {customExpiryDescription}
+            </p>
+          ) : undefined
+        }
+        id="lotes-filtros"
+        loading={list.status === "loading"}
+        onClear={clearFilters}
+        results={
+          list.status === "loading"
+            ? "Cargando lotes…"
+            : list.status === "error" && lots.length === 0
+              ? "No se pudieron cargar los lotes"
+              : list.meta.total === 0
+                ? "Sin lotes"
+                : `Mostrando ${formatInteger(list.range.from)}–${formatInteger(
+                    list.range.to,
+                  )} de ${formatInteger(list.meta.total)}`
+        }
+        search={
+          <AutocompleteField
+            help="Busca el producto por nombre o referencia. El filtro se aplica en el servidor."
             id="filtro-lotes-producto"
             label="Producto"
-            loading={productsResource.status === "loading"}
-            loadingLabel="Cargando productos…"
-            loadError={
-              productsResource.status === "error"
-                ? productsResource.error?.message ??
-                  "No pudimos cargar los productos."
-                : null
-            }
-            onChange={(value) => updateFilter("productId", value)}
-            onRetry={productsResource.reload}
-            options={productOptions}
-            placeholder="Todos los productos"
-            value={filters.productId}
+            loadOptions={async (query) => {
+              const page = await fetchProductPage({ q: query, pageSize: 10 });
+              return page.data.map((product) => ({
+                value: String(product.id),
+                label: productOptionLabel(product),
+              }));
+            }}
+            onSelect={(option) => {
+              setProductDraft(option.label);
+              list.setFilter("product_id", option.value);
+            }}
+            onValueChange={(value) => {
+              setProductDraft(value);
+              if (!value) list.setFilter("product_id", "");
+            }}
+            placeholder="Buscar producto"
+            value={productDraft}
           />
-          <SelectField
-            emptyLabel="No hay estados de ítem registrados."
-            id="filtro-lotes-estado"
-            label="Estado del ítem"
-            loading={itemStatesResource.status === "loading"}
-            loadingLabel="Cargando estados…"
-            loadError={
-              itemStatesResource.status === "error"
-                ? itemStatesResource.error?.message ??
-                  "No pudimos cargar los estados de ítem."
-                : null
-            }
-            onChange={(value) => updateFilter("itemStateId", value)}
-            onRetry={itemStatesResource.reload}
-            options={itemStateOptions}
-            placeholder="Todos los estados"
-            value={filters.itemStateId}
-          />
-          <SelectField
-            emptyLabel="No hay bodegas registradas."
-            id="filtro-lotes-bodega"
-            label="Bodega"
-            loading={warehousesResource.status === "loading"}
-            loadingLabel="Cargando bodegas…"
-            loadError={
-              warehousesResource.status === "error"
-                ? warehousesResource.error?.message ??
-                  "No pudimos cargar las bodegas."
-                : null
-            }
-            onChange={updateWarehouse}
-            onRetry={warehousesResource.reload}
-            options={warehouseOptions}
-            placeholder="Todas las bodegas"
-            value={filters.warehouseId}
-          />
-          <SelectField
-            disabled={!filters.warehouseId}
-            emptyLabel={
-              filters.warehouseId
-                ? "La bodega no tiene estantes registrados."
-                : "Elige una bodega para ver sus estantes."
-            }
-            id="filtro-lotes-estante"
-            label="Estante"
-            loading={
-              Boolean(filters.warehouseId) &&
-              (shelvesResource.status === "loading" ||
-                shelvesResource.status === "refreshing")
-            }
-            loadingLabel="Cargando estantes…"
-            loadError={
-              filters.warehouseId && shelvesResource.status === "error"
-                ? shelvesResource.error?.message ??
-                  "No pudimos cargar los estantes."
-                : null
-            }
-            onChange={updateShelf}
-            onRetry={reloadShelves}
-            options={shelfOptions}
-            placeholder="Todos los estantes"
-            value={filters.shelfId}
-          />
-          <SelectField
-            disabled={!filters.shelfId}
-            emptyLabel={
-              filters.shelfId
-                ? "El estante no tiene secciones registradas."
-                : "Elige un estante para ver sus secciones."
-            }
-            id="filtro-lotes-seccion"
-            label="Sección"
-            onChange={(value) => updateFilter("sectionId", value)}
-            options={sectionOptions}
-            placeholder="Todas las secciones"
-            value={filters.sectionId}
-          />
-          <SelectField
-            id="filtro-lotes-ubicacion"
-            label="Estado de ubicación"
-            onChange={updateLocationStatus}
-            options={LOCATION_STATUS_OPTIONS}
-            placeholder="Todos los estados"
-            value={filters.locationStatus}
-          />
-          <SelectField
-            help={
-              expirySelection === "personalizado"
-                ? "Este filtro conserva la fecha exacta recibida."
-                : undefined
-            }
-            id="filtro-lotes-vencimiento"
-            label="Vencimiento"
-            onChange={updateExpiry}
-            options={expiryOptions}
-            placeholder="Todos los vencimientos"
-            value={expirySelection}
-          />
-          <TextField
-            help="Filtra por número de lote. Se aplica automáticamente al escribir."
-            id="filtro-lotes-numero"
-            label="Número de lote"
-            onChange={handleNumberChange}
-            placeholder="Ej. 12"
-            value={numberDraft}
-          />
-        </div>
+        }
+      >
+        <SelectField
+          emptyLabel="No hay estados de ítem registrados."
+          id="filtro-lotes-estado"
+          label="Estado del ítem"
+          loading={itemStatesResource.status === "loading"}
+          loadingLabel="Cargando estados…"
+          loadError={
+            itemStatesResource.status === "error"
+              ? itemStatesResource.error?.message ??
+                "No pudimos cargar los estados de ítem."
+              : null
+          }
+          onChange={(value) => list.setFilter("item_state_id", value)}
+          onRetry={itemStatesResource.reload}
+          options={itemStateOptions}
+          placeholder="Todos los estados"
+          value={itemStateId}
+        />
+        <SelectField
+          emptyLabel="No hay bodegas registradas."
+          id="filtro-lotes-bodega"
+          label="Bodega"
+          loading={warehousesResource.status === "loading"}
+          loadingLabel="Cargando bodegas…"
+          loadError={
+            warehousesResource.status === "error"
+              ? warehousesResource.error?.message ??
+                "No pudimos cargar las bodegas."
+              : null
+          }
+          onChange={updateWarehouse}
+          onRetry={warehousesResource.reload}
+          options={warehouseOptions}
+          placeholder="Todas las bodegas"
+          value={warehouseId}
+        />
+        <SelectField
+          disabled={!warehouseId}
+          emptyLabel={
+            warehouseId
+              ? "La bodega no tiene estantes registrados."
+              : "Elige una bodega para ver sus estantes."
+          }
+          id="filtro-lotes-estante"
+          label="Estante"
+          loading={
+            Boolean(warehouseId) &&
+            (shelvesResource.status === "loading" ||
+              shelvesResource.status === "refreshing")
+          }
+          loadingLabel="Cargando estantes…"
+          loadError={
+            warehouseId && shelvesResource.status === "error"
+              ? shelvesResource.error?.message ??
+                "No pudimos cargar los estantes."
+              : null
+          }
+          onChange={updateShelf}
+          onRetry={reloadShelves}
+          options={shelfOptions}
+          placeholder="Todos los estantes"
+          value={shelfId}
+        />
+        <SelectField
+          disabled={!shelfId}
+          emptyLabel={
+            shelfId
+              ? "El estante no tiene secciones registradas."
+              : "Elige un estante para ver sus secciones."
+          }
+          id="filtro-lotes-seccion"
+          label="Sección"
+          onChange={(value) => list.setFilter("section_id", value)}
+          options={sectionOptions}
+          placeholder="Todas las secciones"
+          value={sectionId}
+        />
+        <SelectField
+          id="filtro-lotes-ubicacion"
+          label="Estado de ubicación"
+          onChange={updateLocationStatus}
+          options={LOCATION_STATUS_OPTIONS}
+          placeholder="Todos los estados"
+          value={locationStatus}
+        />
+        <SelectField
+          help={
+            expirySelection === "personalizado"
+              ? "Este filtro conserva la fecha exacta recibida."
+              : undefined
+          }
+          id="filtro-lotes-vencimiento"
+          label="Vencimiento"
+          onChange={updateExpiry}
+          options={expiryOptions}
+          placeholder="Todos los vencimientos"
+          value={expirySelection}
+        />
+        <TextField
+          help="Filtra por número de lote. Se aplica automáticamente al escribir."
+          id="filtro-lotes-numero"
+          inputType="search"
+          label="Número de lote"
+          onChange={handleNumberChange}
+          placeholder="Ej. 12"
+          value={numberDraft}
+        />
+      </FilterBar>
 
-        {customExpiryDescription && (
-          <p className="mt-3 text-[12px] leading-5 text-muted">
-            {customExpiryDescription}
-          </p>
-        )}
-
-        <p aria-live="polite" className="sr-only">
-          {filters.warehouseId &&
-          (shelvesResource.status === "loading" ||
-            shelvesResource.status === "refreshing")
-            ? "Cargando los estantes de la bodega seleccionada."
-            : ""}
-          {filters.shelfId &&
-          (shelvesResource.status === "loading" ||
-            shelvesResource.status === "refreshing")
-            ? "Cargando las secciones del estante seleccionado."
-            : ""}
-        </p>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-            {countLabel}
-          </p>
-          {filtersActive && (
-            <button
-              className="min-h-11 text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-              onClick={clearFilters}
-              type="button"
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
-
-      {lotsResource.status === "loading" && (
+      {list.status === "loading" && (
         <RecordsTableSkeleton columns={10} label="Cargando lotes…" rows={6} />
       )}
 
-      {lotsResource.status === "error" && lots.length === 0 && (
+      {list.status === "error" && lots.length === 0 && (
         <RecordsLoadError
           backHref="/app"
           backLabel="Volver al inicio"
           description={lotErrorMessage(
-            lotsResource.error,
+            list.error,
             "No pudimos cargar los lotes.",
           )}
-          onRetry={lotsResource.error?.canRetry ? reloadLots : undefined}
+          onRetry={list.error?.canRetry ? list.reload : undefined}
           title="No pudimos cargar los lotes"
         />
       )}
 
-      {lotsResource.status !== "loading" &&
-        !(lotsResource.status === "error" && lots.length === 0) && (
+      {list.status !== "loading" &&
+        !(list.status === "error" && lots.length === 0) && (
           <section
-            aria-busy={lotsResource.status === "refreshing" || undefined}
+            aria-busy={list.status === "refreshing" || undefined}
             aria-label="Listado de lotes"
             className="space-y-4"
           >
-            {lotsResource.status === "refreshing" && (
+            {list.status === "refreshing" && (
               <>
                 <div aria-hidden="true" className="reload-bar" />
                 <p aria-live="polite" className="sr-only">
@@ -971,12 +990,12 @@ function LotListContent({ initialFilters }: LotListPageProps) {
               </>
             )}
 
-            {lotsResource.status === "error" && lots.length > 0 && (
+            {list.status === "error" && lots.length > 0 && (
               <NoticeBanner
                 action={
                   <button
                     className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                    onClick={reloadLots}
+                    onClick={list.reload}
                     type="button"
                   >
                     Reintentar
@@ -985,47 +1004,64 @@ function LotListContent({ initialFilters }: LotListPageProps) {
                 tone="warning"
               >
                 {lotErrorMessage(
-                  lotsResource.error,
+                  list.error,
                   "No pudimos actualizar los lotes. Mostramos los datos disponibles.",
                 )}
               </NoticeBanner>
             )}
 
             {lots.length === 0 ? (
-              <EmptyState
-                action={
-                  filtersActive ? (
+              list.meta.total === 0 && !filtersActive ? (
+                <EmptyState
+                  action={
+                    canWrite ? (
+                      <Link
+                        className="button-base button-primary min-h-11 px-5"
+                        href="/app/lotes/nuevo"
+                      >
+                        Nuevo lote
+                        <Icon name="arrow-right" size={17} />
+                      </Link>
+                    ) : undefined
+                  }
+                  description="Registra el primero para controlar vencimientos y ubicación."
+                  title="Todavía no hay lotes registrados."
+                />
+              ) : (
+                <EmptyState
+                  action={
                     <button
                       className="button-base button-secondary min-h-11 px-5"
-                      onClick={clearFilters}
+                      onClick={
+                        list.isPageOutOfRange
+                          ? list.goToFirstPage
+                          : clearFilters
+                      }
                       type="button"
                     >
-                      Limpiar filtros
+                      {list.isPageOutOfRange
+                        ? "Ir a la primera página"
+                        : "Limpiar filtros"}
                     </button>
-                  ) : canWrite ? (
-                    <Link
-                      className="button-base button-primary min-h-11 px-5"
-                      href="/app/lotes/nuevo"
-                    >
-                      Nuevo lote
-                      <Icon name="arrow-right" size={17} />
-                    </Link>
-                  ) : undefined
-                }
-                description={
-                  filtersActive
-                    ? "Ajusta los filtros para ver otros resultados."
-                    : "Registra el primero para controlar vencimientos y ubicación."
-                }
-                title={
-                  filtersActive
-                    ? "No hay lotes que coincidan con los filtros."
-                    : "Todavía no hay lotes registrados."
-                }
-              />
+                  }
+                  description={
+                    list.isPageOutOfRange
+                      ? `Hay ${formatInteger(
+                          list.meta.total,
+                        )} lotes en total, pero esta página no tiene filas.`
+                      : "No hay resultados con estos filtros. Ajusta los criterios."
+                  }
+                  title={
+                    list.isPageOutOfRange
+                      ? "No hay resultados en esta página"
+                      : "Sin resultados con estos filtros."
+                  }
+                />
+              )
             ) : (
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
+                  busy={list.status === "refreshing"}
                   caption="Lotes con número, producto, vencimiento, estado, estado de ubicación, existencia, reservado, disponible, ubicación y acciones"
                   columns={columns}
                   getRowAttributes={(lot) => {
@@ -1049,6 +1085,13 @@ function LotListContent({ initialFilters }: LotListPageProps) {
                 />
               </div>
             )}
+
+            <PaginationControls
+              meta={list.meta}
+              onFirstPage={list.goToFirstPage}
+              onPageChange={list.setPage}
+              onPageSizeChange={list.setPageSize}
+            />
           </section>
         )}
 
@@ -1059,7 +1102,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
         onDeleted={() => {
           setDeleteTarget(null);
           setDeleteConflict(false);
-          reloadLots();
+          list.reload();
         }}
         productName={
           deleteTarget

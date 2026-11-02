@@ -1,22 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
+import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
 import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
+import { FilterBar } from "@/components/erp/ui/filter-bar";
+import { PaginationControls } from "@/components/erp/ui/pagination-controls";
 import { Tabs, getTabId, getTabPanelId } from "@/components/erp/ui/tabs";
 import { useToast } from "@/components/erp/ui/toast";
-import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { useServerList } from "@/components/erp/ui/use-server-list";
 import { CustomerMap } from "@/components/erp/records/customer-map";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
@@ -35,14 +32,13 @@ import {
 } from "@/components/erp/records/records-table";
 import {
   deleteCustomer,
-  fetchCustomers,
+  fetchCustomerPage,
   hasCoordinates,
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import { formatCoordinate, formatInteger } from "@/lib/format";
 
-const NO_CUSTOMERS: CustomerRecord[] = [];
 const TABS_ID = "clientes-vista";
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
@@ -58,14 +54,6 @@ function readIsDesktop() {
 
 function readServerIsDesktop() {
   return false;
-}
-
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
 }
 
 function customerCountLabel(count: number) {
@@ -89,10 +77,10 @@ export function CustomerListPage() {
   const toast = useToast();
   const canRead = canReadModule(user.role, "clientes");
   const canWrite = canWriteModule(user.role, "clientes");
-  const customersResource = useAsyncResource(fetchCustomers, {
+  const list = useServerList<CustomerRecord>({
+    loader: (request) => fetchCustomerPage(request),
     enabled: canRead,
   });
-  const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("listado");
   const [mapCollapsed, setMapCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -106,30 +94,14 @@ export function CustomerListPage() {
     readServerIsDesktop,
   );
 
-  const customers = customersResource.data ?? NO_CUSTOMERS;
-
-  const filteredCustomers = useMemo(() => {
-    const normalizedQuery = normalizeSearch(query);
-    if (!normalizedQuery) return customers;
-    return customers.filter(
-      (customer) =>
-        normalizeSearch(customer.fullName).includes(normalizedQuery) ||
-        normalizeSearch(customer.email).includes(normalizedQuery) ||
-        normalizeSearch(customer.direction).includes(normalizedQuery),
-    );
-  }, [customers, query]);
-
-  const locatedCount = filteredCustomers.filter(hasCoordinates).length;
-  const totalLocatedCount = customers.filter(hasCoordinates).length;
-  const filtersActive = Boolean(query.trim());
-  const totalLabel = customerCountLabel(customers.length);
-  const countLabel = filtersActive
-    ? `Mostrando ${formatInteger(filteredCustomers.length)} de ${totalLabel}`
-    : totalLabel;
+  const customers = list.items;
+  const locatedCount = customers.filter(hasCoordinates).length;
+  const totalLocatedCount = locatedCount;
+  const filtersActive = Boolean(list.request.q);
+  const countLabel = customerCountLabel(list.meta.total);
 
   const selectedCustomer =
-    filteredCustomers.find((customer) => String(customer.id) === selectedId) ??
-    null;
+    customers.find((customer) => String(customer.id) === selectedId) ?? null;
   const effectiveSelectedId = selectedCustomer
     ? String(selectedCustomer.id)
     : null;
@@ -256,12 +228,11 @@ export function CustomerListPage() {
     );
   }
 
-  const loading = customersResource.status === "loading" && customers.length === 0;
-  const initialError =
-    customersResource.status === "error" && customers.length === 0;
+  const loading = list.status === "loading" && customers.length === 0;
+  const initialError = list.status === "error" && customers.length === 0;
   const locatedSummary = `${formatInteger(locatedCount)} de ${formatInteger(
-    filteredCustomers.length,
-  )} con ubicación`;
+    customers.length,
+  )} con ubicación en esta página`;
 
   const columns: RecordsTableColumn<CustomerRecord>[] = [
     {
@@ -331,6 +302,70 @@ export function CustomerListPage() {
         title="Clientes"
       />
 
+      <FilterBar
+        activeCount={Number(filtersActive)}
+        chips={
+          filtersActive
+            ? [
+                {
+                  id: "q",
+                  label: `Búsqueda: ${list.request.q}`,
+                  onRemove: () => {
+                    list.setSearch("");
+                    list.commitSearch();
+                  },
+                },
+              ]
+            : []
+        }
+        extra={
+          <div className="mt-4 flex justify-end border-t border-line pt-3">
+            <button
+              aria-controls={mapPanelId}
+              aria-expanded={!mapCollapsed}
+              className="hidden min-h-11 items-center justify-center gap-2 rounded-full border border-ink/15 bg-surface px-4 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand lg:inline-flex"
+              onClick={() => setMapCollapsed((current) => !current)}
+              type="button"
+            >
+              <Icon name="map-pin" size={16} />
+              {mapCollapsed ? "Mostrar mapa" : "Ocultar mapa"}
+            </button>
+          </div>
+        }
+        id="clientes-filtros"
+        loading={loading}
+        onClear={list.clearFilters}
+        results={
+          loading
+            ? "Cargando clientes…"
+            : initialError
+              ? "No pudimos cargar los clientes"
+              : `${countLabel} · ${locatedSummary}`
+        }
+        search={
+          <AutocompleteField
+            help="La búsqueda se aplica en el servidor sobre nombre, correo y dirección."
+            id="buscar-clientes"
+            label="Buscar por nombre, correo o dirección"
+            loadOptions={async (query) => {
+              const page = await fetchCustomerPage({ q: query, pageSize: 10 });
+              return page.data.map((customer) => ({
+                value: String(customer.id),
+                label: customer.fullName,
+                description: customer.email || customer.direction || undefined,
+              }));
+            }}
+            onSelect={(option) => {
+              list.setSearch(option.label);
+              list.commitSearch();
+            }}
+            onValueChange={list.setSearch}
+            placeholder="Buscar por nombre, correo o dirección"
+            value={list.searchDraft}
+          />
+        }
+      />
+
       {loading && (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
           <RecordsTableSkeleton
@@ -354,25 +389,24 @@ export function CustomerListPage() {
       {initialError && (
         <RecordsLoadError
           description={
-            customersResource.error?.message ??
-            "No pudimos cargar el listado de clientes."
+            list.error?.message ?? "No pudimos cargar el listado de clientes."
           }
-          onRetry={customersResource.reload}
+          onRetry={list.reload}
           title="No pudimos cargar los clientes"
         />
       )}
 
       {!loading && !initialError && (
         <section className="space-y-4">
-          {customersResource.status === "refreshing" && (
+          {list.status === "refreshing" && (
             <div aria-hidden="true" className="reload-bar" />
           )}
-          {customersResource.status === "error" && customers.length > 0 && (
+          {list.status === "error" && customers.length > 0 && (
             <NoticeBanner
               action={
                 <button
                   className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                  onClick={customersResource.reload}
+                  onClick={list.reload}
                   type="button"
                 >
                   Reintentar
@@ -380,64 +414,10 @@ export function CustomerListPage() {
               }
               tone="warning"
             >
-              {customersResource.error?.message ??
+              {list.error?.message ??
                 "No pudimos actualizar los clientes. Mostramos los datos disponibles."}
             </NoticeBanner>
           )}
-
-          <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-              <div className="min-w-0 flex-1">
-                <label
-                  className="mb-2 block text-[12px] font-semibold text-ink"
-                  htmlFor="buscar-clientes"
-                >
-                  Buscar por nombre, correo o dirección
-                </label>
-                <div className="relative">
-                  <Icon
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
-                    name="search"
-                    size={17}
-                  />
-                  <input
-                    className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-11 pr-11 text-[14px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
-                    id="buscar-clientes"
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar por nombre, correo o dirección"
-                    type="search"
-                    value={query}
-                  />
-                  {filtersActive && (
-                    <button
-                      aria-label="Limpiar búsqueda"
-                      className="absolute right-0.5 top-1/2 flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full text-muted transition-colors hover:bg-background hover:text-ink"
-                      onClick={() => setQuery("")}
-                      type="button"
-                    >
-                      <Icon name="close" size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <button
-                aria-controls={mapPanelId}
-                aria-expanded={!mapCollapsed}
-                className="hidden min-h-11 items-center justify-center gap-2 rounded-full border border-ink/15 bg-surface px-4 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand lg:inline-flex"
-                onClick={() => setMapCollapsed((current) => !current)}
-                type="button"
-              >
-                <Icon name="map-pin" size={16} />
-                {mapCollapsed ? "Mostrar mapa" : "Ocultar mapa"}
-              </button>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-              <p aria-live="polite" className="text-[12px] font-semibold text-muted">
-                {countLabel}
-              </p>
-              <p className="text-[12px] text-muted">{locatedSummary}</p>
-            </div>
-          </div>
 
           <div
             className={`grid gap-5 ${
@@ -456,7 +436,7 @@ export function CustomerListPage() {
                     {
                       id: "listado",
                       label: "Listado",
-                      count: filteredCustomers.length,
+                      count: list.meta.total,
                     },
                     { id: "mapa", label: "Mapa", count: locatedCount },
                   ]}
@@ -474,46 +454,75 @@ export function CustomerListPage() {
                 role={isDesktop ? "region" : "tabpanel"}
               >
                 {customers.length === 0 ? (
-                  <EmptyState
-                    action={
-                      canWrite ? (
-                        <Link
-                          className="button-base button-primary min-h-11 px-5"
-                          href="/app/clientes/nuevo"
+                  list.meta.total === 0 && !filtersActive ? (
+                    <EmptyState
+                      action={
+                        canWrite ? (
+                          <Link
+                            className="button-base button-primary min-h-11 px-5"
+                            href="/app/clientes/nuevo"
+                          >
+                            Nuevo cliente
+                            <Icon name="arrow-right" size={17} />
+                          </Link>
+                        ) : undefined
+                      }
+                      description="Registra el primero para asignarle un vendedor."
+                      title="Todavía no hay clientes."
+                    />
+                  ) : (
+                    <EmptyState
+                      action={
+                        <button
+                          className="button-base button-secondary min-h-11 px-5"
+                          onClick={
+                            list.isPageOutOfRange
+                              ? list.goToFirstPage
+                              : list.clearFilters
+                          }
+                          type="button"
                         >
-                          Nuevo cliente
-                          <Icon name="arrow-right" size={17} />
-                        </Link>
-                      ) : undefined
-                    }
-                    description="Registra el primero para asignarle un vendedor."
-                    title="Todavía no hay clientes."
-                  />
-                ) : filteredCustomers.length === 0 ? (
-                  <EmptyState
-                    action={
-                      <button
-                        className="button-base button-secondary min-h-11 px-5"
-                        onClick={() => setQuery("")}
-                        type="button"
-                      >
-                        Limpiar búsqueda
-                      </button>
-                    }
-                    description="Ajusta la búsqueda para encontrar al cliente."
-                    title="No hay clientes que coincidan con la búsqueda."
-                  />
+                          {list.isPageOutOfRange
+                            ? "Ir a la primera página"
+                            : "Limpiar filtros"}
+                        </button>
+                      }
+                      description={
+                        list.isPageOutOfRange
+                          ? `Hay ${formatInteger(
+                              list.meta.total,
+                            )} clientes en total, pero esta página no tiene filas.`
+                          : "Ajusta la búsqueda para encontrar al cliente."
+                      }
+                      title={
+                        list.isPageOutOfRange
+                          ? "No hay resultados en esta página"
+                          : "Sin resultados con estos filtros."
+                      }
+                    />
+                  )
                 ) : (
-                  <RecordsTable
-                    caption="Clientes con su correo, dirección, coordenadas y acciones"
-                    columns={columns}
-                    getRowAttributes={rowAttributes}
-                    getRowKey={(customer) => String(customer.id)}
-                    getRowLabel={(customer) => customer.fullName}
-                    renderCard={renderCard}
-                    rowActions={renderActions}
-                    rows={filteredCustomers}
-                  />
+                  <>
+                    <RecordsTable
+                      busy={list.status === "refreshing"}
+                      caption="Clientes con su correo, dirección, coordenadas y acciones"
+                      columns={columns}
+                      getRowAttributes={rowAttributes}
+                      getRowKey={(customer) => String(customer.id)}
+                      getRowLabel={(customer) => customer.fullName}
+                      renderCard={renderCard}
+                      rowActions={renderActions}
+                      rows={customers}
+                    />
+                    <div className="mt-4">
+                      <PaginationControls
+                        meta={list.meta}
+                        onFirstPage={list.goToFirstPage}
+                        onPageChange={list.setPage}
+                        onPageSizeChange={list.setPageSize}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -548,16 +557,16 @@ export function CustomerListPage() {
                 <div className="mt-3 h-[340px] sm:h-[420px] lg:h-[520px]">
                   <CustomerMap
                     centerRequest={centerRequest}
-                    customers={filteredCustomers}
+                    customers={customers}
                     onSelect={selectCustomer}
                     selectedId={effectiveSelectedId}
                     totalLocatedCount={totalLocatedCount}
                   />
                 </div>
                 <p className="mt-3 text-[12px] leading-5 text-muted">
-                  Los clientes sin coordenadas aparecen solo en la tabla con
-                  «Sin ubicación registrada». Selecciona un marcador para
-                  resaltar su fila.
+                  El mapa muestra los clientes de esta página. Los clientes sin
+                  coordenadas aparecen solo en la tabla con «Sin ubicación
+                  registrada».
                 </p>
               </div>
             </div>
@@ -586,7 +595,7 @@ export function CustomerListPage() {
           await deleteCustomer(deleteTarget.id);
           toast.success("Cliente eliminado.");
           if (String(deleteTarget.id) === selectedId) setSelectedId(null);
-          customersResource.reload();
+          list.reload();
         }}
         onError={(error) => toast.error(error.message)}
         open={deleteTarget !== null}

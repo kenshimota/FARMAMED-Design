@@ -1,6 +1,13 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import { getStoredToken } from "@/lib/session-store";
 import {
+  buildListQuery,
+  parsePaginated,
+  pickListFilters,
+  type ListQuery,
+  type Paginated,
+} from "@/lib/pagination";
+import {
   readCollection,
   type RecordId,
 } from "@/components/erp/records/records-api";
@@ -549,6 +556,30 @@ function appendFilter(
   if (value === undefined || value === null) return;
   const normalized = String(value).trim();
   if (normalized) query.set(key, normalized);
+}
+
+const ORDER_FILTERS = [
+  "customer_id",
+  "status",
+  "number",
+  "created_from",
+  "created_to",
+] as const;
+
+export async function fetchOrderPage(
+  query: ListQuery = {},
+): Promise<Paginated<OrderRecord>> {
+  const payload = await apiFetch<unknown>(
+    `/orders${buildListQuery({
+      ...query,
+      filters: pickListFilters(query.filters, ORDER_FILTERS),
+    })}`,
+    authOptions(),
+  );
+  return parsePaginated(payload, parseOrder, {
+    page: query.page,
+    pageSize: query.pageSize,
+  });
 }
 
 export async function fetchOrders(filters: OrderFilters = {}) {
