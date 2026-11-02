@@ -17,6 +17,7 @@ export type ProductRecord = {
   reference: string;
   category_id: RecordId;
   image_id: RecordId;
+  tax_id: RecordId | null;
 };
 
 export type CategoryRecord = {
@@ -71,6 +72,7 @@ export function parseProduct(source: unknown): ProductRecord | null {
   const id = readId(record.id);
   const categoryId = readId(record.category_id);
   const imageId = readId(record.image_id);
+  const taxId = readId(record.tax_id);
   const name = readText(record.name);
   const reference = readText(record.reference);
   if (id === null || categoryId === null || imageId === null || !name || !reference) {
@@ -84,6 +86,7 @@ export function parseProduct(source: unknown): ProductRecord | null {
     reference,
     category_id: categoryId,
     image_id: imageId,
+    tax_id: taxId,
   };
 }
 
