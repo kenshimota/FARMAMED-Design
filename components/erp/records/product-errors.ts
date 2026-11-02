@@ -7,7 +7,7 @@ export const PRODUCT_FIELD_IDS = {
   description: "producto-descripcion",
   reference: "producto-referencia",
   category_id: "producto-categoria",
-  image_id: "producto-imagen",
+  image: "producto-imagen",
 } as const;
 
 export type ProductFieldKey = keyof typeof PRODUCT_FIELD_IDS;
@@ -17,7 +17,7 @@ export const PRODUCT_FIELD_LABELS: Record<ProductFieldKey, string> = {
   description: "Descripción",
   reference: "Referencia",
   category_id: "Categoría",
-  image_id: "Imagen",
+  image: "Imagen",
 };
 
 const FIELD_ALIASES: Record<string, ProductFieldKey> = {
@@ -26,13 +26,22 @@ const FIELD_ALIASES: Record<string, ProductFieldKey> = {
   reference: "reference",
   category_id: "category_id",
   categoryid: "category_id",
-  image_id: "image_id",
-  imageid: "image_id",
+  image: "image",
+  image_id: "image",
+  imageid: "image",
+};
+
+const MESSAGE_ALIASES: Record<string, string> = {
+  "invalid image": "Usa una imagen JPEG, PNG o WebP.",
+  "invalid image dimensions": "La imagen supera el tamaño permitido.",
+  "invalid image id": "Selecciona una imagen válida.",
+  "image_id cannot be combined with image":
+    "No puedes combinar un archivo con una imagen existente. Elige una opción.",
 };
 
 const SPECIFIC_FIELD_MESSAGES: Partial<Record<ProductFieldKey, string>> = {
   category_id: "Selecciona una categoría válida.",
-  image_id: "Selecciona una imagen válida.",
+  image: "Selecciona una imagen válida.",
 };
 
 export function mapProductFieldErrors(error: unknown) {
@@ -44,6 +53,12 @@ export function mapProductFieldErrors(error: unknown) {
     if (!key) continue;
     if (key === "reference" && /exist/i.test(rawMessage)) {
       mapped.reference = "Ya existe un producto con esa referencia.";
+      continue;
+    }
+    if (key === "image") {
+      mapped.image =
+        MESSAGE_ALIASES[rawMessage.trim().toLowerCase()] ??
+        (SPECIFIC_FIELD_MESSAGES.image as string);
       continue;
     }
     mapped[key] = SPECIFIC_FIELD_MESSAGES[key] ?? translateFieldMessage(rawMessage);

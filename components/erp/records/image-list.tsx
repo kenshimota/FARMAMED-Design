@@ -19,6 +19,8 @@ import {
 import { RecordsLoadError } from "@/components/erp/records/record-states";
 import {
   fetchImages,
+  getImageDisplayName,
+  isOpaqueImageReference,
   type ImageRecord,
 } from "@/components/erp/records/records-api";
 import { formatInteger } from "@/lib/format";
@@ -79,63 +81,77 @@ function ImageCardsSkeleton() {
 
 function ImageCard({
   canWrite,
+  displayName,
   image,
   onDelete,
 }: {
   canWrite: boolean;
+  displayName: string;
   image: ImageRecord;
-  onDelete: (image: ImageRecord) => void;
+  onDelete: (image: ImageRecord, displayName: string) => void;
 }) {
   const local = Boolean(image.pathname);
+  const generated = isOpaqueImageReference(image.reference);
 
   return (
     <li className="flex flex-col overflow-hidden rounded-[24px] border border-line bg-surface shadow-[0_12px_36px_rgba(27,12,104,0.04)] transition-colors hover:border-brand/35 motion-reduce:transition-none">
       <div className="aspect-[4/3] border-b border-line">
-        <ImagePreview reference={image.reference} src={image.thumbnail} />
+        <ImagePreview reference={displayName} src={image.thumbnail} />
       </div>
 
       <div className="flex flex-1 flex-col p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="min-w-0 break-words text-[15px] font-semibold leading-6 text-ink">
-            {image.reference}
+            {displayName}
           </h2>
           <span
             className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
-              local ? "bg-soft-blue text-brand" : "bg-soft-lime text-ink"
+              generated
+                ? "bg-soft-lime text-ink"
+                : local
+                  ? "bg-soft-blue text-brand"
+                  : "bg-soft-lime text-ink"
             }`}
           >
-            {local ? "Archivo local" : "Solo S3"}
+            {generated ? "Generada" : local ? "Archivo local" : "Solo S3"}
           </span>
         </div>
 
-        <dl className="mt-3 space-y-2 text-[12px]">
-          <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              URL
-            </dt>
-            <dd
-              className="mt-1 truncate font-mono text-[11px] text-muted"
-              dir="ltr"
-              title={image.url}
-            >
-              {shortUrl(image.url)}
-            </dd>
-          </div>
-          {image.pathname && (
+        {generated ? (
+          <p className="mt-3 rounded-xl border border-brand/15 bg-soft-blue px-3 py-2 text-[12px] leading-5 text-ink">
+            Se generó al subir una imagen de producto. La miniatura se
+            administra desde el formulario del producto.
+          </p>
+        ) : (
+          <dl className="mt-3 space-y-2 text-[12px]">
             <div>
               <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                Ruta del archivo
+                URL
               </dt>
               <dd
                 className="mt-1 truncate font-mono text-[11px] text-muted"
                 dir="ltr"
-                title={image.pathname}
+                title={image.url}
               >
-                {image.pathname}
+                {shortUrl(image.url)}
               </dd>
             </div>
-          )}
-        </dl>
+            {image.pathname && (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Ruta del archivo
+                </dt>
+                <dd
+                  className="mt-1 truncate font-mono text-[11px] text-muted"
+                  dir="ltr"
+                  title={image.pathname}
+                >
+                  {image.pathname}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
 
         <div className="mt-auto pt-5">
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
@@ -149,24 +165,24 @@ function ImageCard({
               <Icon name="arrow-up-right" size={15} />
               <span className="sr-only">
                 {" "}
-                de {image.reference} (se abre en una nueva pestaña)
+                de {displayName} (se abre en una nueva pestaña)
               </span>
             </a>
 
-            {canWrite && (
+            {canWrite && !generated && (
               <RecordActions>
                 <RecordActionLink
-                  ariaLabel={`Editar la imagen ${image.reference}`}
+                  ariaLabel={`Editar la imagen ${displayName}`}
                   href={`/app/imagenes/${image.id}/editar`}
                   icon="arrow-right"
                 >
                   Editar
                 </RecordActionLink>
                 <RecordActionButton
-                  aria-label={`Eliminar la imagen ${image.reference}`}
+                  aria-label={`Eliminar la imagen ${displayName}`}
                   danger
                   icon="close"
-                  onClick={() => onDelete(image)}
+                  onClick={() => onDelete(image, displayName)}
                 >
                   Eliminar
                 </RecordActionButton>
@@ -184,20 +200,42 @@ export function ImageListPage() {
   const canWrite = canWriteModule(user.role, "catalogo");
   const imagesResource = useAsyncResource(fetchImages);
   const [query, setQuery] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<ImageRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    displayName: string;
+    image: ImageRecord;
+  } | null>(null);
 
   const images = useMemo(
     () => [...(imagesResource.data ?? NO_IMAGES)].sort(compareImageIds),
     [imagesResource.data],
   );
 
+  const imageIndexes = useMemo(
+    () =>
+      new Map(
+        images.map((image, index) => [String(image.id), index] as const),
+      ),
+    [images],
+  );
+
+  function displayNameFor(image: ImageRecord) {
+    return getImageDisplayName(image, imageIndexes.get(String(image.id)));
+  }
+
   const filteredImages = useMemo(() => {
     const normalizedQuery = normalizeSearch(query);
     if (!normalizedQuery) return images;
-    return images.filter((image) =>
-      normalizeSearch(image.reference).includes(normalizedQuery),
-    );
-  }, [images, query]);
+    return images.filter((image) => {
+      const displayName = getImageDisplayName(
+        image,
+        imageIndexes.get(String(image.id)),
+      );
+      return (
+        normalizeSearch(image.reference).includes(normalizedQuery) ||
+        normalizeSearch(displayName).includes(normalizedQuery)
+      );
+    });
+  }, [imageIndexes, images, query]);
 
   const hasQuery = query.trim().length > 0;
   const countLabel = hasQuery
@@ -267,7 +305,7 @@ export function ImageListPage() {
                   className="mb-2 block text-[12px] font-semibold text-ink"
                   htmlFor="buscar-imagenes"
                 >
-                  Buscar por referencia
+                  Buscar por nombre o referencia
                 </label>
                 <div className="relative">
                   <Icon
@@ -279,7 +317,7 @@ export function ImageListPage() {
                     className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-11 pr-4 text-[14px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
                     id="buscar-imagenes"
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar por referencia"
+                    placeholder="Buscar por nombre o referencia"
                     type="search"
                     value={query}
                   />
@@ -333,7 +371,7 @@ export function ImageListPage() {
                     Limpiar búsqueda
                   </button>
                 }
-                description="Prueba con otra referencia."
+                description="Prueba con otro nombre o referencia."
                 headingLevel={2}
                 title="No hay imágenes que coincidan con la búsqueda."
               />
@@ -342,9 +380,12 @@ export function ImageListPage() {
                 {filteredImages.map((image) => (
                   <ImageCard
                     canWrite={canWrite}
+                    displayName={displayNameFor(image)}
                     image={image}
                     key={String(image.id)}
-                    onDelete={setDeleteTarget}
+                    onDelete={(target, displayName) =>
+                      setDeleteTarget({ displayName, image: target })
+                    }
                   />
                 ))}
               </ul>
@@ -353,7 +394,8 @@ export function ImageListPage() {
         )}
 
       <ImageDeleteDialog
-        image={deleteTarget}
+        image={deleteTarget?.image ?? null}
+        imageName={deleteTarget?.displayName ?? null}
         onClose={() => setDeleteTarget(null)}
         onDeleted={imagesResource.reload}
       />

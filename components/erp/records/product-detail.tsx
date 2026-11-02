@@ -19,7 +19,8 @@ import {
   fetchImages,
   fetchProduct,
   findById,
-  getImagePreviewSource,
+  getImageDisplayName,
+  getImageSource,
   isPositiveRecordId,
 } from "@/components/erp/records/records-api";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
@@ -95,7 +96,8 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const product = productResource.data;
   const category = findById(categoriesResource.data ?? [], product.category_id);
   const image = findById(imagesResource.data ?? [], product.image_id);
-  const imageSource = getImagePreviewSource(image);
+  const imageSource = getImageSource(image);
+  const imageName = getImageDisplayName(image);
   const relatedError =
     categoriesResource.status === "error" || imagesResource.status === "error";
 
@@ -199,7 +201,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           />
           <p className="mt-3 text-[11px] leading-5 text-muted">
             {image
-              ? `Imagen ${image.reference}`
+              ? `${imageName} · Miniatura del producto`
               : imagesResource.status === "loading"
                 ? "Cargando imagen…"
                 : imagesResource.status === "error"
@@ -265,10 +267,10 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               <dd className="mt-1.5 text-[14px] text-ink">
                 <span>
                   {image
-                    ? image.reference
+                    ? imageName
                     : imagesResource.status === "loading"
                       ? "Cargando imagen…"
-                      : `Imagen #${product.image_id}`}
+                      : "Imagen del catálogo"}
                 </span>
                 <Link
                   aria-label="Ir al módulo de imágenes"
