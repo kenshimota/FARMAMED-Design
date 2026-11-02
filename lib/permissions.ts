@@ -28,6 +28,7 @@ export type ModuleKey =
   | "tipos_metodos_pago"
   | "metodos_pago"
   | "terminos_pago"
+  | "facturas"
   | "pagos"
   | "billeteras"
   | "usuarios"
@@ -111,6 +112,10 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
     read: ["admin", "seller"],
     write: ["admin", "seller"],
   },
+  facturas: {
+    read: ["admin", "seller"],
+    write: ["admin", "seller"],
+  },
   pagos: {
     read: ["admin", "seller"],
     write: ["admin", "seller"],
@@ -135,11 +140,11 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
-    "Administra usuarios, roles, catálogos, operación, pedidos, inventario, compras, monedas, impuestos, términos de pago, métodos de pago, pagos, billeteras y listas de precios.",
+    "Administra usuarios, roles, catálogos, operación, pedidos, facturas, inventario, compras, monedas, impuestos, términos de pago, métodos de pago, pagos, billeteras y listas de precios.",
   customer:
     "Consulta el catálogo en modo lectura. La vista de pedidos del cliente se incorpora en otro módulo.",
   seller:
-    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, costos, compras, listas de precios, términos de pago y pagos; consulta existencias, lotes, monedas, estantes, impuestos, métodos de pago y billeteras.",
+    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, monedas, estantes, impuestos, métodos de pago y billeteras.",
   dispatcher:
     "Consulta clientes, bodegas, estantes, lotes, asignaciones, monedas, impuestos y métodos de pago.",
   manager_warehouse:
@@ -199,6 +204,7 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "tipos_metodos_pago",
   "metodos_pago",
   "terminos_pago",
+  "facturas",
   "pagos",
   "billeteras",
   "usuarios",
@@ -238,6 +244,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Tipos de métodos de pago", module: "tipos_metodos_pago" },
   { label: "Métodos de pago", module: "metodos_pago" },
   { label: "Términos de pago", module: "terminos_pago" },
+  { label: "Facturas", module: "facturas" },
   { label: "Pagos recibidos", module: "pagos" },
   { label: "Billeteras", module: "billeteras" },
   { label: "Usuarios", module: "usuarios" },
