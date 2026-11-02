@@ -458,6 +458,39 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/pedidos",
   },
   {
+    path: "/app/pedidos/estados",
+    title: "Estados de pedido",
+    label: "Estados de pedido",
+    group: "Operación",
+    module: "pedidos_estados",
+    icon: "clipboard",
+    description:
+      "Configura el orden y la cadena de estados que seguirán los pedidos.",
+    navigation: true,
+  },
+  {
+    path: "/app/pedidos/estados/nuevo",
+    title: "Nuevo estado de pedido",
+    label: "Nuevo estado",
+    group: "Operación",
+    module: "pedidos_estados",
+    icon: "clipboard",
+    description:
+      "Registra un estado adicional y define su lugar en la cadena de pedidos.",
+    parent: "/app/pedidos/estados",
+  },
+  {
+    path: "/app/pedidos/estados/[id]/editar",
+    title: "Editar estado de pedido",
+    label: "Editar estado",
+    group: "Operación",
+    module: "pedidos_estados",
+    icon: "clipboard",
+    description:
+      "Actualiza el nombre, la descripción, el orden y el siguiente estado.",
+    parent: "/app/pedidos/estados",
+  },
+  {
     path: "/app/existencias",
     title: "Existencias",
     label: "Existencias",

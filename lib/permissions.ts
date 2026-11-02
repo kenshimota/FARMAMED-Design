@@ -21,6 +21,7 @@ export type ModuleKey =
   | "costos"
   | "compras"
   | "pedidos"
+  | "pedidos_estados"
   | "monedas"
   | "impuestos"
   | "listas_precios"
@@ -78,6 +79,10 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
   pedidos: {
     read: ["admin", "seller"],
     write: ["admin", "seller"],
+  },
+  pedidos_estados: {
+    read: ["admin"],
+    write: ["admin"],
   },
   monedas: {
     read: ["admin", "seller", "manager_warehouse", "dispatcher"],
@@ -172,6 +177,7 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "costos",
   "compras",
   "pedidos",
+  "pedidos_estados",
   "monedas",
   "impuestos",
   "listas_precios",
@@ -207,6 +213,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Costos", module: "costos" },
   { label: "Compras", module: "compras" },
   { label: "Pedidos", module: "pedidos" },
+  { label: "Estados de pedido", module: "pedidos_estados" },
   { label: "Monedas", module: "monedas" },
   { label: "Impuestos", module: "impuestos" },
   { label: "Listas de precios", module: "listas_precios" },

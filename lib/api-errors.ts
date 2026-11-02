@@ -100,6 +100,10 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   "payment type already exists": "Ya existe un tipo con ese código.",
   "payment type has methods":
     "No puedes cambiar la moneda ni los campos porque el tipo ya tiene métodos.",
+  "system order status cannot be deleted":
+    "Los estados del sistema no se pueden eliminar.",
+  "order status is in use": "Un estado en uso no se puede eliminar.",
+  "order status already exists": "Ya existe un estado con ese código.",
 };
 
 export const PASSWORD_MIN_MESSAGE = "La contraseña debe tener al menos 8 caracteres.";
@@ -127,6 +131,10 @@ const KNOWN_MESSAGES: Record<string, string> = {
     "El código debe tener entre 2 y 30 caracteres y usar solo mayúsculas, números o guion bajo.",
   "description must have at most 255 characters":
     "La descripción no puede superar los 255 caracteres.",
+  "invalid status transition":
+    "El siguiente estado no puede ser el mismo ni generar un ciclo.",
+  "next status code does not exist":
+    "El siguiente estado indicado no existe.",
 };
 
 const FIELD_MESSAGE_FALLBACK = COPY.invalidField;
