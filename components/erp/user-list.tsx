@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
@@ -7,6 +8,7 @@ import { NewUserLink } from "@/components/erp/new-user-link";
 import { useSession } from "@/components/erp/session-context";
 import {
   RecordActionButton,
+  RecordActionLink,
   RecordActions,
 } from "@/components/erp/records/record-actions";
 import { SelectField } from "@/components/erp/records/form-controls";
@@ -136,7 +138,7 @@ function UsersListSkeleton() {
         aria-hidden="true"
         className="rounded-[24px] border border-line bg-surface p-5"
       >
-        <SkeletonTable columns={5} rows={6} />
+        <SkeletonTable columns={6} rows={6} />
       </div>
     </div>
   );
@@ -225,9 +227,12 @@ function UserListContent() {
       if (statusFilter === "activos" && entry.isBlocked) return false;
       if (statusFilter === "bloqueados" && !entry.isBlocked) return false;
       if (!normalized) return true;
-      return [entry.username, entry.name ?? "", entry.email].some((value) =>
-        value.toLowerCase().includes(normalized),
-      );
+      return [
+        entry.username,
+        entry.name ?? "",
+        entry.email,
+        entry.customer?.fullName ?? "",
+      ].some((value) => value.toLowerCase().includes(normalized));
     });
   }, [query, roleFilter, statusFilter, users]);
 
@@ -282,6 +287,31 @@ function UserListContent() {
     );
   }
 
+  function renderCustomerCell(entry: UserRecord) {
+    if (entry.customer?.fullName) {
+      return (
+        <div className="min-w-0">
+          <Link
+            className="font-semibold text-ink underline-offset-4 hover:text-brand hover:underline"
+            href={`/app/clientes/${entry.customer.id}`}
+          >
+            {entry.customer.fullName}
+          </Link>
+          <span className="mt-1 flex w-fit items-center gap-1 rounded-full bg-soft-lime px-2 py-0.5 text-[10px] font-semibold text-ink">
+            <Icon name="check" size={11} />
+            Vinculado
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <span className="inline-flex rounded-lg bg-background px-2 py-1 text-[11px] font-semibold text-muted">
+        Sin vincular
+      </span>
+    );
+  }
+
   function renderStatusCell(entry: UserRecord) {
     return (
       <span aria-live="polite" className="inline-flex">
@@ -324,8 +354,25 @@ function UserListContent() {
     );
   }
 
+  function detailAction(entry: UserRecord) {
+    return (
+      <RecordActionLink
+        ariaLabel={`Ver el detalle del usuario ${displayNameOf(entry)}`}
+        href={`/app/usuarios/${entry.id}`}
+        icon="eye"
+      >
+        Ver detalle
+      </RecordActionLink>
+    );
+  }
+
   function renderRowActions(entry: UserRecord) {
-    return <RecordActions>{actionButtons(entry)}</RecordActions>;
+    return (
+      <RecordActions>
+        {detailAction(entry)}
+        {actionButtons(entry)}
+      </RecordActions>
+    );
   }
 
   function renderCardActions(entry: UserRecord) {
@@ -335,7 +382,10 @@ function UserListContent() {
           Acciones
           <Icon name="chevron-down" size={14} />
         </summary>
-        <div className="mt-2 flex flex-col gap-2">{actionButtons(entry)}</div>
+        <div className="mt-2 flex flex-col gap-2">
+          {detailAction(entry)}
+          {actionButtons(entry)}
+        </div>
       </details>
     );
   }
@@ -372,6 +422,14 @@ function UserListContent() {
               Rol
             </dt>
             <dd>{renderRoleCell(entry)}</dd>
+          </div>
+          <div className="flex items-start justify-between gap-3">
+            <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
+              Cliente
+            </dt>
+            <dd className="min-w-0 text-right text-[13px] text-ink">
+              {renderCustomerCell(entry)}
+            </dd>
           </div>
           <div className="flex items-start justify-between gap-3">
             <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
@@ -420,6 +478,7 @@ function UserListContent() {
     { key: "usuario", header: "Usuario", render: renderUserCell },
     { key: "correo", header: "Correo", render: renderEmailCell },
     { key: "rol", header: "Rol", render: renderRoleCell },
+    { key: "cliente", header: "Cliente", render: renderCustomerCell },
     { key: "estado", header: "Estado", render: renderStatusCell },
   ];
 
@@ -511,7 +570,7 @@ function UserListContent() {
                     className="h-12 w-full rounded-xl border border-ink/15 bg-surface pl-11 pr-4 text-[14px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
                     id="buscar-usuarios"
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar por usuario, nombre o correo"
+                    placeholder="Buscar por usuario, nombre, correo o cliente"
                     type="search"
                     value={query}
                   />
@@ -587,7 +646,7 @@ function UserListContent() {
             />
           ) : (
             <RecordsTable
-              caption="Usuarios registrados con su correo, rol y estado de acceso"
+              caption="Usuarios registrados con su correo, rol, cliente vinculado y estado de acceso"
               cardActions={renderCardActions}
               columns={columns}
               getRowKey={(entry) => String(entry.id)}

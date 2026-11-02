@@ -1,5 +1,9 @@
 import { ApiError, apiFetch } from "@/lib/api";
-import type { UiError } from "@/lib/api-errors";
+import { translateApiError, type UiError } from "@/lib/api-errors";
+import {
+  parseCustomer,
+  type CustomerRecord,
+} from "@/components/erp/records/customers-api";
 import {
   readCollection,
   type RecordId,
@@ -13,6 +17,8 @@ export type UserRecord = {
   email: string;
   role: string;
   isBlocked: boolean;
+  customer_id: RecordId | null;
+  customer: CustomerRecord | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,6 +54,9 @@ export function parseUser(source: unknown): UserRecord | null {
   if (id === null || !username || !email || !role) return null;
   if (typeof record.isBlocked !== "boolean") return null;
 
+  const customer = parseCustomer(record.customer);
+  const customerId = readId(record.customer_id) ?? customer?.id ?? null;
+
   return {
     id,
     username,
@@ -55,6 +64,8 @@ export function parseUser(source: unknown): UserRecord | null {
     email,
     role,
     isBlocked: record.isBlocked,
+    customer_id: customerId,
+    customer,
   };
 }
 
@@ -76,6 +87,66 @@ export async function fetchUsers() {
   return parseUserList(payload);
 }
 
+export async function fetchUser(id: RecordId) {
+  const users = await fetchUsers();
+  const user = users.find((entry) => String(entry.id) === String(id));
+  if (!user) throw new ApiError(404, { message: "User not found" });
+  return user;
+}
+
+export async function updateUserCustomer(
+  id: RecordId,
+  customerId: RecordId | null,
+) {
+  const payload = await apiFetch<unknown>(
+    `/users/${encodeURIComponent(String(id))}/customer`,
+    {
+      ...authOptions(),
+      method: "PUT",
+      body: JSON.stringify({ customer_id: customerId }),
+    },
+  );
+  const user = parseUser(payload);
+  if (!user) throw new ApiError(500, null);
+  return user;
+}
+
+export function customerLinkFieldMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  if (normalized === "user is not a customer") {
+    return "Solo los usuarios con rol customer pueden vincularse.";
+  }
+  return "Cliente inválido.";
+}
+
+export function userCustomerLinkErrorMessage(error: unknown) {
+  if (!(error instanceof ApiError)) {
+    return "No pudimos guardar el vínculo. Revisa tu conexión e intenta de nuevo.";
+  }
+
+  switch (error.status) {
+    case 400:
+      return "Selecciona un cliente o usa Desvincular.";
+    case 401:
+      return "Tu sesión expiró. Inicia sesión de nuevo.";
+    case 403:
+      return "No tienes permiso para administrar usuarios.";
+    case 404:
+      return "No encontramos ese usuario.";
+    case 409:
+      return translateApiError(error).message;
+    case 422: {
+      const message = error.fieldErrors.customer_id;
+      if (message) return customerLinkFieldMessage(message);
+      return "Revisa los datos del vínculo.";
+    }
+    case 503:
+      return "No pudimos guardar el vínculo. Inténtalo de nuevo.";
+    default:
+      return "No pudimos guardar el vínculo. Inténtalo de nuevo.";
+  }
+}
+
 export async function setUserBlocked(id: RecordId, isBlocked: boolean) {
   await apiFetch<unknown>(`/users/${encodeURIComponent(String(id))}/status`, {
     ...authOptions(),
@@ -91,12 +162,12 @@ export async function deleteUser(id: RecordId) {
   });
 }
 
-export type UserActionContext = "load" | "status" | "delete";
+export type UserActionContext = "load" | "status" | "delete" | "link";
 
 export function userErrorMessage(error: UiError, context: UserActionContext) {
   switch (error.kind) {
     case "forbidden":
-      return "Solo un administrador puede gestionar usuarios.";
+      return "No tienes permiso para administrar usuarios.";
     case "not-found":
       return "No encontramos ese usuario.";
     case "validation":

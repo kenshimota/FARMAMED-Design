@@ -5,6 +5,13 @@ import { useCallback, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
+import {
+  USER_CUSTOMER_SEARCH_SUFFIX,
+  UserCustomerSelector,
+  useUserCustomers,
+} from "@/components/erp/user-customer-picker";
+import { customerLinkFieldMessage } from "@/components/erp/users-api";
+import { toApiId } from "@/components/erp/records/records-api";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import {
   AccountFields,
@@ -26,7 +33,10 @@ import { PanelError } from "@/components/erp/ui/panel-error";
 import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import { ApiError, apiFetch } from "@/lib/api";
-import { PASSWORD_MIN_MESSAGE } from "@/lib/api-errors";
+import {
+  customerAlreadyLinkedMessage,
+  PASSWORD_MIN_MESSAGE,
+} from "@/lib/api-errors";
 import { canWriteModule, getRoleLabel } from "@/lib/permissions";
 import { getStoredToken } from "@/lib/session";
 
@@ -44,6 +54,7 @@ const COPY = {
 } as const;
 
 const ROLE_FIELD_ID = "rol";
+const CUSTOMER_FIELD_ID = `cliente-vinculado${USER_CUSTOMER_SEARCH_SUFFIX}`;
 
 type RoleOption = {
   id: string;
@@ -104,10 +115,12 @@ function UserCreateFormContent() {
   const resource = useAsyncResource(loader);
   const [values, setValues] = useState(EMPTY_ACCOUNT_VALUES);
   const [role, setRole] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSummary, setShowSummary] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const customerOptions = useUserCustomers(role === "customer");
 
   const roles = resource.data ?? [];
   const rolesLoading = resource.status === "loading" || resource.status === "refreshing";
@@ -125,6 +138,20 @@ function UserCreateFormContent() {
   function handleChange(field: AccountFieldKey, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
     clearFieldError(field);
+  }
+
+  function handleRoleChange(value: string) {
+    setRole(value);
+    clearFieldError("role");
+    if (value !== "customer") {
+      setCustomerId("");
+      clearFieldError("customer");
+    }
+  }
+
+  function handleCustomerSelect(value: string) {
+    setCustomerId(value);
+    clearFieldError("customer");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -155,6 +182,9 @@ function UserCreateFormContent() {
           password: values.password,
           role,
           ...(values.name.trim() ? { name: values.name.trim() } : {}),
+          ...(role === "customer" && customerId
+            ? { customer_id: toApiId(customerId) }
+            : {}),
         }),
       });
       toast.success(COPY.success);
@@ -164,6 +194,11 @@ function UserCreateFormContent() {
         if (caught.status === 422) {
           const mapped = mapAccountFieldErrors(caught);
           if (caught.fieldErrors.role) mapped.role = COPY.invalidRole;
+          if (caught.fieldErrors.customer_id) {
+            mapped.customer = customerLinkFieldMessage(
+              caught.fieldErrors.customer_id,
+            );
+          }
           if (Object.keys(mapped).length > 0) {
             setErrors(mapped);
             setShowSummary(true);
@@ -172,7 +207,14 @@ function UserCreateFormContent() {
             setMessage(COPY.validation);
           }
         } else if (caught.status === 409) {
-          setMessage(COPY.conflict);
+          const customerConflict = customerAlreadyLinkedMessage(caught);
+          if (customerConflict) {
+            setErrors({ customer: customerConflict });
+            setShowSummary(true);
+            window.requestAnimationFrame(() => focusFirstInvalidField());
+          } else {
+            setMessage(COPY.conflict);
+          }
         } else if (caught.status === 403) {
           setMessage(COPY.forbidden);
         } else if (caught.status === 400) {
@@ -193,6 +235,15 @@ function UserCreateFormContent() {
     ...accountSummaryItems(errors),
     ...(errors.role
       ? [{ fieldId: ROLE_FIELD_ID, label: "Rol", message: errors.role }]
+      : []),
+    ...(errors.customer
+      ? [
+          {
+            fieldId: CUSTOMER_FIELD_ID,
+            label: "Cliente vinculado",
+            message: errors.customer,
+          },
+        ]
       : []),
   ];
 
@@ -239,10 +290,7 @@ function UserCreateFormContent() {
                 className="h-12 w-full rounded-xl border border-ink/15 bg-surface px-4 text-[15px] text-ink transition-colors hover:border-brand/45 focus:border-brand disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={submitting || rolesLoading || rolesError}
                 name="role"
-                onChange={(event) => {
-                  setRole(event.target.value);
-                  clearFieldError("role");
-                }}
+                onChange={(event) => handleRoleChange(event.target.value)}
                 value={role}
               >
                 <option value="">
@@ -261,6 +309,23 @@ function UserCreateFormContent() {
             )}
           </FormField>
         </div>
+
+        {role === "customer" && (
+          <div className="rounded-2xl border border-line bg-background/60 p-4">
+            <UserCustomerSelector
+              customers={customerOptions.customers}
+              disabled={submitting}
+              fieldError={errors.customer}
+              help="Opcional. Puedes crear la cuenta sin vínculo y asignarlo después desde el detalle."
+              idPrefix="cliente-vinculado"
+              loadError={customerOptions.loadError}
+              loading={customerOptions.loading}
+              onRetry={customerOptions.retry}
+              onSelect={handleCustomerSelect}
+              selectedId={customerId}
+            />
+          </div>
+        )}
 
         <BusyButton
           busy={submitting}

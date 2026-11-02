@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { AuthCard } from "@/components/erp/auth-card";
 import { UserCreateForm } from "@/components/erp/user-create-form";
 
-export const metadata: Metadata = { title: "Nuevo usuario" };
+export const metadata: Metadata = {
+  title: "Nuevo usuario",
+  description:
+    "Crea una cuenta para Farmamed, define su rol y vincula opcionalmente un cliente al portal.",
+};
 
 const hints = [
   {
@@ -14,6 +18,11 @@ const hints = [
     title: "Rol del usuario",
     description:
       "Define qué puede hacer dentro del ERP; la lista de roles disponibles la entrega el sistema.",
+  },
+  {
+    title: "Cliente vinculado",
+    description:
+      "Opcional y solo para el rol Cliente. Puedes vincular la cuenta ahora o hacerlo después desde el detalle del usuario.",
   },
   {
     title: "Contraseña",

@@ -4,7 +4,7 @@ import { UserListPage } from "@/components/erp/user-list";
 export const metadata: Metadata = {
   title: "Usuarios",
   description:
-    "Consulta quién tiene acceso al ERP, bloquea cuentas y elimina usuarios registrados en Farmamed.",
+    "Consulta quién tiene acceso al ERP, qué cliente tiene vinculado cada cuenta, bloquea accesos y elimina usuarios registrados en Farmamed.",
 };
 
 export default function UsersPage() {

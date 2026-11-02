@@ -29,6 +29,7 @@ import {
 } from "@/components/erp/records/customer-errors";
 import { CustomerLocationPicker } from "@/components/erp/records/customer-map";
 import {
+  SelectField,
   TextAreaField,
   TextField,
 } from "@/components/erp/records/form-controls";
@@ -45,7 +46,11 @@ import {
   updateCustomer,
   type CustomerInput,
 } from "@/components/erp/records/customers-api";
-import { isPositiveRecordId } from "@/components/erp/records/records-api";
+import {
+  isPositiveRecordId,
+  toApiId,
+} from "@/components/erp/records/records-api";
+import { fetchPriceLists } from "@/components/erp/records/price-lists-api";
 import { ApiError } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
@@ -57,6 +62,7 @@ type CustomerFormValues = {
   direction: string;
   latitude: string;
   longitude: string;
+  priceListId: string;
 };
 
 const EMPTY_VALUES: CustomerFormValues = {
@@ -65,6 +71,7 @@ const EMPTY_VALUES: CustomerFormValues = {
   direction: "",
   latitude: "",
   longitude: "",
+  priceListId: "",
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -144,6 +151,7 @@ export function CustomerFormPage({ mode, customerId }: CustomerFormPageProps) {
 }
 
 function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
+  const { user } = useSession();
   const router = useRouter();
   const toast = useToast();
   const editing = mode === "edit";
@@ -153,6 +161,10 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
   );
   const customerResource = useAsyncResource(customerLoader, {
     enabled: editing,
+  });
+  const canReadPriceLists = canReadModule(user.role, "listas_precios");
+  const priceListsResource = useAsyncResource(fetchPriceLists, {
+    enabled: canReadPriceLists,
   });
 
   const [values, setValues] = useState<CustomerFormValues>(EMPTY_VALUES);
@@ -186,6 +198,12 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
           customer.longitude === null
             ? ""
             : coordinateInputValue(customer.longitude),
+        priceListId:
+          customer.price_list_id !== null
+            ? String(customer.price_list_id)
+            : customer.price_list
+              ? String(customer.price_list.id)
+              : "",
       };
       setValues(next);
       setInitialValues(next);
@@ -311,6 +329,9 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
       direction: values.direction.trim(),
       latitude: latitudeValue,
       longitude: longitudeValue,
+      price_list_id: values.priceListId
+        ? toApiId(values.priceListId)
+        : null,
     };
 
     try {
@@ -420,6 +441,25 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
   const latitudeBadge = coordinateText(latitudeValue);
   const longitudeBadge = coordinateText(longitudeValue);
 
+  const priceListOptions = (priceListsResource.data ?? []).map((priceList) => ({
+    value: String(priceList.id),
+    label: priceList.name,
+  }));
+  if (
+    values.priceListId &&
+    !priceListOptions.some((option) => option.value === values.priceListId)
+  ) {
+    const currentPriceList =
+      customer?.price_list &&
+      String(customer.price_list.id) === values.priceListId
+        ? customer.price_list
+        : null;
+    priceListOptions.unshift({
+      value: values.priceListId,
+      label: currentPriceList?.name ?? `Lista #${values.priceListId}`,
+    });
+  }
+
   return (
     <div className="space-y-5">
       {header}
@@ -527,6 +567,33 @@ function CustomerFormContent({ mode, customerId }: CustomerFormPageProps) {
               value={values.longitude}
             />
           </div>
+
+          {canReadPriceLists && (
+            <div className="rounded-2xl border border-line bg-background/60 p-4">
+              <SelectField
+                createHref="/app/listas-de-precios"
+                createLabel="Administrar listas de precios"
+                disabled={submitting}
+                emptyLabel="No hay listas de precios registradas."
+                error={errors.priceListId}
+                help="Opcional. El porcentaje es un margen sobre el costo; el cliente solo ve el precio final y el nombre de la lista."
+                id={CUSTOMER_FIELD_IDS.priceListId}
+                label="Lista de precios"
+                loadError={
+                  priceListsResource.status === "error"
+                    ? "No pudimos cargar las listas de precios."
+                    : null
+                }
+                loading={priceListsResource.status === "loading"}
+                loadingLabel="Cargando listas de precios…"
+                onChange={(value) => updateField("priceListId", value)}
+                onRetry={priceListsResource.reload}
+                options={priceListOptions}
+                placeholder="Sin lista"
+                value={values.priceListId}
+              />
+            </div>
+          )}
 
           <div className="rounded-2xl border border-line bg-background/60 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">

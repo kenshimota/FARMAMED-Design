@@ -124,6 +124,8 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
   }
 
   const customer = customerResource.data;
+  const hasPriceList =
+    customer.price_list !== null || customer.price_list_id !== null;
   const located = hasCoordinates(customer);
   const assignment = assignmentResource.data?.[0] ?? null;
   const assignmentResolved = assignmentResource.data !== null;
@@ -250,6 +252,19 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
             </dd>
           </div>
 
+          <div>
+            <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Lista de precios
+            </dt>
+            <dd className="mt-1.5 text-[14px] text-ink">
+              {customer.price_list
+                ? customer.price_list.name
+                : hasPriceList
+                  ? `Lista #${customer.price_list_id}`
+                  : "Sin lista asignada"}
+            </dd>
+          </div>
+
           <div className="sm:col-span-2">
             <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
               Dirección
@@ -291,6 +306,22 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
             </div>
           )}
         </dl>
+
+        {hasPriceList ? (
+          <p className="mt-6 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
+            La lista de precios define el margen con el que se calcula el precio
+            del cliente. El porcentaje es interno y no se muestra en esta ficha.
+          </p>
+        ) : (
+          <div className="mt-6">
+            <NoticeBanner tone="warning">
+              Este cliente no tiene una lista de precios asignada.{" "}
+              {canWrite
+                ? "Asígnala desde la edición del cliente para que tenga un precio definido."
+                : "Un usuario con permisos puede asignarla desde la edición del cliente."}
+            </NoticeBanner>
+          </div>
+        )}
 
         <p className="mt-6 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
           Los clientes son terceros a los que se les vende; no son usuarios del
