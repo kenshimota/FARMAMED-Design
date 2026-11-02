@@ -41,6 +41,7 @@ export type InvoiceItem = {
   productReference: string;
   itemStateId: RecordId;
   itemStateName: string;
+  itemStateLabel: string;
   quantity: number;
   unitPrice: number;
   subtotal: number;
@@ -261,6 +262,9 @@ function parseInvoiceItem(source: unknown): InvoiceItem | null {
   const itemStateId = readId(source.item_state_id);
   const productName = readText(source.product_name);
   const itemStateName = readText(source.item_state_name);
+  const itemStateLabel =
+    readText(source.item_state_label) ||
+    (isRecord(source.item_state) ? readText(source.item_state.label) : "");
   const quantity = Math.trunc(readNumber(source.quantity, -1));
   const unitPrice = readNumber(source.unit_price, -1);
   if (
@@ -280,6 +284,7 @@ function parseInvoiceItem(source: unknown): InvoiceItem | null {
     productReference: readText(source.product_reference),
     itemStateId,
     itemStateName,
+    itemStateLabel,
     quantity,
     unitPrice,
     subtotal: readNumber(source.subtotal, roundMoney(quantity * unitPrice)),
@@ -354,7 +359,7 @@ export function parseInvoice(source: unknown): Invoice | null {
     currency,
     paymentTerm,
     invoicedBy: parseUser(record.invoiced_by),
-    items: parseInvoiceItemList(record.items),
+    items: parseInvoiceItemList(record.items ?? record.invoice_items),
     paymentHistory,
     paymentsCount: Math.max(
       0,

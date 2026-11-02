@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { useSession } from "@/components/erp/session-context";
 import { hasCustomerLink } from "@/lib/customer";
@@ -86,8 +87,15 @@ export function CustomerAccountView() {
           Tu sesión tiene vencimiento y no se renueva silenciosamente. Cuando
           expire, deberás iniciar sesión de nuevo.
         </p>
-        <button
+        <Link
           className="button-base button-secondary mt-6 w-full bg-surface"
+          href="/app/billetera"
+        >
+          Mi billetera
+          <Icon name="coins" size={17} />
+        </Link>
+        <button
+          className="button-base button-secondary mt-3 w-full bg-surface"
           onClick={logout}
           type="button"
         >
