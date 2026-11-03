@@ -98,6 +98,7 @@ const COPY = {
     "Usa un monto mayor que cero, con máximo dos decimales y 12 dígitos enteros.",
   amountRange: "El monto supera el máximo permitido.",
   dateRequired: "Ingresa la fecha del pago.",
+  dateFuture: "La fecha del pago no puede ser posterior a hoy.",
   referenceLength: "La referencia no puede superar los 100 caracteres.",
   notesLength: "Las notas no pueden superar los 1000 caracteres.",
   missingData: "Faltan datos obligatorios. Revisa el formulario.",
@@ -276,6 +277,7 @@ function PaymentFormContent({
   const router = useRouter();
   const toast = useToast();
   const editing = mode === "edit" && payment !== undefined;
+  const maxPaidAt = formatDateInputValue(new Date());
 
   const formRef = useRef<HTMLFormElement>(null);
   const customerFieldId = useId();
@@ -307,7 +309,12 @@ function PaymentFormContent({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
-  const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
+  const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>(
+    () =>
+      editing && initialPaidAt && initialPaidAt > maxPaidAt
+        ? { paidAt: true }
+        : {},
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<FieldErrors>({});
@@ -354,6 +361,7 @@ function PaymentFormContent({
     }
 
     if (editing && !paidAt) errors.paidAt = COPY.dateRequired;
+    else if (paidAt && paidAt > maxPaidAt) errors.paidAt = COPY.dateFuture;
     if (reference.trim().length > REFERENCE_MAX_LENGTH) {
       errors.reference = COPY.referenceLength;
     }
@@ -367,6 +375,7 @@ function PaymentFormContent({
     customerId,
     editing,
     imageError,
+    maxPaidAt,
     methodPaymentId,
     notes,
     paidAt,
@@ -697,11 +706,12 @@ function PaymentFormContent({
             error={visibleError("paidAt")}
             help={
               editing
-                ? "Actualiza la fecha registrada del pago."
-                : "Opcional. Si la dejas vacía, se usa la fecha de registro."
+                ? "Actualiza la fecha registrada del pago. No puede ser posterior a hoy."
+                : "Opcional. No puede ser posterior a hoy. Si la dejas vacía, se usa la fecha de registro."
             }
             id={paidAtFieldId}
             label="Fecha del pago"
+            max={maxPaidAt}
             onChange={(value) => {
               setPaidAt(value);
               touch("paidAt");
