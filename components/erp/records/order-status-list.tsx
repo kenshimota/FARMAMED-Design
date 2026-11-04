@@ -6,16 +6,9 @@ import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
 import { NoticeBanner } from "@/components/erp/ui/banner";
-import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
 import { EmptyState } from "@/components/erp/ui/empty-state";
-import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
-import {
-  RecordActionButton,
-  RecordActionLink,
-  RecordActions,
-} from "@/components/erp/records/record-actions";
 import {
   RecordsLoadError,
   RecordsTableSkeleton,
@@ -26,15 +19,26 @@ import {
 } from "@/components/erp/records/records-table";
 import { OrderStatusChain } from "@/components/erp/records/order-status-chain";
 import {
-  deleteOrderStatus,
+  BASE_ORDER_STATUS_CODES,
   fetchOrderStatuses,
   ORDER_STATUS_LABELS,
   type OrderStatus,
 } from "@/components/erp/records/order-statuses-api";
-import { canReadModule, canWriteModule } from "@/lib/permissions";
+import { canReadModule } from "@/lib/permissions";
 import { formatInteger } from "@/lib/format";
 
 const NO_STATUSES: OrderStatus[] = [];
+
+const ORDER_STATUS_MEANINGS: Record<
+  (typeof BASE_ORDER_STATUS_CODES)[number],
+  string
+> = {
+  draft: "El pedido aún se puede editar.",
+  request: "Espera revisión y aprobación interna.",
+  generate: "Se reservaron existencias para el pedido.",
+  invoiced: "Estado terminal del pedido.",
+  cancelled: "Estado terminal alternativo.",
+};
 
 function normalizeSearch(value: string) {
   return value
@@ -86,25 +90,62 @@ function SemanticBadge({
   );
 }
 
+function OrderStatusGlossary() {
+  return (
+    <section
+      aria-labelledby="significado-estados-pedido"
+      className="rounded-[24px] border border-line bg-surface p-5 sm:p-6"
+    >
+      <span className="eyebrow">Ciclo de vida</span>
+      <h2
+        className="mt-3 text-xl font-semibold tracking-[-0.025em] text-ink"
+        id="significado-estados-pedido"
+      >
+        Qué significa cada estado
+      </h2>
+      <p className="mt-2 max-w-2xl text-[13px] leading-6 text-muted">
+        Estas son las etapas base del ciclo de vida del pedido.
+      </p>
+      <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {BASE_ORDER_STATUS_CODES.map((code) => (
+          <div
+            className="rounded-2xl border border-line bg-background px-4 py-3"
+            key={code}
+          >
+            <dt className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] font-semibold text-ink">
+                {ORDER_STATUS_LABELS[code]}
+              </span>
+              <span className="rounded-lg bg-soft-blue px-2 py-0.5 font-mono text-[11px] font-semibold text-brand">
+                {code}
+              </span>
+            </dt>
+            <dd className="mt-2 text-[13px] leading-6 text-muted">
+              {ORDER_STATUS_MEANINGS[code]}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 export function OrderStatusListPage() {
   const { user } = useSession();
   const canRead = canReadModule(user.role, "pedidos_estados");
-  const canWrite = canWriteModule(user.role, "pedidos_estados");
 
   if (!canRead) {
     return (
-      <AccessState description="No tienes permiso para configurar estados de pedido." />
+      <AccessState description="No tienes permiso para consultar el ciclo de estados de pedido." />
     );
   }
 
-  return <OrderStatusListContent canWrite={canWrite} />;
+  return <OrderStatusListContent />;
 }
 
-function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
-  const toast = useToast();
+function OrderStatusListContent() {
   const resource = useAsyncResource(fetchOrderStatuses);
   const [query, setQuery] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<OrderStatus | null>(null);
 
   const statuses = resource.data ?? NO_STATUSES;
   const byCode = useMemo(
@@ -127,48 +168,6 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
   const initialError = resource.status === "error" && statuses.length === 0;
   const refreshError = resource.status === "error" && statuses.length > 0;
 
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    await deleteOrderStatus(deleteTarget.id);
-    toast.success("Estado eliminado.");
-    resource.reload();
-    setDeleteTarget(null);
-  }
-
-  function renderActions(status: OrderStatus) {
-    return (
-      <RecordActions>
-        <RecordActionLink
-          ariaLabel={`Editar ${status.code}`}
-          href={`/app/pedidos/estados/${status.id}/editar`}
-          icon="arrow-right"
-        >
-          Editar
-        </RecordActionLink>
-        {status.is_system ? (
-          <RecordActionButton
-            aria-label={`Eliminar ${status.code}, no disponible porque es un estado del sistema`}
-            danger
-            disabled
-            icon="close"
-            title="Los estados del sistema no se pueden eliminar."
-          >
-            Eliminar
-          </RecordActionButton>
-        ) : (
-          <RecordActionButton
-            aria-label={`Eliminar ${status.code}`}
-            danger
-            icon="close"
-            onClick={() => setDeleteTarget(status)}
-          >
-            Eliminar
-          </RecordActionButton>
-        )}
-      </RecordActions>
-    );
-  }
-
   function renderCard(status: OrderStatus) {
     return (
       <div>
@@ -189,7 +188,7 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
         <dl className="mt-3 space-y-2">
           <div className="flex items-start justify-between gap-3">
             <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
-              Siguiente
+              Siguiente estado
             </dt>
             <dd className="text-right text-[13px] text-ink">
               {nextStatusLabel(status, byCode)}
@@ -207,11 +206,11 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
           </div>
           <div className="flex items-start justify-between gap-3">
             <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
-              Origen
+              Sistema
             </dt>
             <dd>
               <SemanticBadge active={status.is_system}>
-                {status.is_system ? "Sistema" : "Personalizado"}
+                {status.is_system ? "Sí" : "No"}
               </SemanticBadge>
             </dd>
           </div>
@@ -219,7 +218,7 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
             <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
               Descripción
             </dt>
-            <dd className="line-clamp-2 text-right text-[13px] text-muted">
+            <dd className="text-right text-[13px] text-muted">
               {status.description || "Sin descripción"}
             </dd>
           </div>
@@ -231,7 +230,7 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
   const columns: RecordsTableColumn<OrderStatus>[] = [
     {
       key: "orden",
-      header: "Orden",
+      header: "Orden de presentación",
       render: (status) => (
         <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-background px-2 font-mono text-[12px] font-semibold text-ink">
           {status.sort_order}
@@ -251,12 +250,16 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
       key: "nombre",
       header: "Nombre",
       render: (status) => (
-        <div>
-          <span className="font-semibold text-ink">{statusName(status)}</span>
-          <span className="mt-1 block max-w-[220px] truncate text-[12px] text-muted">
-            {status.description || "Sin descripción"}
-          </span>
-        </div>
+        <span className="font-semibold text-ink">{statusName(status)}</span>
+      ),
+    },
+    {
+      key: "descripcion",
+      header: "Descripción",
+      render: (status) => (
+        <span className="block max-w-[220px] text-[13px] text-muted">
+          {status.description || "Sin descripción"}
+        </span>
       ),
     },
     {
@@ -292,20 +295,22 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
     <div className="space-y-5">
       <RecordsPageHeader
         actions={
-          canWrite ? (
-            <Link
-              className="button-base button-primary min-h-11 px-5 text-[13px]"
-              href="/app/pedidos/estados/nuevo"
-            >
-              Nuevo estado
-              <Icon name="arrow-right" size={17} />
-            </Link>
-          ) : undefined
+          <Link
+            className="button-base button-secondary min-h-11 px-5 text-[13px]"
+            href="/app/pedidos"
+          >
+            Volver a pedidos
+          </Link>
         }
-        description="Configura el orden y la cadena de estados que seguirán los pedidos. Solo un administrador puede crear, editar o eliminar estados."
+        description="Consulta la cadena de estados que sigue el ciclo de vida de los pedidos. Esta pantalla es de solo lectura."
         eyebrow="Operación"
         title="Estados de pedido"
       />
+
+      <NoticeBanner tone="info">
+        Los estados forman parte del ciclo de vida del pedido y no se configuran
+        desde aquí.
+      </NoticeBanner>
 
       {loading && (
         <RecordsTableSkeleton
@@ -319,7 +324,7 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
         <RecordsLoadError
           description={
             resource.error?.status === 403
-              ? "No tienes permiso para configurar estados."
+              ? "No tienes permiso para consultar el ciclo de estados de pedido."
               : resource.error?.message ??
                 "No pudimos cargar los estados de pedido."
           }
@@ -329,7 +334,7 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
       )}
 
       {!loading && !initialError && (
-        <section aria-label="Listado de estados de pedido" className="space-y-4">
+        <section aria-label="Ciclo de vida del pedido" className="space-y-4">
           {resource.status === "refreshing" && (
             <div aria-hidden="true" className="reload-bar" />
           )}
@@ -354,28 +359,12 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
 
           {statuses.length === 0 ? (
             <EmptyState
-              action={
-                canWrite ? (
-                  <Link
-                    className="button-base button-primary min-h-11 px-5"
-                    href="/app/pedidos/estados/nuevo"
-                  >
-                    Nuevo estado
-                    <Icon name="arrow-right" size={17} />
-                  </Link>
-                ) : undefined
-              }
-              description="Crea el primero para empezar."
+              description="El ciclo de vida del pedido no devolvió estados."
               title="No hay estados configurados."
             />
           ) : (
             <>
               <OrderStatusChain statuses={statuses} />
-
-              <NoticeBanner tone="info">
-                Los estados del sistema se pueden editar, pero no eliminar. Su
-                código e indicador de sistema son inmutables.
-              </NoticeBanner>
 
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <div className="relative w-full sm:max-w-md">
@@ -423,48 +412,20 @@ function OrderStatusListContent({ canWrite }: { canWrite: boolean }) {
                 />
               ) : (
                 <RecordsTable
-                  caption="Estados de pedido con su orden, código, nombre, siguiente estado, condición terminal, origen y acciones"
+                  caption="Estados del ciclo de vida del pedido con su orden de presentación, código, nombre, descripción, siguiente estado, condición terminal y origen en el sistema"
                   columns={columns}
                   getRowKey={(status) => String(status.id)}
                   getRowLabel={(status) => status.code}
                   renderCard={renderCard}
-                  rowActions={canWrite ? renderActions : undefined}
                   rows={filteredStatuses}
                 />
               )}
             </>
           )}
+
+          <OrderStatusGlossary />
         </section>
       )}
-
-      <ConfirmDialog
-        confirmLabel="Eliminar estado"
-        description={
-          deleteTarget ? (
-            <div className="space-y-2">
-              <p>
-                Estado:{" "}
-                <span className="font-semibold text-ink">
-                  {deleteTarget.code}
-                </span>
-              </p>
-              <p>
-                Esta acción es permanente y no se puede deshacer. Un estado en
-                uso o un estado del sistema no se puede eliminar.
-              </p>
-            </div>
-          ) : undefined
-        }
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        onError={(error) => toast.error(error.message)}
-        open={deleteTarget !== null}
-        title={
-          deleteTarget
-            ? `¿Eliminar el estado ${deleteTarget.code}?`
-            : "Eliminar estado"
-        }
-      />
     </div>
   );
 }
