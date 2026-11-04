@@ -340,11 +340,11 @@ export function LotSyncNotice({
 }) {
   const description = withExpiryAutomation
     ? variant === "detail"
-      ? "Puedes editar manualmente la existencia y la cantidad reservada de este lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y ajusta su existencia; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
-      : "Puedes editar manualmente la existencia y la cantidad reservada de cada lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y ajusta su existencia; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
+      ? "La existencia y la cantidad reservada de este lote se editan desde el formulario del lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
+      : "La existencia y la cantidad reservada se editan desde el formulario de cada lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
     : variant === "detail"
-      ? "Este lote no actualiza automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y ajusta las existencias."
-      : "Los lotes no actualizan automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y ajusta las existencias.";
+      ? "Este lote no actualiza automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada."
+      : "Los lotes no actualizan automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada.";
   return (
     <NoticeBanner role="note" title="Lotes y existencias" action={action}>
       {description}

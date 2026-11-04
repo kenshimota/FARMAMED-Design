@@ -251,14 +251,14 @@ function LotDetailContent({ lotId }: { lotId: string }) {
             ? "Este lote está vencido y conserva reservas. No cuenta para la disponibilidad vendible; se moverá al estado Vencido cuando la reserva se libere."
             : itemStateExpired
               ? "Este lote está vencido y ya está en el estado Vencido. No cuenta para la disponibilidad vendible."
-              : "Este lote está vencido y no cuenta para la disponibilidad vendible. El job diario lo moverá al estado Vencido."}
+              : "Este lote está vencido y no cuenta para la disponibilidad vendible. El job diario mueve los lotes vencidos sin reservas al estado Vencido."}
         </NoticeBanner>
       )}
 
       {itemStateExpired && expiryStatus !== "vencido" && (
         <NoticeBanner tone="danger" title="Estado Vencido">
-          Este lote está en estado Vencido. El job diario lo actualizó
-          automáticamente y no cuenta para la disponibilidad vendible.
+          Este lote está en estado Vencido y no cuenta para la disponibilidad
+          vendible. La fecha de vencimiento no coincide con ese estado.
         </NoticeBanner>
       )}
 

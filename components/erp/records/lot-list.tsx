@@ -592,7 +592,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             {reserved && <LotExpiredReservationBadge />}
             {expired && (
               <span className="text-[10px] font-semibold text-muted">
-                Actualizado por el job diario
+                El job diario mueve aquí los vencidos sin reservas
               </span>
             )}
           </div>
@@ -763,7 +763,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
 
         {expired && (
           <p className="mt-1 text-[11px] leading-5 text-muted">
-            El job diario actualizó este lote al estado Vencido.
+            El job diario mueve los lotes vencidos sin reservas a este estado.
           </p>
         )}
 
