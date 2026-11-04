@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
+  type KeyboardEvent,
 } from "react";
 import { Icon } from "@/components/icons";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -50,6 +51,12 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_DIMENSION = 6000;
 const MAX_PIXELS = 25 * 1000 * 1000;
 const FILE_ACCEPT = "image/jpeg,image/png,image/webp";
+const GALLERY_BATCH_SIZE = 12;
+const GALLERY_MAX_HEIGHT =
+  "max-h-[min(60vh,20rem)] sm:max-h-[24rem] lg:max-h-[28rem]";
+const GALLERY_RESERVED_HEIGHT =
+  "h-[min(60vh,20rem)] sm:h-[24rem] lg:h-[28rem]";
+const GALLERY_AREA = `min-h-[15rem] ${GALLERY_MAX_HEIGHT} rounded-2xl border border-line bg-background`;
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -242,14 +249,21 @@ export function ProductImageField({
   const helpId = `${id}-ayuda`;
   const errorId = `${id}-error`;
   const searchId = `${id}-buscar`;
+  const galleryId = `${id}-galeria`;
+  const galleryHelpId = `${id}-galeria-ayuda`;
   const inputId = `${id}-archivo`;
   const describedBy = [helpId, fieldError ? errorId : null]
     .filter(Boolean)
     .join(" ");
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(GALLERY_BATCH_SIZE);
   const [dragging, setDragging] = useState(false);
   const [failedPreview, setFailedPreview] = useState<string | null>(null);
   const validationRun = useRef(0);
+  const galleryOptionRefs = useRef(new Map<string, HTMLLabelElement>());
+  const galleryScrollRef = useRef<HTMLDivElement | null>(null);
+  const galleryCountRef = useRef<HTMLParagraphElement | null>(null);
+  const focusCountAfterLoad = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -307,10 +321,146 @@ export function ProductImageField({
     });
   }, [imageIndexes, orderedImages, query]);
 
+  const firstVisibleImages = useMemo(
+    () => filteredImages.slice(0, visibleCount),
+    [filteredImages, visibleCount],
+  );
+
+  const selectedOutsideBatch = useMemo(() => {
+    if (!selectedImageId) return false;
+    if (!filteredImages.some((image) => String(image.id) === selectedImageId)) {
+      return false;
+    }
+    return !firstVisibleImages.some(
+      (image) => String(image.id) === selectedImageId,
+    );
+  }, [filteredImages, firstVisibleImages, selectedImageId]);
+
+  const visibleImages = useMemo(() => {
+    if (!selectedOutsideBatch) return firstVisibleImages;
+    const selectedInBatch = filteredImages.find(
+      (image) => String(image.id) === selectedImageId,
+    );
+    return selectedInBatch
+      ? [...firstVisibleImages, selectedInBatch]
+      : firstVisibleImages;
+  }, [
+    filteredImages,
+    firstVisibleImages,
+    selectedImageId,
+    selectedOutsideBatch,
+  ]);
+
+  const hasMoreImages = visibleCount < filteredImages.length;
+
+  const selectionOutsideFilter = useMemo(() => {
+    if (!selectedImage || !normalizeSearch(query)) return false;
+    return !filteredImages.some(
+      (image) => String(image.id) === selectedImageId,
+    );
+  }, [filteredImages, query, selectedImage, selectedImageId]);
+
+  const gallerySummary = useMemo(() => {
+    if (
+      imagesStatus === "loading" ||
+      imagesStatus === "idle" ||
+      imagesStatus === "error"
+    ) {
+      return "";
+    }
+    if (images.length === 0) {
+      return "No hay imágenes registradas. 0 imágenes.";
+    }
+    if (filteredImages.length === 0) {
+      return "Sin coincidencias. 0 imágenes.";
+    }
+    return `Mostrando ${visibleImages.length} de ${filteredImages.length} imágenes.`;
+  }, [
+    filteredImages.length,
+    images.length,
+    imagesStatus,
+    visibleImages.length,
+  ]);
+
+  const showGalleryFooter =
+    filteredImages.length > 0 &&
+    imagesStatus !== "loading" &&
+    imagesStatus !== "idle" &&
+    imagesStatus !== "error";
+  const showLoadMore = filteredImages.length > GALLERY_BATCH_SIZE;
+
+  useEffect(() => {
+    if (!focusCountAfterLoad.current || hasMoreImages) return;
+    focusCountAfterLoad.current = false;
+    galleryCountRef.current?.focus({ preventScroll: true });
+  }, [hasMoreImages]);
+
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    setVisibleCount(GALLERY_BATCH_SIZE);
+    focusCountAfterLoad.current = false;
+    galleryScrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function handleLoadMore() {
+    if (disabled || !hasMoreImages) return;
+    if (visibleCount + GALLERY_BATCH_SIZE >= filteredImages.length) {
+      focusCountAfterLoad.current = true;
+    }
+    setVisibleCount((count) => count + GALLERY_BATCH_SIZE);
+  }
+
+  function handleGalleryKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (disabled || visibleImages.length === 0) return;
+
+    const navigationKeys = [
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "End",
+      "Home",
+    ];
+    if (!navigationKeys.includes(event.key)) return;
+
+    event.preventDefault();
+
+    const activeIndex = visibleImages.findIndex(
+      (image) => String(image.id) === selectedImageId,
+    );
+    const lastIndex = visibleImages.length - 1;
+
+    let nextIndex: number;
+    if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = lastIndex;
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = activeIndex < 0 ? 0 : (activeIndex + 1) % visibleImages.length;
+    } else {
+      nextIndex =
+        activeIndex < 0
+          ? lastIndex
+          : (activeIndex - 1 + visibleImages.length) % visibleImages.length;
+    }
+
+    const nextImage = visibleImages[nextIndex];
+    const nextKey = String(nextImage.id);
+    const nextOption = galleryOptionRefs.current.get(nextKey);
+
+    clearFile();
+    onSelectedImageIdChange(nextKey);
+    nextOption?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    nextOption
+      ?.querySelector<HTMLInputElement>('input[type="radio"]')
+      ?.focus({ preventScroll: true });
+  }
+
   function selectMode(nextMode: ProductImageMode) {
     if (disabled || nextMode === mode) return;
     setDragging(false);
     setQuery("");
+    setVisibleCount(GALLERY_BATCH_SIZE);
     clearFile();
     onModeChange(nextMode);
   }
@@ -530,7 +680,7 @@ export function ProductImageField({
               <input
                 className="h-11 w-full rounded-xl border border-ink/15 bg-surface pl-9 pr-3 text-[13px] text-ink transition-colors placeholder:text-muted hover:border-brand/45 focus:border-brand"
                 id={searchId}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => handleQueryChange(event.target.value)}
                 placeholder="Buscar por nombre o referencia"
                 type="search"
                 value={query}
@@ -538,116 +688,197 @@ export function ProductImageField({
             </div>
           </div>
 
+          <p className="sr-only" id={galleryHelpId}>
+            Recorre las imágenes con las flechas del teclado y selecciona con
+            Espacio.
+          </p>
+
           <div
             aria-describedby={describedBy}
             aria-invalid={fieldError ? true : undefined}
             tabIndex={-1}
           >
             {imagesStatus === "loading" ? (
-            <div aria-busy="true" role="status">
-              <span className="sr-only">Cargando imágenes…</span>
-              <div aria-hidden="true" className="grid grid-cols-2 gap-3">
-                {Array.from({ length: 4 }, (_, index) => (
-                  <div
-                    className="rounded-2xl border border-line p-2"
-                    key={index}
-                  >
-                    <Skeleton className="aspect-[4/3] w-full" />
-                    <Skeleton className="mt-2 h-3 w-2/3" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : imagesStatus === "error" ? (
-            <NoticeBanner
-              action={
-                <button
-                  className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                  onClick={onRetryImages}
-                  type="button"
-                >
-                  Reintentar
-                </button>
-              }
-              tone="warning"
-            >
-              {imagesError ?? "No pudimos cargar las imágenes."}
-            </NoticeBanner>
-          ) : images.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-line bg-background px-4 py-5 text-center">
-              <p className="text-[12px] font-semibold text-ink">
-                No hay imágenes registradas.
-              </p>
-              <p className="mt-1 text-[11px] leading-5 text-muted">
-                Puedes subir un archivo o registrar imágenes desde el módulo de
-                imágenes.
-              </p>
-              <Link
-                className="mt-2 inline-flex min-h-11 items-center text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                href="/app/imagenes"
+              <div
+                aria-busy="true"
+                className={`${GALLERY_RESERVED_HEIGHT} overflow-hidden rounded-2xl border border-line bg-background p-2`}
+                role="status"
               >
-                Ir a imágenes
-              </Link>
-            </div>
-          ) : filteredImages.length === 0 ? (
-            <p className="rounded-2xl border border-line bg-background px-4 py-4 text-center text-[12px] text-muted">
-              No hay imágenes que coincidan con la búsqueda.
-            </p>
-          ) : (
-            <div
-              aria-describedby={describedBy}
-              aria-label="Imágenes disponibles"
-              aria-required="true"
-              className="grid grid-cols-2 gap-3"
-              role="radiogroup"
-            >
-              {filteredImages.map((image) => {
-                const imageName = getImageDisplayName(
-                  image,
-                  imageIndexes.get(String(image.id)),
-                );
-                const checked = selectedImageId === String(image.id);
-
-                return (
-                  <label
-                    className={`relative cursor-pointer rounded-2xl border p-2 transition-colors focus-within:ring-[3px] focus-within:ring-cyan/60 motion-reduce:transition-none ${
-                      checked
-                        ? "border-brand bg-soft-blue shadow-[0_0_0_1px_var(--brand)]"
-                        : "border-line bg-surface hover:border-brand/40"
-                    } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-                    key={String(image.id)}
+                <span className="sr-only">Cargando imágenes…</span>
+                <div aria-hidden="true" className="grid grid-cols-2 gap-3">
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <div
+                      className="rounded-2xl border border-line p-2"
+                      key={index}
+                    >
+                      <Skeleton className="aspect-[4/3] w-full" />
+                      <Skeleton className="mt-2 h-3 w-2/3" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : imagesStatus === "error" ? (
+              <NoticeBanner
+                action={
+                  <button
+                    className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+                    onClick={onRetryImages}
+                    type="button"
                   >
-                    <input
-                      aria-describedby={describedBy}
-                      checked={checked}
-                      className="sr-only"
-                      disabled={disabled}
-                      name={`${id}-imagen`}
-                      onChange={() => {
-                        clearFile();
-                        onSelectedImageIdChange(String(image.id));
-                      }}
-                      type="radio"
-                      value={String(image.id)}
-                    />
-                    <GalleryThumbnail image={image} />
-                    <span className="mt-2 block truncate text-[11px] font-semibold text-ink">
-                      {imageName}
-                    </span>
-                    {checked && (
-                      <span
-                        aria-hidden="true"
-                        className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white"
+                    Reintentar
+                  </button>
+                }
+                tone="warning"
+              >
+                {imagesError ?? "No pudimos cargar las imágenes."}
+              </NoticeBanner>
+            ) : images.length === 0 ? (
+              <div
+                className={`${GALLERY_AREA} flex flex-col items-center justify-center px-4 py-5 text-center`}
+              >
+                <p className="text-[12px] font-semibold text-ink">
+                  No hay imágenes registradas.
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-muted">
+                  Puedes subir un archivo o registrar imágenes desde el módulo
+                  de imágenes.
+                </p>
+                <Link
+                  className="mt-2 inline-flex min-h-11 items-center text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                  href="/app/imagenes"
+                >
+                  Ir a imágenes
+                </Link>
+              </div>
+            ) : filteredImages.length === 0 ? (
+              <div
+                className={`${GALLERY_AREA} flex items-center justify-center px-4 py-4 text-center`}
+              >
+                <p className="text-[12px] text-muted">
+                  No hay imágenes que coincidan con la búsqueda.
+                </p>
+              </div>
+            ) : (
+              <div
+                aria-describedby={galleryHelpId}
+                aria-label="Galería de imágenes. Desplázate para recorrerla."
+                className={`${GALLERY_MAX_HEIGHT} overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border border-line bg-background/60 p-1`}
+                id={galleryId}
+                ref={galleryScrollRef}
+                role="group"
+                tabIndex={0}
+              >
+                <div
+                  aria-describedby={galleryHelpId}
+                  aria-label="Imágenes disponibles"
+                  aria-required="true"
+                  className="grid grid-cols-2 gap-3"
+                  onKeyDown={handleGalleryKeyDown}
+                  role="radiogroup"
+                >
+                  {visibleImages.map((image) => {
+                    const imageKey = String(image.id);
+                    const imageName = getImageDisplayName(
+                      image,
+                      imageIndexes.get(imageKey),
+                    );
+                    const checked = selectedImageId === imageKey;
+
+                    return (
+                      <label
+                        className={`relative cursor-pointer rounded-2xl border p-2 transition-colors focus-within:ring-[3px] focus-within:ring-cyan/60 motion-reduce:transition-none ${
+                          checked
+                            ? "border-brand bg-soft-blue shadow-[0_0_0_1px_var(--brand)]"
+                            : "border-line bg-surface hover:border-brand/40"
+                        } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+                        key={imageKey}
+                        ref={(node) => {
+                          if (node) {
+                            galleryOptionRefs.current.set(imageKey, node);
+                          } else {
+                            galleryOptionRefs.current.delete(imageKey);
+                          }
+                        }}
                       >
-                        <Icon name="check" size={14} />
-                      </span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          )}
+                        <input
+                          checked={checked}
+                          className="sr-only"
+                          disabled={disabled}
+                          name={`${id}-imagen`}
+                          onChange={() => {
+                            clearFile();
+                            onSelectedImageIdChange(imageKey);
+                          }}
+                          type="radio"
+                          value={imageKey}
+                        />
+                        <GalleryThumbnail image={image} />
+                        <span className="mt-2 block truncate text-[11px] font-semibold text-ink">
+                          {imageName}
+                        </span>
+                        {checked && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white"
+                          >
+                            <Icon name="check" size={14} />
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p
+              aria-atomic="true"
+              aria-live="polite"
+              className={
+                showGalleryFooter
+                  ? "text-[11px] font-semibold text-muted"
+                  : "sr-only"
+              }
+              ref={galleryCountRef}
+              tabIndex={-1}
+            >
+              {gallerySummary}
+            </p>
+            {showGalleryFooter && showLoadMore && (
+              <button
+                aria-controls={galleryId}
+                className="min-h-11 rounded-full border border-ink/15 px-4 text-[12px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+                disabled={disabled || !hasMoreImages}
+                onClick={handleLoadMore}
+                type="button"
+              >
+                {hasMoreImages ? "Ver más" : "No hay más imágenes"}
+              </button>
+            )}
+          </div>
+
+          {selectedOutsideBatch && !normalizeSearch(query) && (
+            <p
+              className="rounded-xl border border-olive/35 bg-soft-lime px-3 py-2 text-[11px] leading-5 text-ink"
+              role="status"
+            >
+              La imagen seleccionada está fuera del lote visible y se muestra
+              al final de la galería para conservar la selección.
+            </p>
+          )}
+
+          {selectionOutsideFilter &&
+            imagesStatus !== "loading" &&
+            imagesStatus !== "error" && (
+              <p
+                className="rounded-xl border border-olive/35 bg-soft-lime px-3 py-2 text-[11px] leading-5 text-ink"
+                role="status"
+              >
+                La imagen seleccionada no coincide con la búsqueda actual.
+              </p>
+            )}
         </div>
       )}
 

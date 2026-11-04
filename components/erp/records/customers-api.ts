@@ -167,6 +167,11 @@ export async function fetchCustomerPage(
   });
 }
 
+export async function searchCustomers(query: string) {
+  const page = await fetchCustomerPage({ q: query, pageSize: 10 });
+  return page.data;
+}
+
 export async function fetchCustomer(id: string) {
   const payload = await apiFetch<unknown>(
     `/customers/${encodeURIComponent(id)}`,
