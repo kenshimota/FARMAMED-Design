@@ -42,6 +42,8 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `components/erp/store/use-store-resource.ts`: carga de recursos de la tienda con reintento y estados de error.
 - `components/erp/customer/`: detalle de factura y billetera propios del portal del cliente.
 - `lib/customer-finance.ts`: copy de errores, propiedad de facturas/billeteras y vencimiento para el cliente.
+- `components/erp/records/equivalence/`: selector, resumen, tasa, bloque de contado y líneas de la vista equivalente de pedidos y facturas.
+- `lib/finance/equivalence-api.ts`: tipos, parseo defensivo y llamadas a `/orders/{id}/equivalence` y `/invoices/{id}/equivalence`.
 - `components/erp/login-scene.tsx`: límite cliente que decide entre la escena 3D y su alternativa estática según tamaño y movimiento.
 - `lib/`: cliente del API, sesión, matriz de permisos y definición de rutas.
 - `lib/cart.ts`: carrito local del portal del cliente, aislado por cliente autenticado.

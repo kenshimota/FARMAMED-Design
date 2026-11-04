@@ -11,6 +11,7 @@ import { NoticeBanner } from "@/components/erp/ui/banner";
 import { SkeletonTable } from "@/components/erp/ui/skeleton";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import { InvoiceLinesSection } from "@/components/erp/records/invoice-lines";
+import { RecordEquivalencePanel } from "@/components/erp/records/equivalence/equivalence-panel";
 import {
   InvoiceStatusBadge,
   invoiceDateLabel,
@@ -450,6 +451,17 @@ export function CustomerInvoiceDetail({ invoiceId }: { invoiceId: string }) {
           Factura pagada. No tienes saldo pendiente en esta factura.
         </NoticeBanner>
       )}
+
+      <RecordEquivalencePanel
+        documentCash={
+          invoice.paymentTerm?.days === 0
+            ? { isCash: true, amount: invoice.balanceDue }
+            : null
+        }
+        documentCurrency={invoice.currency}
+        recordId={String(invoice.id)}
+        scope="invoice"
+      />
 
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">
