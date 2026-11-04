@@ -221,6 +221,17 @@ export function OrderActionsSection({
         )}
       </div>
 
+      {canWrite &&
+        (order.status === "generate" || order.status === "invoiced") && (
+          <Link
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-ink/15 bg-surface px-5 text-[13px] font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand"
+            href={`/app/pedidos/${order.id}/alistamiento`}
+          >
+            <Icon name="box" size={17} />
+            {order.status === "generate" ? "Preparar pedido" : "Ver alistamiento"}
+          </Link>
+        )}
+
       {isCashPaymentTerm(order.paymentTerm) &&
         (order.status === "draft" || order.status === "request") && (
           <NoticeBanner className="mt-4" tone="info">

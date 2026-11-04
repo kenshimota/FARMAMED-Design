@@ -23,6 +23,7 @@ export type ModuleKey =
   | "compras"
   | "pedidos"
   | "pedidos_estados"
+  | "alistamiento"
   | "monedas"
   | "impuestos"
   | "listas_precios"
@@ -93,6 +94,10 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
     read: ["admin"],
     write: [],
   },
+  alistamiento: {
+    read: ["admin", "seller", "manager_warehouse", "dispatcher"],
+    write: [],
+  },
   monedas: {
     read: ["admin", "seller", "manager_warehouse", "dispatcher"],
     write: ["admin"],
@@ -145,15 +150,15 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
-    "Administra usuarios, roles, catálogos, operación, pedidos, facturas, inventario, compras, monedas, impuestos, términos de pago, métodos de pago, pagos, billeteras y listas de precios.",
+    "Administra usuarios, roles, catálogos, operación, pedidos, alistamiento, facturas, inventario, compras, monedas, impuestos, términos de pago, métodos de pago, pagos, billeteras y listas de precios.",
   customer:
     "Consulta el catálogo en modo lectura, revisa los pedidos de su cuenta y consulta sus facturas y billetera.",
   seller:
-    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, bandeja de almacén, monedas, estantes, impuestos, métodos de pago y billeteras.",
+    "Gestiona catálogo, clientes, pedidos de sus clientes asignados, facturas y pagos, costos, compras, listas de precios y términos de pago; consulta existencias, lotes, alistamiento de pedidos, bandeja de almacén, monedas, estantes, impuestos, métodos de pago y billeteras.",
   dispatcher:
-    "Consulta clientes, bodegas, estantes, lotes, asignaciones, monedas, impuestos y métodos de pago.",
+    "Consulta clientes, bodegas, estantes, lotes, alistamiento de pedidos, asignaciones, monedas, impuestos y métodos de pago.",
   manager_warehouse:
-    "Gestiona bodegas, estantes, lotes, la bandeja de ubicación, existencias, costos y compras; consulta monedas e impuestos.",
+    "Gestiona bodegas, estantes, lotes, la bandeja de ubicación, existencias, costos y compras; consulta alistamiento de pedidos, monedas e impuestos.",
   support:
     "Consulta catálogo. No accede a operación, inventario, compras, finanzas ni administración.",
 };
@@ -204,6 +209,7 @@ const OPERATIONAL_MODULES: readonly ModuleKey[] = [
   "compras",
   "pedidos",
   "pedidos_estados",
+  "alistamiento",
   "monedas",
   "impuestos",
   "listas_precios",
@@ -245,6 +251,7 @@ export const PERMISSION_MATRIX_ROWS: readonly {
   { label: "Compras", module: "compras" },
   { label: "Pedidos", module: "pedidos" },
   { label: "Estados de pedido", module: "pedidos_estados" },
+  { label: "Alistamiento de pedidos", module: "alistamiento" },
   { label: "Monedas", module: "monedas" },
   { label: "Impuestos", module: "impuestos" },
   { label: "Listas de precios", module: "listas_precios" },

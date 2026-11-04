@@ -469,6 +469,17 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
     parent: "/app/pedidos",
   },
   {
+    path: "/app/pedidos/[id]/alistamiento",
+    title: "Alistamiento del pedido",
+    label: "Alistamiento",
+    group: "Operación",
+    module: "alistamiento",
+    icon: "box",
+    description:
+      "Lista de alistamiento con los lotes, las cantidades a empacar y la ubicación física de cada producto.",
+    parent: "/app/pedidos/[id]",
+  },
+  {
     path: "/app/pedidos/estados",
     title: "Estados de pedido",
     label: "Estados de pedido",
