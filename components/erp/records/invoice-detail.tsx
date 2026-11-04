@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { CustomerInvoiceDetail } from "@/components/erp/customer/customer-invoice-detail";
 import { useSession } from "@/components/erp/session-context";
+import { InvoicePdfAction } from "@/components/erp/records/document-actions";
 import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-context";
 import { EmptyState } from "@/components/erp/ui/empty-state";
@@ -385,6 +386,10 @@ function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
                 <Icon name="arrow-up-right" size={16} />
               </Link>
             )}
+            <InvoicePdfAction
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.number}
+            />
           </>
         }
         description="Factura inmutable con las líneas del pedido, el saldo pendiente y los pagos aplicados."

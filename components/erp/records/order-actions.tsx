@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -9,6 +9,9 @@ import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
 import { FormDialog } from "@/components/erp/ui/form-dialog";
 import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
+import { OrderDocumentActions } from "@/components/erp/records/document-actions";
+import { documentErrorCopy } from "@/components/erp/records/document-api";
+import { QuotationPdfDialog } from "@/components/erp/records/quotation-pdf-dialog";
 import {
   ORDER_COPY,
   mapPaymentTermFieldError,
@@ -67,6 +70,9 @@ export function OrderActionsSection({
   const [termError, setTermError] = useState<string | null>(null);
   const [termMessage, setTermMessage] = useState<string | null>(null);
   const [termBusy, setTermBusy] = useState(false);
+  const [quotationOpen, setQuotationOpen] = useState(false);
+  const [documentNotice, setDocumentNotice] = useState<string | null>(null);
+  const mobileActionsButtonRef = useRef<HTMLButtonElement>(null);
 
   const currentStatus = findOrderStatus(order.status, statuses);
   const terminal =
@@ -101,6 +107,38 @@ export function OrderActionsSection({
     setDialog(null);
     setTermError(null);
     setTermMessage(null);
+  }
+
+  function openQuotation() {
+    setDocumentNotice(null);
+    setMobileActionsOpen(false);
+    setQuotationOpen(true);
+  }
+
+  function focusMobileActions() {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      window.setTimeout(() => mobileActionsButtonRef.current?.focus(), 0);
+    }
+  }
+
+  function closeQuotation() {
+    setQuotationOpen(false);
+    focusMobileActions();
+  }
+
+  function handleQuotationConflict(caught: unknown) {
+    setDocumentNotice(documentErrorCopy(caught).message);
+    setQuotationOpen(false);
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      setMobileActionsOpen(true);
+    }
+    onReload();
   }
 
   async function runStatus(target: string) {
@@ -199,6 +237,12 @@ export function OrderActionsSection({
 
   const actionsContent = (
     <>
+      {documentNotice && (
+        <NoticeBanner className="mb-4" role="alert" tone="warning">
+          {documentNotice}
+        </NoticeBanner>
+      )}
+
       <div className="rounded-2xl border border-line bg-background px-4 py-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
           Término de pago
@@ -363,6 +407,14 @@ export function OrderActionsSection({
           reserva se libera si cancelas el pedido.
         </p>
       )}
+
+      <OrderDocumentActions
+        className="mt-4"
+        onOpenQuotation={openQuotation}
+        onReload={onReload}
+        order={order}
+        showDialog={false}
+      />
     </>
   );
 
@@ -401,6 +453,7 @@ export function OrderActionsSection({
             aria-haspopup="dialog"
             className="button-base button-secondary min-h-11 flex-1 px-4 text-[13px]"
             onClick={() => setMobileActionsOpen(true)}
+            ref={mobileActionsButtonRef}
             type="button"
           >
             Acciones
@@ -550,6 +603,15 @@ export function OrderActionsSection({
           </div>
         </form>
       </FormDialog>
+
+      {quotationOpen && (
+        <QuotationPdfDialog
+          onClose={closeQuotation}
+          onConflict={handleQuotationConflict}
+          open={quotationOpen}
+          order={order}
+        />
+      )}
     </>
   );
 }

@@ -18,6 +18,7 @@ export type IconName =
   | "close"
   | "coins"
   | "database"
+  | "download"
   | "eye"
   | "eye-off"
   | "home"
@@ -161,6 +162,13 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <ellipse cx="12" cy="5" rx="8" ry="3" />
       <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
     </>
   ),
   layers: (
