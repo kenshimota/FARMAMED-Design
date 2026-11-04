@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -20,6 +19,7 @@ import {
   SelectField,
   TextField,
 } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import {
   LotExpiryBadge,
   lotLocationStatusLabel,
@@ -38,13 +38,16 @@ import {
   type RecordsTableColumn,
 } from "@/components/erp/records/records-table";
 import {
-  fetchProducts,
+  fetchProduct,
+  searchProducts,
   type ProductRecord,
 } from "@/components/erp/records/records-api";
 import {
-  fetchPurchases,
+  fetchPurchase,
+  searchPurchases,
   type PurchaseRecord,
 } from "@/components/erp/records/purchases-api";
+import { PURCHASE_STATUS_LABELS } from "@/components/erp/records/purchase-shared";
 import { WarehouseInboxActions } from "@/components/erp/records/warehouse-inbox-actions";
 import {
   fetchWarehouseInboxLots,
@@ -53,6 +56,7 @@ import {
   type WarehouseInboxLot,
   type WarehouseInboxStatusFilter,
 } from "@/components/erp/records/warehouse-inbox-api";
+import { ApiError } from "@/lib/api";
 import { formatDateOnly, formatInteger } from "@/lib/format";
 import { translateApiError, type UiError } from "@/lib/api-errors";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
@@ -74,8 +78,6 @@ const EMPTY_FILTERS: WarehouseInboxListFilters = {
 };
 
 const NO_LOTS: WarehouseInboxLot[] = [];
-const NO_PRODUCTS: ProductRecord[] = [];
-const NO_PURCHASES: PurchaseRecord[] = [];
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente de ubicar" },
@@ -209,6 +211,17 @@ function WarehouseInboxContent({
   } | null>(null);
   const filtersRef = useRef(filters);
   const numberTimer = useRef<number | null>(null);
+  const [filterResetKey, setFilterResetKey] = useState(0);
+  const [resolvedProduct, setResolvedProduct] = useState<{
+    id: string;
+    label: string;
+    missing: boolean;
+  } | null>(null);
+  const [resolvedPurchase, setResolvedPurchase] = useState<{
+    id: string;
+    label: string;
+    missing: boolean;
+  } | null>(null);
 
   const initialFiltersKey = filtersKey(initialFilters);
   const [appliedInitialFiltersKey, setAppliedInitialFiltersKey] =
@@ -220,12 +233,6 @@ function WarehouseInboxContent({
       setLotNumberDraft(initialFilters.lotNumber);
     }
   }
-
-  const productsResource = useAsyncResource(fetchProducts);
-  const purchasesResource = useAsyncResource(fetchPurchases);
-
-  const products = productsResource.data ?? NO_PRODUCTS;
-  const purchases = purchasesResource.data ?? NO_PURCHASES;
 
   const lotsLoader = useCallback(
     () => fetchWarehouseInboxLots(toApiFilters(filters)),
@@ -258,22 +265,91 @@ function WarehouseInboxContent({
 
   const filtersActive = hasActiveFilters(filters);
 
-  const productOptions = useMemo(
-    () =>
-      products.map((product) => ({
-        value: String(product.id),
-        label: productOptionLabel(product),
-      })),
-    [products],
-  );
+  useEffect(() => {
+    const id = filters.productId;
+    if (!id) return;
 
-  const purchaseOptions = useMemo(
-    () =>
-      purchases.map((purchase) => ({
-        value: String(purchase.id),
-        label: purchaseOptionLabel(purchase),
-      })),
-    [purchases],
+    let active = true;
+    fetchProduct(id)
+      .then((product) => {
+        if (active) {
+          setResolvedProduct({
+            id,
+            label: productOptionLabel(product),
+            missing: false,
+          });
+        }
+      })
+      .catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResolvedProduct({
+            id,
+            label: `Producto #${id}`,
+            missing: true,
+          });
+          return;
+        }
+        setResolvedProduct({
+          id,
+          label: `Producto #${id}`,
+          missing: false,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [filters.productId]);
+
+  useEffect(() => {
+    const id = filters.purchaseId;
+    if (!id) return;
+
+    let active = true;
+    fetchPurchase(id)
+      .then((purchase) => {
+        if (active) {
+          setResolvedPurchase({
+            id,
+            label: purchaseOptionLabel(purchase),
+            missing: false,
+          });
+        }
+      })
+      .catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResolvedPurchase({
+            id,
+            label: `Compra #${id}`,
+            missing: true,
+          });
+          return;
+        }
+        setResolvedPurchase({
+          id,
+          label: `Compra #${id}`,
+          missing: false,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [filters.purchaseId]);
+
+  const selectedProductLabel =
+    resolvedProduct?.id === filters.productId
+      ? resolvedProduct.label
+      : undefined;
+  const purchaseLabel =
+    resolvedPurchase?.id === filters.purchaseId
+      ? resolvedPurchase.label
+      : undefined;
+  const productMissing = Boolean(
+    resolvedProduct?.id === filters.productId && resolvedProduct.missing,
+  );
+  const purchaseMissing = Boolean(
+    resolvedPurchase?.id === filters.purchaseId && resolvedPurchase.missing,
   );
 
   const countLabel = lotsResource.data
@@ -326,6 +402,7 @@ function WarehouseInboxContent({
       window.clearTimeout(numberTimer.current);
     }
     setLotNumberDraft("");
+    setFilterResetKey((current) => current + 1);
     commitFilters(EMPTY_FILTERS);
   }
 
@@ -560,40 +637,46 @@ function WarehouseInboxContent({
         className="rounded-[24px] border border-line bg-surface p-4 sm:p-5"
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <SelectField
-            emptyLabel="No hay productos registrados."
+          <EntityAutocompleteField
+            emptyLabel="No hay productos que coincidan."
+            help="Busca por nombre o referencia."
             id="filtro-bandeja-producto"
+            initialLabel={selectedProductLabel}
+            key={`filtro-bandeja-producto-${filterResetKey}`}
             label="Producto"
-            loading={productsResource.status === "loading"}
-            loadingLabel="Cargando productos…"
-            loadError={
-              productsResource.status === "error"
-                ? productsResource.error?.message ??
-                  "No pudimos cargar los productos."
-                : null
-            }
+            loadingLabel="Buscando productos…"
+            loadOptions={async (query) => {
+              const found = await searchProducts(query);
+              return found.map((product) => ({
+                value: String(product.id),
+                label: productOptionLabel(product),
+                description: product.description || undefined,
+              }));
+            }}
             onChange={updateProduct}
-            onRetry={productsResource.reload}
-            options={productOptions}
-            placeholder="Todos los productos"
+            placeholder="Busca por nombre o referencia"
             value={filters.productId}
           />
-          <SelectField
-            emptyLabel="No hay compras registradas."
+          <EntityAutocompleteField
+            emptyLabel="No hay compras que coincidan."
+            help="Busca por número de compra."
             id="filtro-bandeja-compra"
+            initialLabel={purchaseLabel}
+            key={`filtro-bandeja-compra-${filterResetKey}`}
             label="Compra"
-            loading={purchasesResource.status === "loading"}
-            loadingLabel="Cargando compras…"
-            loadError={
-              purchasesResource.status === "error"
-                ? purchasesResource.error?.message ??
-                  "No pudimos cargar las compras."
-                : null
-            }
+            loadingLabel="Buscando compras…"
+            loadOptions={async (query) => {
+              const found = await searchPurchases(query);
+              return found.map((purchase) => ({
+                value: String(purchase.id),
+                label: `Compra #${purchase.number}`,
+                description:
+                  purchase.supplier?.name ??
+                  PURCHASE_STATUS_LABELS[purchase.status],
+              }));
+            }}
             onChange={updatePurchase}
-            onRetry={purchasesResource.reload}
-            options={purchaseOptions}
-            placeholder="Todas las compras"
+            placeholder="Busca por número de compra"
             value={filters.purchaseId}
           />
           <SelectField
@@ -620,6 +703,19 @@ function WarehouseInboxContent({
             value={filters.expiringBefore}
           />
         </div>
+
+        {(productMissing || purchaseMissing) && (
+          <p
+            aria-live="polite"
+            className="mt-4 text-[12px] font-semibold text-alert-ink"
+          >
+            {productMissing && purchaseMissing
+              ? "El producto y la compra seleccionados ya no existen. Limpia los filtros para continuar."
+              : productMissing
+                ? "El producto seleccionado ya no existe. Limpia los filtros para continuar."
+                : "La compra seleccionada ya no existe. Limpia los filtros para continuar."}
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p aria-live="polite" className="text-[12px] font-semibold text-muted">

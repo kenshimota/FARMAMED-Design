@@ -26,10 +26,10 @@ import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import {
   DateField,
-  SelectField,
   TextAreaField,
   TextField,
 } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
   RecordsFormSkeleton,
@@ -37,8 +37,8 @@ import {
 } from "@/components/erp/records/record-states";
 import { isPositiveRecordId } from "@/components/erp/records/records-api";
 import {
-  fetchCustomers,
-  type CustomerRecord,
+  fetchCustomer,
+  searchCustomers,
 } from "@/components/erp/records/customers-api";
 import {
   fetchMethodPayments,
@@ -87,7 +87,6 @@ const AMOUNT_MAX = 999999999999.99;
 const REFERENCE_MAX_LENGTH = 100;
 const NOTES_MAX_LENGTH = 1000;
 
-const NO_CUSTOMERS: CustomerRecord[] = [];
 const NO_METHODS: MethodPayment[] = [];
 
 const COPY = {
@@ -312,21 +311,18 @@ function PaymentFormContent({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<FieldErrors>({});
 
-  const customersResource = useAsyncResource(fetchCustomers);
+  const customerIdForLabel = payment
+    ? String(payment.customer_id)
+    : initialCustomerId;
+  const customerResource = useAsyncResource(
+    async () =>
+      customerIdForLabel ? fetchCustomer(customerIdForLabel) : null,
+    { enabled: Boolean(customerIdForLabel) },
+  );
   const methodsResource = useAsyncResource(() =>
     fetchMethodPayments({ is_active: true }),
   );
-  const customers = customersResource.data ?? NO_CUSTOMERS;
   const methods = methodsResource.data ?? NO_METHODS;
-
-  const customer = useMemo(
-    () =>
-      customers.find((item) => String(item.id) === customerId) ??
-      (payment && String(payment.customer_id) === customerId
-        ? ({ id: payment.customer_id, fullName: `Cliente #${payment.customer_id}` } as CustomerRecord)
-        : null),
-    [customerId, customers, payment],
-  );
 
   const selectedMethod = useMemo(
     () =>
@@ -392,15 +388,6 @@ function PaymentFormContent({
 
   const canCreateCustomers = canWriteModule(user.role, "clientes");
   const canCreateMethods = canWriteModule(user.role, "metodos_pago");
-
-  const customerOptions = useMemo(
-    () =>
-      customers.map((item) => ({
-        value: String(item.id),
-        label: item.email ? `${item.fullName} — ${item.email}` : item.fullName,
-      })),
-    [customers],
-  );
 
   const methodOptions = useMemo(
     () =>
@@ -589,7 +576,9 @@ function PaymentFormContent({
                 label="Cliente"
                 onChange={() => undefined}
                 readOnly
-                value={customer?.fullName ?? `Cliente #${initialCustomer}`}
+                value={
+                  customerResource.data?.fullName ?? `Cliente #${initialCustomer}`
+                }
               />
               <TextField
                 disabled={submitting}
@@ -603,56 +592,94 @@ function PaymentFormContent({
             </>
           ) : (
             <>
-              <SelectField
-                createHref={canCreateCustomers ? "/app/clientes/nuevo" : undefined}
-                createLabel={canCreateCustomers ? "Registrar cliente" : undefined}
-                emptyLabel="No hay clientes registrados."
-                error={visibleError("customer")}
-                help="El saldo se acredita a la billetera de este cliente cuando el pago se concilia."
-                id={customerFieldId}
-                label="Cliente"
-                loading={customersResource.status === "loading"}
-                loadingLabel="Cargando clientes…"
-                loadError={
-                  customersResource.status === "error"
-                    ? customersResource.error?.message ??
-                      "No pudimos cargar los clientes."
-                    : null
+              <EntityAutocompleteField
+                createHref={
+                  canCreateCustomers ? "/app/clientes/nuevo" : undefined
                 }
+                createLabel={
+                  canCreateCustomers ? "Registrar cliente" : undefined
+                }
+                emptyLabel="No hay clientes que coincidan."
+                error={visibleError("customer")}
+                help="Busca por nombre o correo. El saldo se acredita a la billetera de este cliente cuando el pago se concilia."
+                id={customerFieldId}
+                initialLabel={customerResource.data?.fullName}
+                label="Cliente"
+                loadingLabel="Buscando clientes…"
+                loadOptions={async (query) => {
+                  const found = await searchCustomers(query);
+                  return found.map((item) => ({
+                    value: String(item.id),
+                    label: item.fullName,
+                    description:
+                      item.email || item.direction || undefined,
+                  }));
+                }}
                 onChange={(value) => {
                   setCustomerId(value);
                   touch("customer");
                 }}
-                onRetry={customersResource.reload}
-                options={customerOptions}
-                placeholder="Selecciona un cliente"
+                placeholder="Busca por nombre o correo"
                 required
                 value={customerId}
               />
-              <SelectField
-                createHref={canCreateMethods ? "/app/metodos-pago/nuevo" : undefined}
-                createLabel={canCreateMethods ? "Registrar método de pago" : undefined}
-                emptyLabel="No hay métodos de pago activos."
+              {methodsResource.status === "error" && (
+                <NoticeBanner
+                  action={
+                    <button
+                      className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+                      onClick={methodsResource.reload}
+                      type="button"
+                    >
+                      Reintentar
+                    </button>
+                  }
+                  className="lg:col-span-2"
+                  role="alert"
+                  tone="warning"
+                >
+                  {methodsResource.error?.message ??
+                    "No pudimos cargar los métodos de pago."}
+                </NoticeBanner>
+              )}
+              <EntityAutocompleteField
+                createHref={
+                  canCreateMethods ? "/app/metodos-pago/nuevo" : undefined
+                }
+                createLabel={
+                  canCreateMethods ? "Registrar método de pago" : undefined
+                }
+                disabled={
+                  methodsResource.status === "loading" ||
+                  methodsResource.status === "error"
+                }
+                emptyLabel={
+                  methods.length === 0
+                    ? "No hay métodos de pago activos."
+                    : "No hay métodos de pago que coincidan."
+                }
                 error={visibleError("method")}
                 help="Solo se muestran métodos activos. La moneda se deriva de este método."
                 id={methodFieldId}
                 label="Método de pago"
-                loading={methodsResource.status === "loading"}
-                loadingLabel="Cargando métodos…"
-                loadError={
-                  methodsResource.status === "error"
-                    ? methodsResource.error?.message ??
-                      "No pudimos cargar los métodos de pago."
-                    : null
-                }
+                loadingLabel="Buscando métodos de pago…"
+                loadOptions={async (query) => {
+                  const search = query.trim().toLocaleLowerCase("es");
+                  if (!search) return methodOptions;
+                  return methodOptions.filter((option) =>
+                    option.label.toLocaleLowerCase("es").includes(search),
+                  );
+                }}
                 onChange={(value) => {
                   setMethodPaymentId(value);
                   touch("method");
                   setServerErrors({});
                 }}
-                onRetry={methodsResource.reload}
-                options={methodOptions}
-                placeholder="Selecciona un método"
+                placeholder={
+                  methodsResource.status === "loading"
+                    ? "Cargando métodos…"
+                    : "Busca un método de pago"
+                }
                 required
                 value={methodPaymentId}
               />
