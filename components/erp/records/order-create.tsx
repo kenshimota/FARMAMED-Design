@@ -36,7 +36,9 @@ import {
   type StoreProduct,
 } from "@/components/erp/records/orders-api";
 import {
+  fetchCustomer,
   fetchCustomers,
+  searchCustomers,
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
 import {
@@ -49,12 +51,9 @@ import {
   TextAreaField,
   TextField,
 } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import { toApiId } from "@/components/erp/records/records-api";
-import {
-  RecordsFormSkeleton,
-  RecordsLoadError,
-} from "@/components/erp/records/record-states";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import { formatInteger } from "@/lib/format";
 
@@ -145,48 +144,39 @@ function OrderCreateContent() {
   const customersResource = useAsyncResource(fetchCustomers);
   const customers = customersResource.data ?? NO_CUSTOMERS;
   const [customerId, setCustomerId] = useState("");
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerRecord | null>(null);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+  const customerRequest = useRef(0);
 
-  const selectedCustomer =
-    customers.find((customer) => String(customer.id) === customerId) ?? null;
+  async function selectCustomer(value: string) {
+    const request = customerRequest.current + 1;
+    customerRequest.current = request;
+    setCustomerId(value);
+    setCustomerError(null);
 
-  const customerOptions = useMemo(
-    () =>
-      customers.map((customer) => ({
-        value: String(customer.id),
-        label: customer.email
-          ? `${customer.fullName} — ${customer.email}`
-          : customer.fullName,
-      })),
-    [customers],
-  );
+    if (!value) {
+      setSelectedCustomer(null);
+      setCustomerLoading(false);
+      return;
+    }
 
-  if (customersResource.status === "loading") {
-    return (
-      <div className="space-y-5">
-        <RecordsPageHeader
-          description="Selecciona un cliente y arma su pedido con el catálogo disponible."
-          eyebrow="Operación"
-          title="Nuevo pedido"
-        />
-        <RecordsFormSkeleton />
-      </div>
-    );
-  }
+    setSelectedCustomer(null);
+    setCustomerLoading(true);
 
-  if (customersResource.status === "error" && customers.length === 0) {
-    return (
-      <RecordsLoadError
-        backHref="/app/pedidos"
-        backLabel="Volver a pedidos"
-        description={
-          customersResource.error?.message ??
-          "No pudimos cargar los clientes para la venta asistida."
-        }
-        headingLevel="h1"
-        onRetry={customersResource.reload}
-        title="No pudimos iniciar la venta asistida"
-      />
-    );
+    try {
+      const customer = await fetchCustomer(value);
+      if (customerRequest.current !== request) return;
+      setSelectedCustomer(customer);
+    } catch {
+      if (customerRequest.current !== request) return;
+      setCustomerError(
+        "No pudimos cargar los datos del cliente seleccionado. Vuelve a elegirlo.",
+      );
+    } finally {
+      if (customerRequest.current === request) setCustomerLoading(false);
+    }
   }
 
   return (
@@ -205,7 +195,7 @@ function OrderCreateContent() {
         title="Nuevo pedido"
       />
 
-      {customersResource.status === "error" && customers.length > 0 && (
+      {customersResource.status === "error" && (
         <NoticeBanner
           action={
             <button
@@ -218,7 +208,26 @@ function OrderCreateContent() {
           }
           tone="warning"
         >
-          No pudimos actualizar los clientes. Mostramos los datos disponibles.
+          No pudimos cargar la lista de clientes. Puedes buscar y seleccionar
+          igualmente; reintenta si necesitas actualizarla.
+        </NoticeBanner>
+      )}
+
+      {customersResource.status === "ready" && customers.length === 0 && (
+        <NoticeBanner
+          action={
+            <Link
+              className="button-base button-secondary min-h-11 px-4 text-[12px]"
+              href="/app/clientes/nuevo"
+            >
+              Registrar cliente
+              <Icon name="arrow-right" size={15} />
+            </Link>
+          }
+          tone="warning"
+        >
+          Todavía no hay clientes registrados. La venta asistida necesita un
+          cliente con lista de precios asignada.
         </NoticeBanner>
       )}
 
@@ -238,68 +247,84 @@ function OrderCreateContent() {
           pueden operar con cualquiera.
         </p>
 
-        {customers.length === 0 ? (
-          <div className="mt-5">
-            <EmptyState
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <EntityAutocompleteField
+            emptyLabel="No hay clientes que coincidan."
+            help="Busca por nombre o correo. Los vendedores solo operan con clientes asignados."
+            id="nuevo-pedido-cliente"
+            label="Cliente"
+            loadingLabel="Buscando clientes…"
+            loadOptions={async (query) => {
+              const found = await searchCustomers(query);
+              return found.map((customer) => ({
+                value: String(customer.id),
+                label: customer.fullName,
+                description: customer.email || customer.direction || undefined,
+              }));
+            }}
+            onChange={(value) => void selectCustomer(value)}
+            placeholder="Busca por nombre o correo"
+            required
+            value={customerId}
+          />
+          {customerLoading && (
+            <p
+              aria-live="polite"
+              className="text-[12px] font-semibold text-muted"
+            >
+              Cargando los datos del cliente…
+            </p>
+          )}
+          {customerError && (
+            <NoticeBanner
               action={
-                <Link
-                  className="button-base button-primary min-h-11 px-5"
-                  href="/app/clientes/nuevo"
+                <button
+                  className="min-h-11 rounded-full border border-alert/30 px-3 text-[12px] font-semibold text-alert-ink transition-colors hover:bg-surface"
+                  onClick={() => void selectCustomer(customerId)}
+                  type="button"
                 >
-                  Nuevo cliente
-                  <Icon name="arrow-right" size={17} />
-                </Link>
+                  Reintentar
+                </button>
               }
-              description="La venta asistida necesita un cliente con lista de precios asignada."
-              title="Todavía no hay clientes registrados."
-            />
-          </div>
-        ) : (
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            <SelectField
-              emptyLabel="No hay clientes disponibles."
-              id="nuevo-pedido-cliente"
-              label="Cliente"
-              onChange={(value) => setCustomerId(value)}
-              options={customerOptions}
-              placeholder="Selecciona un cliente"
-              required
-              value={customerId}
-            />
-            {selectedCustomer && (
-              <dl className="rounded-2xl border border-line bg-background px-4 py-3 text-[12px] leading-5">
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                    Contacto
-                  </dt>
-                  <dd className="mt-1 break-all text-ink">
-                    {selectedCustomer.email || "Correo no registrado"}
-                  </dd>
-                </div>
-                <div className="mt-2">
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                    Dirección
-                  </dt>
-                  <dd className="mt-1 text-ink">
-                    {selectedCustomer.direction || "No registrada"}
-                  </dd>
-                </div>
-                <div className="mt-2">
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                    Lista de precios
-                  </dt>
-                  <dd className="mt-1 text-ink">
-                    {selectedCustomer.price_list
-                      ? selectedCustomer.price_list.name
-                      : selectedCustomer.price_list_id !== null
-                        ? `Lista #${selectedCustomer.price_list_id}`
-                        : "Sin lista asignada"}
-                  </dd>
-                </div>
-              </dl>
-            )}
-          </div>
-        )}
+              role="alert"
+              tone="danger"
+            >
+              {customerError}
+            </NoticeBanner>
+          )}
+          {selectedCustomer && (
+            <dl className="rounded-2xl border border-line bg-background px-4 py-3 text-[12px] leading-5">
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Contacto
+                </dt>
+                <dd className="mt-1 break-all text-ink">
+                  {selectedCustomer.email || "Correo no registrado"}
+                </dd>
+              </div>
+              <div className="mt-2">
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Dirección
+                </dt>
+                <dd className="mt-1 text-ink">
+                  {selectedCustomer.direction || "No registrada"}
+                </dd>
+              </div>
+              <div className="mt-2">
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  Lista de precios
+                </dt>
+                <dd className="mt-1 text-ink">
+                  {selectedCustomer.price_list
+                    ? selectedCustomer.price_list.name
+                    : selectedCustomer.price_list_id !== null
+                      ? `Lista #${selectedCustomer.price_list_id}`
+                      : "Sin lista asignada"}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </section>
 
       {selectedCustomer && (

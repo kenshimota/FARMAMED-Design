@@ -29,7 +29,8 @@ import {
   orderProductLabel,
   type OrderDisplayCurrency,
 } from "@/components/erp/records/orders-shared";
-import { SelectField, TextField } from "@/components/erp/records/form-controls";
+import { TextField } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import {
   RecordActionButton,
   RecordActions,
@@ -399,28 +400,57 @@ export function OrderLinesSection({
               {addMessage}
             </NoticeBanner>
           )}
-          <SelectField
-            emptyLabel="Todas las variantes disponibles ya están en el pedido."
+          {storeResource.status === "error" && (
+            <NoticeBanner
+              action={
+                <button
+                  className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+                  onClick={storeResource.reload}
+                  type="button"
+                >
+                  Reintentar
+                </button>
+              }
+              role="alert"
+              tone="warning"
+            >
+              {storeResource.error?.kind === "forbidden"
+                ? "No pudimos consultar el catálogo del cliente. Verifica que tenga una lista de precios asignada y que esté asignado a tu usuario."
+                : storeResource.error?.message ??
+                  "No pudimos cargar el catálogo del cliente."}
+            </NoticeBanner>
+          )}
+          <EntityAutocompleteField
+            disabled={
+              storeResource.status === "loading" ||
+              storeResource.status === "error"
+            }
+            emptyLabel={
+              storeProducts.length === 0
+                ? "Todas las variantes disponibles ya están en el pedido."
+                : "No hay productos que coincidan."
+            }
             error={addErrors.productId}
+            help="Busca por nombre, referencia o estado."
             id="pedido-linea-variante"
             label="Producto y estado"
-            loading={storeResource.status === "loading"}
-            loadingLabel="Cargando catálogo del cliente…"
-            loadError={
-              storeResource.status === "error"
-                ? storeResource.error?.kind === "forbidden"
-                  ? "No pudimos consultar el catálogo del cliente. Verifica que tenga una lista de precios asignada y que esté asignado a tu usuario."
-                  : storeResource.error?.message ??
-                    "No pudimos cargar el catálogo del cliente."
-                : null
-            }
+            loadingLabel="Buscando productos…"
+            loadOptions={async (query) => {
+              const search = query.trim().toLocaleLowerCase("es");
+              if (!search) return productOptions;
+              return productOptions.filter((option) =>
+                option.label.toLocaleLowerCase("es").includes(search),
+              );
+            }}
             onChange={(value) => {
               setProductKey(value);
               setAddErrors((current) => ({ ...current, productId: undefined }));
             }}
-            onRetry={storeResource.reload}
-            options={productOptions}
-            placeholder="Selecciona un producto"
+            placeholder={
+              storeResource.status === "loading"
+                ? "Cargando catálogo del cliente…"
+                : "Busca por nombre, referencia o estado"
+            }
             required
             value={productKey}
           />

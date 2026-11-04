@@ -293,6 +293,11 @@ export async function fetchPurchasePage(
   });
 }
 
+export async function searchPurchases(query: string) {
+  const page = await fetchPurchasePage({ q: query, pageSize: 10 });
+  return page.data;
+}
+
 export async function fetchPurchases(filters: PurchaseFilters = {}) {
   const query = new URLSearchParams();
   appendFilter(query, "supplier_id", filters.supplier_id);

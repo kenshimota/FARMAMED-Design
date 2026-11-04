@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -28,8 +28,11 @@ import {
   SelectField,
   TextField,
 } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import {
+  fetchProduct,
   findById,
+  searchProducts,
   type ProductRecord,
   type RecordId,
 } from "@/components/erp/records/records-api";
@@ -44,6 +47,7 @@ import {
   isValidIsoDate,
   normalizeDateInput,
 } from "@/components/erp/records/lot-shared";
+import { ApiError } from "@/lib/api";
 import { formatDateOnly } from "@/lib/format";
 
 export type PurchaseLineValues = {
@@ -174,9 +178,6 @@ type PurchaseLinesEditorProps = {
   rows: PurchaseLineRow[];
   currency: PurchaseMoney | null;
   products: ProductRecord[];
-  productsLoading: boolean;
-  productsError: string | null;
-  onRetryProducts: () => void;
   itemStates: ItemStateRecord[];
   itemStatesLoading: boolean;
   itemStatesError: string | null;
@@ -191,9 +192,6 @@ export function PurchaseLinesEditor({
   rows,
   currency,
   products,
-  productsLoading,
-  productsError,
-  onRetryProducts,
   itemStates,
   itemStatesLoading,
   itemStatesError,
@@ -216,6 +214,37 @@ export function PurchaseLinesEditor({
     ? (rows.find((row) => row.key === editingKey) ?? null)
     : null;
   const values = editingRow ? editValues : addValues;
+  const [resolvedProduct, setResolvedProduct] = useState<{
+    id: string;
+    product: ProductRecord | null;
+    missing: boolean;
+  } | null>(null);
+  const listedProduct = values.product_id
+    ? findById(products, values.product_id)
+    : null;
+
+  useEffect(() => {
+    const id = values.product_id;
+    if (!id || listedProduct) return;
+    if (resolvedProduct?.id === id) return;
+
+    let active = true;
+    fetchProduct(id)
+      .then((product) => {
+        if (active) setResolvedProduct({ id, product, missing: false });
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setResolvedProduct({
+          id,
+          product: null,
+          missing: caught instanceof ApiError && caught.status === 404,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [listedProduct, resolvedProduct, values.product_id]);
 
   function updateField(field: PurchaseLineFieldKey, value: string) {
     if (editingRow) {
@@ -296,10 +325,6 @@ export function PurchaseLinesEditor({
     void runOp(() => (key ? onUpdate(key, values) : onAdd(values)));
   }
 
-  const productOptions = products.map((product) => ({
-    value: String(product.id),
-    label: `${product.name} (${product.reference})`,
-  }));
   const itemStateOptions = itemStates.map((itemState) => ({
     value: String(itemState.id),
     label: itemState.label,
@@ -316,9 +341,21 @@ export function PurchaseLinesEditor({
   }
 
   const summaryItems = lineSummaryItems(errors);
-  const selectedProductName = values.product_id
-    ? findById(products, values.product_id)?.name
-    : null;
+  const resolvedProductForValue =
+    resolvedProduct?.id === values.product_id ? resolvedProduct : null;
+  const selectedProduct =
+    listedProduct ?? resolvedProductForValue?.product ?? null;
+  const selectedProductLabel = selectedProduct
+    ? `${selectedProduct.name} (${selectedProduct.reference})`
+    : resolvedProductForValue && values.product_id
+      ? `Producto #${values.product_id}`
+      : undefined;
+  const productUnavailable = Boolean(
+    resolvedProductForValue?.missing &&
+      values.product_id &&
+      !selectedProduct,
+  );
+  const selectedProductName = selectedProduct?.name ?? null;
   const lotFieldLabel = selectedProductName
     ? `${PURCHASE_LINE_LABELS.lot_number} de ${selectedProductName}`
     : PURCHASE_LINE_LABELS.lot_number;
@@ -328,18 +365,29 @@ export function PurchaseLinesEditor({
 
   const fields: ReactNode = (
     <>
-      <SelectField
-        emptyLabel="No hay productos registrados."
-        error={errors.product_id}
+      <EntityAutocompleteField
+        emptyLabel="No hay productos que coincidan."
+        error={
+          errors.product_id ??
+          (productUnavailable
+            ? "La opción seleccionada ya no está disponible. Elige otra."
+            : undefined)
+        }
+        help="Busca por nombre o referencia."
         id={PURCHASE_LINE_FIELD_IDS.product_id}
+        initialLabel={selectedProductLabel}
         label={PURCHASE_LINE_LABELS.product_id}
-        loading={productsLoading}
-        loadingLabel="Cargando productos…"
-        loadError={productsError}
+        loadingLabel="Buscando productos…"
+        loadOptions={async (query) => {
+          const found = await searchProducts(query);
+          return found.map((product) => ({
+            value: String(product.id),
+            label: `${product.name} (${product.reference})`,
+            description: product.description || undefined,
+          }));
+        }}
         onChange={(value) => updateField("product_id", value)}
-        onRetry={onRetryProducts}
-        options={productOptions}
-        placeholder="Selecciona un producto"
+        placeholder="Busca por nombre o referencia"
         required
         value={values.product_id}
       />
