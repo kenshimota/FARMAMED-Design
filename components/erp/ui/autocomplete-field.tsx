@@ -24,6 +24,7 @@ type AutocompleteFieldProps = {
   help?: ReactNode;
   error?: string | null;
   emptyLabel?: string;
+  emptyQueryLabel?: string;
   loadingLabel?: string;
   errorLabel?: string;
   clearAriaLabel?: string;
@@ -50,6 +51,7 @@ export function AutocompleteField({
   help,
   error,
   emptyLabel = "No hay coincidencias.",
+  emptyQueryLabel,
   loadingLabel = "Buscando…",
   errorLabel = "No pudimos cargar las coincidencias.",
   clearAriaLabel,
@@ -181,6 +183,8 @@ export function AutocompleteField({
     showPanel && settledQuery !== trimmed ? "loading" : status;
   const showListbox =
     showPanel && displayStatus === "ready" && options.length > 0;
+  const emptyMessage =
+    trimmed.length === 0 && emptyQueryLabel ? emptyQueryLabel : emptyLabel;
   const liveMessage = !showPanel
     ? ""
     : displayStatus === "loading"
@@ -188,7 +192,7 @@ export function AutocompleteField({
       : displayStatus === "error"
         ? errorLabel
         : displayStatus === "ready" && options.length === 0
-          ? emptyLabel
+          ? emptyMessage
           : "";
 
   return (
@@ -310,7 +314,7 @@ export function AutocompleteField({
 
               {displayStatus === "ready" && options.length === 0 && (
                 <p className="px-4 py-3 text-[12px] font-semibold text-muted">
-                  {emptyLabel}
+                  {emptyMessage}
                 </p>
               )}
 

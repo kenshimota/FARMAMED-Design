@@ -37,6 +37,10 @@ export const PURCHASE_COPY = {
   lotNumberFormat: "El número de lote debe tener entre 1 y 100 caracteres.",
   expirationRequired: "Ingresa la fecha de vencimiento.",
   expirationInvalid: "Usa una fecha de vencimiento válida.",
+  expirationFuture: "La fecha de vencimiento debe ser posterior a hoy.",
+  productUnavailable: "Producto no disponible. Elige otro para continuar.",
+  productUnavailableShort: "Producto no disponible",
+  productLoadError: "No pudimos cargar el producto.",
   duplicateLot: "Ya existe una línea con ese lote para este producto.",
   lotIncompatible:
     "El lote ya existe con otro estado o vencimiento. Revisa los datos antes de confirmar.",
