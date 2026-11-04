@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -10,6 +10,7 @@ import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-co
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import { OrderActionsSection } from "@/components/erp/records/order-actions";
+import { RecordEquivalencePanel } from "@/components/erp/records/equivalence/equivalence-panel";
 import { OrderLinesSection } from "@/components/erp/records/order-lines";
 import {
   ORDER_COPY,
@@ -39,6 +40,7 @@ import {
 import { isPositiveRecordId } from "@/components/erp/records/records-api";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
 import { formatCoordinate, formatDateTime, formatInteger } from "@/lib/format";
+import type { EquivalenceCurrency } from "@/lib/finance/equivalence-api";
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { user } = useSession();
@@ -280,6 +282,25 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   const resource = useAsyncResource(loader);
   const statusesResource = useAsyncResource(fetchOrderStatuses);
   const statuses = statusesResource.data ?? [];
+  const defaultCurrency = currencyStatus?.defaultCurrency ?? null;
+  const equivalenceDocumentCurrency = useMemo<EquivalenceCurrency | null>(() => {
+    const orderCurrency = resource.data?.currency;
+    if (orderCurrency) {
+      return {
+        id: orderCurrency.id,
+        code: orderCurrency.code,
+        name: orderCurrency.name,
+        symbol: orderCurrency.symbol,
+      };
+    }
+    if (!defaultCurrency) return null;
+    return {
+      id: defaultCurrency.id,
+      code: defaultCurrency.code,
+      name: defaultCurrency.name,
+      symbol: defaultCurrency.symbol,
+    };
+  }, [defaultCurrency, resource.data?.currency]);
 
   if (resource.status === "loading") {
     return (
@@ -325,6 +346,10 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   const order = resource.data;
   const currency: OrderDisplayCurrency | null =
     order.currency ?? currencyStatus?.defaultCurrency ?? null;
+  const documentCash =
+    order.paymentTerm?.days === 0
+      ? { isCash: true, amount: order.total }
+      : null;
   const customer = order.customer;
   const latitude = customer?.latitude ?? null;
   const longitude = customer?.longitude ?? null;
@@ -391,6 +416,13 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
           y algunas acciones pueden no estar disponibles hasta reintentar.
         </NoticeBanner>
       )}
+
+      <RecordEquivalencePanel
+        documentCash={documentCash}
+        documentCurrency={equivalenceDocumentCurrency}
+        recordId={String(order.id)}
+        scope="order"
+      />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">

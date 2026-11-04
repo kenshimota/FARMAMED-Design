@@ -9,6 +9,7 @@ import { useSession } from "@/components/erp/session-context";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
+import { RecordEquivalencePanel } from "@/components/erp/records/equivalence/equivalence-panel";
 import { RecordsDetailSkeleton, RecordsLoadError } from "@/components/erp/records/record-states";
 import {
   fetchOrder,
@@ -536,6 +537,10 @@ export default function MisPedidoDetailPage({
   }
 
   const order = state.order;
+  const documentCash =
+    order.paymentTerm?.days === 0
+      ? { isCash: true, amount: order.total }
+      : null;
   const statuses =
     statusesState.status === "ready" ? statusesState.statuses : [];
   const isDraft = order.status === "draft";
@@ -596,6 +601,13 @@ export default function MisPedidoDetailPage({
           conocidos hasta que el servicio se recupere.
         </NoticeBanner>
       )}
+
+      <RecordEquivalencePanel
+        documentCash={documentCash}
+        documentCurrency={order.currency}
+        recordId={String(order.id)}
+        scope="order"
+      />
 
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">
