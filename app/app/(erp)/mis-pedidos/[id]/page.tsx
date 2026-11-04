@@ -25,6 +25,7 @@ import {
   orderNumberLabel,
   orderStatusLabel,
 } from "@/components/erp/records/orders-shared";
+import { OrderDocumentActions } from "@/components/erp/records/document-actions";
 import { ApiError } from "@/lib/api";
 import { translateApiError } from "@/lib/api-errors";
 import { getCustomerAccessIssue } from "@/lib/customer";
@@ -790,6 +791,14 @@ export default function MisPedidoDetailPage({
               </NoticeBanner>
             )}
 
+            <OrderDocumentActions
+              className="mt-4"
+              onReload={() => {
+                void refreshOrder();
+              }}
+              order={order}
+            />
+
             {(isDraft || canCancel) && (
               <div className="mt-5 flex flex-col gap-3">
                 {isDraft && (
@@ -830,15 +839,19 @@ export default function MisPedidoDetailPage({
               </div>
             )}
 
-            {!isDraft && !canCancel && (
-              <p className="mt-4 rounded-2xl border border-line bg-background px-4 py-3 text-[13px] leading-6 text-muted">
-                Este pedido está en estado{" "}
-                <span className="font-semibold text-ink">
-                  {orderStatusLabel(order.status, statuses)}
-                </span>{" "}
-                y solo admite consulta.
-              </p>
-            )}
+            {!isDraft &&
+              !canCancel &&
+              order.status !== "generate" &&
+              order.status !== "invoiced" &&
+              order.status !== "cancelled" && (
+                <p className="mt-4 rounded-2xl border border-line bg-background px-4 py-3 text-[13px] leading-6 text-muted">
+                  Este pedido está en estado{" "}
+                  <span className="font-semibold text-ink">
+                    {orderStatusLabel(order.status, statuses)}
+                  </span>{" "}
+                  y solo admite consulta.
+                </p>
+              )}
           </section>
         </aside>
       </div>

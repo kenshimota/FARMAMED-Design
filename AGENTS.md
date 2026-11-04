@@ -37,6 +37,10 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `components/erp/records/warehouse-inbox-actions.tsx`: acciones para iniciar la ubicación y abrir el diálogo de asignación.
 - `components/erp/records/warehouse-inbox-api.ts`: tipos y llamadas a `/warehouse-inbox`.
 - `components/erp/records/lot-location-dialog.tsx`: diálogo en cascada de bodega, estante y sección.
+- `components/erp/records/document-api.ts`: descarga autenticada de PDF de factura y cotización, catálogo de monedas y vista previa de equivalencia.
+- `components/erp/records/download-document-button.tsx`: botón de descarga con estado de carga, errores y anuncio accesible.
+- `components/erp/records/quotation-pdf-dialog.tsx`: diálogo de cotización con moneda, tasa, totales y avisos de documento no fiscal.
+- `components/erp/records/document-actions.tsx`: acciones de descarga de factura y generación de cotización en pedidos y facturas.
 - `components/erp/`: shell responsive, navegación, estados de sesión y placeholders del ERP.
 - `components/erp/store/`: catálogo, detalle y estados de la tienda del cliente.
 - `components/erp/store/use-store-resource.ts`: carga de recursos de la tienda con reintento y estados de error.

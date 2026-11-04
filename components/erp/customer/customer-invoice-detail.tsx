@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { Icon } from "@/components/icons";
 import { CustomerIncompleteContent } from "@/components/erp/customer-incomplete";
 import { useSession } from "@/components/erp/session-context";
+import { InvoicePdfAction } from "@/components/erp/records/document-actions";
 import { CurrencyChip } from "@/components/erp/ui/currency-select";
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -409,21 +410,27 @@ export function CustomerInvoiceDetail({ invoiceId }: { invoiceId: string }) {
     <div className="space-y-5">
       <RecordsPageHeader
         actions={
-          orderHref ? (
-            <Link
-              className="button-base button-secondary min-h-11 px-5 text-[13px]"
-              href={orderHref}
-            >
-              Volver al pedido
-            </Link>
-          ) : (
-            <Link
-              className="button-base button-secondary min-h-11 px-5 text-[13px]"
-              href="/app/mis-pedidos"
-            >
-              Volver a mis pedidos
-            </Link>
-          )
+          <>
+            {orderHref ? (
+              <Link
+                className="button-base button-secondary min-h-11 px-5 text-[13px]"
+                href={orderHref}
+              >
+                Volver al pedido
+              </Link>
+            ) : (
+              <Link
+                className="button-base button-secondary min-h-11 px-5 text-[13px]"
+                href="/app/mis-pedidos"
+              >
+                Volver a mis pedidos
+              </Link>
+            )}
+            <InvoicePdfAction
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.number}
+            />
+          </>
         }
         description="Consulta las líneas, los totales, el saldo pendiente y los pagos aplicados a tu factura."
         eyebrow="Factura"
