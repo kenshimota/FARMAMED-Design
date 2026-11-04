@@ -78,10 +78,8 @@ import {
   RecordsLoadError,
 } from "@/components/erp/records/record-states";
 import {
-  fetchProducts,
   isPositiveRecordId,
   toApiId,
-  type ProductRecord,
 } from "@/components/erp/records/records-api";
 import {
   fetchItemStates,
@@ -112,7 +110,6 @@ const EMPTY_VALUES: PurchaseFormValues = {
   notes: "",
 };
 
-const NO_PRODUCTS: ProductRecord[] = [];
 const NO_ITEM_STATES: ItemStateRecord[] = [];
 const DUPLICATE_NOTICE_KEY = "__duplicate__";
 
@@ -155,7 +152,6 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     [purchaseId],
   );
   const purchaseResource = useAsyncResource(purchaseLoader, { enabled: editing });
-  const productsResource = useAsyncResource(fetchProducts);
   const itemStatesResource = useAsyncResource(fetchItemStates);
 
   const [values, setValues] = useState<PurchaseFormValues>(EMPTY_VALUES);
@@ -221,7 +217,6 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
   }, [values.supplier_id]);
 
   const purchase = purchaseResource.data;
-  const products = productsResource.data ?? NO_PRODUCTS;
   const itemStates = itemStatesResource.data ?? NO_ITEM_STATES;
   const currencies = useMemo<PurchaseCurrency[]>(() => {
     return (currencyStatus?.currencies ?? [])
@@ -873,14 +868,16 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
         >
           <div className="grid gap-5 lg:grid-cols-2">
             <EntityAutocompleteField
-              emptyLabel="No hay proveedores que coincidan."
+              clearLabel="Limpiar proveedor"
+              emptyLabel="No hay proveedores que coincidan con la búsqueda."
               error={
                 errors.supplier_id ??
                 (supplierUnavailable
                   ? "La opción seleccionada ya no está disponible. Elige otra."
                   : undefined)
               }
-              help="Busca por nombre o identificación. La compra queda registrada a nombre de este proveedor."
+              errorLabel="No pudimos cargar los proveedores."
+              help="Obligatorio. La compra queda registrada a nombre de este proveedor."
               id={PURCHASE_HEADER_FIELD_IDS.supplier_id}
               initialLabel={resolvedSupplierForValue?.label}
               label={PURCHASE_HEADER_LABELS.supplier_id}
@@ -893,6 +890,7 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
                   description: supplier.identification,
                 }));
               }}
+              noRecordsLabel="No hay proveedores registrados."
               onChange={(value) => updateField("supplier_id", value)}
               placeholder="Busca por nombre o identificación"
               required
@@ -983,7 +981,6 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
                 onDelete={handleDeleteLine}
                 onRetryItemStates={itemStatesResource.reload}
                 onUpdate={handleUpdateLine}
-                products={products}
                 rowErrors={rowErrors}
                 rows={rows}
               />
