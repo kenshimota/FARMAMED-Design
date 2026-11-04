@@ -795,7 +795,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             </Link>
           ) : undefined
         }
-        description="Consulta los lotes de Farmamed con su vencimiento, cantidades, estado de ubicación y ubicación física. Solo los lotes ubicados y no vencidos cuentan para la venta."
+        description="Consulta los lotes de Farmamed con su vencimiento, cantidades, estado de ubicación y ubicación física. Solo los lotes ubicados, no vencidos y con estado de ítem vendible cuentan para la venta."
         eyebrow="Inventario"
         title="Lotes"
       />

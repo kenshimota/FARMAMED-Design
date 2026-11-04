@@ -230,6 +230,13 @@ export function LotExpiredReservationBadge() {
   );
 }
 
+function lotItemStateIsSellable(
+  lot: Pick<LotRecord, "item_state" | "item_state_id">,
+  itemStates: ItemStateRecord[] = [],
+) {
+  return resolveLotItemState(lot, itemStates)?.is_sellable !== false;
+}
+
 export function lotSellableAvailable(
   lot: Pick<
     LotRecord,
@@ -244,6 +251,7 @@ export function lotSellableAvailable(
 ) {
   if (getLotExpiryStatus(lot.expiration_date) === "vencido") return 0;
   if (lotItemStateIsExpired(lot, itemStates)) return 0;
+  if (!lotItemStateIsSellable(lot, itemStates)) return 0;
   return lotAvailable(lot);
 }
 
@@ -332,8 +340,8 @@ export function LotSyncNotice({
 }) {
   const description = withExpiryAutomation
     ? variant === "detail"
-      ? "Este lote solo actualiza sus existencias con el job diario de vencimiento, que corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y ajusta las existencias; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
-      : "Las existencias de los lotes solo se actualizan con el job diario de vencimiento, que corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y ajusta las existencias; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
+      ? "Puedes editar manualmente la existencia y la cantidad reservada de este lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y ajusta su existencia; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
+      : "Puedes editar manualmente la existencia y la cantidad reservada de cada lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y ajusta su existencia; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
     : variant === "detail"
       ? "Este lote no actualiza automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y ajusta las existencias."
       : "Los lotes no actualizan automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y ajusta las existencias.";

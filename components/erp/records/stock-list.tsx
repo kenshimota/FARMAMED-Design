@@ -417,7 +417,7 @@ function StockListContent({
             <Icon name="clipboard" size={16} />
           </Link>
         }
-        description="Consulta la existencia física agregada y la disponibilidad vendible real por producto y estado de ítem. Solo los lotes ubicados y no vencidos cuentan para la venta. Este módulo es de solo lectura."
+        description="Consulta la existencia física agregada y la disponibilidad vendible real por producto y estado de ítem. Solo los lotes ubicados, no vencidos y con estado de ítem vendible cuentan para la venta. Este módulo es de solo lectura."
         eyebrow="Inventario"
         title="Existencias"
       />
@@ -1040,7 +1040,7 @@ function AvailableStocksPanel({
                   </p>
                 </div>
                 <RecordsTable
-                  caption={`Disponibilidad vendible de ${productName} por estado de ítem: existencia física, disponible vendible, no vendible, costo y moneda. Solo los lotes ubicados y no vencidos cuentan para la venta.`}
+                  caption={`Disponibilidad vendible de ${productName} por estado de ítem: existencia física, disponible vendible, no vendible, costo y moneda. Solo los lotes ubicados, no vencidos y con estado de ítem vendible cuentan para la venta.`}
                   columns={columns}
                   getRowKey={(stock) =>
                     `${stock.product_id}-${stock.item_state_id}`
@@ -1060,8 +1060,9 @@ function AvailableStocksPanel({
                 ? "Parte de la existencia no está disponible para la venta. "
                 : ""}
               La existencia física incluye lotes pendientes, en ubicación o
-              vencidos. Solo los lotes ubicados y no vencidos cuentan para la
-              disponibilidad vendible. La cantidad reservada vive en los lotes.{" "}
+              vencidos. Solo los lotes ubicados, no vencidos y con estado de ítem
+              vendible cuentan para la disponibilidad vendible. La cantidad
+              reservada vive en los lotes.{" "}
               <Link
                 className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
                 href={`/app/lotes?product_id=${productId}`}

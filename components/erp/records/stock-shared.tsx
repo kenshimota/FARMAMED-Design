@@ -107,8 +107,8 @@ export function StockAvailabilityNotice({ action }: { action?: ReactNode }) {
   return (
     <NoticeBanner role="note" title="Disponibilidad vendible" action={action}>
       <p>
-        Solo los lotes ubicados y no vencidos cuentan para la venta. Un lote
-        pendiente de ubicación no es vendible.
+        Solo los lotes ubicados, no vencidos y con estado de ítem vendible
+        cuentan para la venta. Un lote pendiente de ubicación no es vendible.
       </p>
       <p className="mt-2">
         El job diario corre una vez al día y mueve los lotes vencidos sin

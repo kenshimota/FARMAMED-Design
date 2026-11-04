@@ -7,7 +7,7 @@ import {
 export const metadata: Metadata = {
   title: "Disponibilidad vendible",
   description:
-    "Consulta la existencia física y la disponibilidad vendible de un producto en Farmamed, con su costo vigente y moneda. Solo los lotes ubicados y no vencidos cuentan para la venta.",
+    "Consulta la existencia física y la disponibilidad vendible de un producto en Farmamed, con su costo vigente y moneda. Solo los lotes ubicados, no vencidos y con estado de ítem vendible cuentan para la venta.",
 };
 
 type AvailableStocksRouteProps = {

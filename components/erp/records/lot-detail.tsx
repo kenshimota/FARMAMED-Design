@@ -383,9 +383,9 @@ function LotDetailContent({ lotId }: { lotId: string }) {
 
         <p className="mt-4 text-[12px] leading-6 text-muted">
           El disponible vendible se calcula como existencia − reservado. En
-          lotes pendientes, en ubicación o vencidos es 0. Un lote vencido con
-          reservas no cuenta para la disponibilidad vendible hasta que la
-          reserva se libere.
+          lotes pendientes, en ubicación, vencidos o con estado de ítem no
+          vendible es 0. Un lote vencido con reservas no cuenta para la
+          disponibilidad vendible hasta que la reserva se libere.
           {canReadExistencias && (
             <>
               {" "}
