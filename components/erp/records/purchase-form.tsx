@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -69,10 +70,8 @@ import {
   type PurchaseDisplayCurrency,
 } from "@/components/erp/records/purchase-shared";
 import { normalizeDateInput } from "@/components/erp/records/lot-shared";
-import {
-  SelectField,
-  TextAreaField,
-} from "@/components/erp/records/form-controls";
+import { TextAreaField } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
   RecordsFormSkeleton,
@@ -89,8 +88,8 @@ import {
   type ItemStateRecord,
 } from "@/components/erp/records/item-states-api";
 import {
-  fetchSuppliers,
-  type SupplierRecord,
+  fetchSupplier,
+  searchSuppliers,
 } from "@/components/erp/records/suppliers-api";
 import { ApiError } from "@/lib/api";
 import {
@@ -113,7 +112,6 @@ const EMPTY_VALUES: PurchaseFormValues = {
   notes: "",
 };
 
-const NO_SUPPLIERS: SupplierRecord[] = [];
 const NO_PRODUCTS: ProductRecord[] = [];
 const NO_ITEM_STATES: ItemStateRecord[] = [];
 const DUPLICATE_NOTICE_KEY = "__duplicate__";
@@ -157,7 +155,6 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     [purchaseId],
   );
   const purchaseResource = useAsyncResource(purchaseLoader, { enabled: editing });
-  const suppliersResource = useAsyncResource(fetchSuppliers);
   const productsResource = useAsyncResource(fetchProducts);
   const itemStatesResource = useAsyncResource(fetchItemStates);
 
@@ -182,9 +179,48 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     getCurrencyNoticeSnapshot,
   );
   const shouldResetOnHideRef = useRef(false);
+  const [resolvedSupplier, setResolvedSupplier] = useState<{
+    id: string;
+    label: string;
+    missing: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const id = values.supplier_id;
+    if (!id) return;
+
+    let active = true;
+    fetchSupplier(id)
+      .then((supplier) => {
+        if (!active) return;
+        setResolvedSupplier({
+          id,
+          label: supplier.name,
+          missing: false,
+        });
+      })
+      .catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResolvedSupplier({
+            id,
+            label: `Proveedor #${id}`,
+            missing: true,
+          });
+          return;
+        }
+        setResolvedSupplier({
+          id,
+          label: `Proveedor #${id}`,
+          missing: false,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [values.supplier_id]);
 
   const purchase = purchaseResource.data;
-  const suppliers = suppliersResource.data ?? NO_SUPPLIERS;
   const products = productsResource.data ?? NO_PRODUCTS;
   const itemStates = itemStatesResource.data ?? NO_ITEM_STATES;
   const currencies = useMemo<PurchaseCurrency[]>(() => {
@@ -710,10 +746,11 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
     );
   }
 
-  const supplierOptions = suppliers.map((supplier) => ({
-    value: String(supplier.id),
-    label: supplier.name,
-  }));
+  const resolvedSupplierForValue =
+    resolvedSupplier?.id === values.supplier_id ? resolvedSupplier : null;
+  const supplierUnavailable = Boolean(
+    resolvedSupplierForValue?.missing && values.supplier_id,
+  );
 
   const currentCurrencyRecord = editing
     ? currencyOf(
@@ -835,24 +872,29 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
           onSubmit={handleSubmit}
         >
           <div className="grid gap-5 lg:grid-cols-2">
-            <SelectField
-              emptyLabel="No hay proveedores registrados."
-              error={errors.supplier_id}
-              help="Obligatorio. La compra queda registrada a nombre de este proveedor."
-              id={PURCHASE_HEADER_FIELD_IDS.supplier_id}
-              label={PURCHASE_HEADER_LABELS.supplier_id}
-              loading={suppliersResource.status === "loading"}
-              loadingLabel="Cargando proveedores…"
-              loadError={
-                suppliersResource.status === "error"
-                  ? suppliersResource.error?.message ??
-                    "No pudimos cargar los proveedores."
-                  : null
+            <EntityAutocompleteField
+              emptyLabel="No hay proveedores que coincidan."
+              error={
+                errors.supplier_id ??
+                (supplierUnavailable
+                  ? "La opción seleccionada ya no está disponible. Elige otra."
+                  : undefined)
               }
+              help="Busca por nombre o identificación. La compra queda registrada a nombre de este proveedor."
+              id={PURCHASE_HEADER_FIELD_IDS.supplier_id}
+              initialLabel={resolvedSupplierForValue?.label}
+              label={PURCHASE_HEADER_LABELS.supplier_id}
+              loadingLabel="Buscando proveedores…"
+              loadOptions={async (query) => {
+                const found = await searchSuppliers(query);
+                return found.map((supplier) => ({
+                  value: String(supplier.id),
+                  label: supplier.name,
+                  description: supplier.identification,
+                }));
+              }}
               onChange={(value) => updateField("supplier_id", value)}
-              onRetry={suppliersResource.reload}
-              options={supplierOptions}
-              placeholder="Selecciona un proveedor"
+              placeholder="Busca por nombre o identificación"
               required
               value={values.supplier_id}
             />
@@ -940,16 +982,8 @@ function PurchaseFormContent({ mode, purchaseId }: PurchaseFormPageProps) {
                 onAdd={handleAddLine}
                 onDelete={handleDeleteLine}
                 onRetryItemStates={itemStatesResource.reload}
-                onRetryProducts={productsResource.reload}
                 onUpdate={handleUpdateLine}
                 products={products}
-                productsError={
-                  productsResource.status === "error"
-                    ? productsResource.error?.message ??
-                      "No pudimos cargar los productos."
-                    : null
-                }
-                productsLoading={productsResource.status === "loading"}
                 rowErrors={rowErrors}
                 rows={rows}
               />

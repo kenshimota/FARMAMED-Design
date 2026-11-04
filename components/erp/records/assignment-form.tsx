@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -17,6 +23,7 @@ import {
 import { useToast } from "@/components/erp/ui/toast";
 import { useAsyncResource } from "@/components/erp/ui/use-async-resource";
 import { SelectField } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
   RecordsFormSkeleton,
@@ -27,7 +34,9 @@ import {
   toApiId,
 } from "@/components/erp/records/records-api";
 import {
+  fetchCustomer,
   fetchCustomers,
+  searchCustomers,
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
 import { fetchUsers, type UserRecord } from "@/components/erp/users-api";
@@ -52,7 +61,12 @@ const FIELD_IDS = {
 
 const NO_CUSTOMERS: CustomerRecord[] = [];
 const NO_USERS: UserRecord[] = [];
-const NO_ASSIGNMENTS: AssignmentRecord[] = [];
+
+function customerOptionLabel(customer: CustomerRecord) {
+  return customer.email
+    ? `${customer.fullName} · ${customer.email}`
+    : customer.fullName;
+}
 
 type AssignmentFormMode = "create" | "edit";
 
@@ -120,14 +134,15 @@ function AssignmentFormContent({
   const customersResource = useAsyncResource(fetchCustomers, {
     enabled: !editing,
   });
-  const assignmentsResource = useAsyncResource(fetchAssignments, {
-    enabled: !editing,
-  });
   const usersResource = useAsyncResource(fetchUsers, {
     enabled: isAdmin,
   });
 
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
+  const [resolvedCustomer, setResolvedCustomer] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [sellerId, setSellerId] = useState(isSeller ? fixedSellerId : "");
   const [initialSellerId, setInitialSellerId] = useState(
     isSeller ? fixedSellerId : "",
@@ -144,7 +159,6 @@ function AssignmentFormContent({
   const assignment = assignmentResource.data;
   const customers = customersResource.data ?? NO_CUSTOMERS;
   const users = usersResource.data ?? NO_USERS;
-  const existingAssignments = assignmentsResource.data ?? NO_ASSIGNMENTS;
 
   const activeSellers = useMemo(
     () => users.filter((entry) => entry.role === "seller" && !entry.isBlocked),
@@ -154,28 +168,39 @@ function AssignmentFormContent({
     () => new Set(activeSellers.map((entry) => String(entry.id))),
     [activeSellers],
   );
-  const assignedCustomerIds = useMemo(
-    () =>
-      new Set(
-        existingAssignments.map((entry) => String(entry.customer_id)),
-      ),
-    [existingAssignments],
-  );
-  const availableCustomers = useMemo(
-    () =>
-      customers.filter(
-        (customer) => !assignedCustomerIds.has(String(customer.id)),
-      ),
-    [assignedCustomerIds, customers],
-  );
 
-  const effectiveCustomerId =
-    customerId &&
-    availableCustomers.some(
-      (customer) => String(customer.id) === customerId,
-    )
-      ? customerId
-      : "";
+  const effectiveCustomerId = customerId;
+  const listedCustomer = customerId
+    ? (customers.find((customer) => String(customer.id) === customerId) ??
+      null)
+    : null;
+  const selectedCustomerLabel = customerId
+    ? listedCustomer
+      ? customerOptionLabel(listedCustomer)
+      : resolvedCustomer?.id === customerId
+        ? resolvedCustomer.label
+        : null
+    : null;
+
+  useEffect(() => {
+    if (editing || !customerId || listedCustomer) return;
+    if (resolvedCustomer?.id === customerId) return;
+
+    let active = true;
+    fetchCustomer(customerId)
+      .then((customer) => {
+        if (active) {
+          setResolvedCustomer({
+            id: customerId,
+            label: customerOptionLabel(customer),
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [customerId, editing, listedCustomer, resolvedCustomer]);
 
   if (editing && assignment) {
     const key = String(assignment.id);
@@ -186,13 +211,6 @@ function AssignmentFormContent({
       setInitializedFor(key);
     }
   }
-
-  const customerOptions = availableCustomers.map((customer) => ({
-    value: String(customer.id),
-    label: customer.email
-      ? `${customer.fullName} · ${customer.email}`
-      : customer.fullName,
-  }));
 
   const activeSellerOptions = activeSellers.map((seller) => ({
     value: String(seller.id),
@@ -223,33 +241,20 @@ function AssignmentFormContent({
     return options;
   }, [activeSellerOptions, assignment, currentSellerUnavailable]);
 
-  const customersLoading = customersResource.status === "loading";
-  const customerCatalogLoading =
-    !editing &&
-    (customersLoading || assignmentsResource.status === "loading");
   const customerLoadError =
     customersResource.status === "error"
       ? customersResource.error?.message ?? "No pudimos cargar los clientes."
       : null;
-  const assignmentsCheckError =
-    !editing && assignmentsResource.status === "error";
   const usersLoadError =
     isAdmin && usersResource.status === "error"
       ? usersResource.error?.message ?? "No pudimos cargar los vendedores."
       : null;
   const sellersLoading = isAdmin && usersResource.status === "loading";
 
-  const customerEmptyLabel =
-    customers.length === 0
-      ? "No hay clientes registrados."
-      : "No hay clientes sin vendedor.";
-
-  const customersReady =
-    customersResource.data !== null && customersResource.status !== "error";
   const sellersReady = isSeller
     ? Boolean(fixedSellerId)
     : usersResource.data !== null && usersResource.status !== "error";
-  const baseReady = editing ? Boolean(assignment) : customersReady;
+  const baseReady = editing ? Boolean(assignment) : true;
   const selectorsReady = baseReady && sellersReady;
   const dirty = editing
     ? Boolean(assignment) && sellerId !== initialSellerId
@@ -257,7 +262,6 @@ function AssignmentFormContent({
   const submitDisabled =
     submitting ||
     !selectorsReady ||
-    customerCatalogLoading ||
     (isAdmin && Boolean(usersLoadError)) ||
     (isAdmin && activeSellers.length === 0) ||
     (isSeller && !fixedSellerId) ||
@@ -278,8 +282,11 @@ function AssignmentFormContent({
     setConflict(null);
   }
 
-  function updateCustomer(value: string) {
+  function updateCustomer(value: string, option?: { label: string }) {
     setCustomerId(value);
+    setResolvedCustomer(
+      value && option ? { id: value, label: option.label } : null,
+    );
     resetFeedback();
     clearFieldError("customer");
   }
@@ -547,20 +554,25 @@ function AssignmentFormContent({
               </div>
             </div>
           ) : (
-            <SelectField
+            <EntityAutocompleteField
               disabled={submitting}
-              emptyLabel={customerEmptyLabel}
+              emptyLabel="No hay clientes que coincidan."
               error={errors.customer}
-              help="Un cliente solo puede tener un vendedor."
+              help="Busca por nombre o correo. Un cliente solo puede tener un vendedor."
               id={FIELD_IDS.customer}
+              initialLabel={selectedCustomerLabel ?? undefined}
               label="Cliente"
-              loadError={customerLoadError}
-              loading={customerCatalogLoading}
-              loadingLabel="Cargando clientes…"
+              loadingLabel="Buscando clientes…"
+              loadOptions={async (query) => {
+                const found = await searchCustomers(query);
+                return found.map((customer) => ({
+                  value: String(customer.id),
+                  label: customer.fullName,
+                  description: customer.email || customer.direction || undefined,
+                }));
+              }}
               onChange={updateCustomer}
-              onRetry={customersResource.reload}
-              options={customerOptions}
-              placeholder="Selecciona un cliente"
+              placeholder="Busca por nombre o correo"
               required
               value={effectiveCustomerId}
             />
@@ -663,12 +675,12 @@ function AssignmentFormContent({
               </NoticeBanner>
             )}
 
-          {assignmentsCheckError && (
+          {!editing && customerLoadError && (
             <NoticeBanner
               action={
                 <button
                   className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
-                  onClick={assignmentsResource.reload}
+                  onClick={customersResource.reload}
                   type="button"
                 >
                   Reintentar
@@ -676,8 +688,8 @@ function AssignmentFormContent({
               }
               tone="warning"
             >
-              No pudimos verificar qué clientes ya tienen vendedor. Si eliges uno
-              asignado, el sistema te avisará al guardar.
+              {customerLoadError} La búsqueda de clientes sigue disponible desde el
+              selector.
             </NoticeBanner>
           )}
 
@@ -698,18 +710,6 @@ function AssignmentFormContent({
               >
                 No hay clientes registrados. Registra uno antes de crear una
                 asignación.
-              </NoticeBanner>
-            )}
-
-          {!editing &&
-            !customerCatalogLoading &&
-            !customerLoadError &&
-            !assignmentsCheckError &&
-            customers.length > 0 &&
-            availableCustomers.length === 0 && (
-              <NoticeBanner tone="info">
-                Todos los clientes registrados ya tienen un vendedor. Puedes
-                reasignarlos desde la lista de asignaciones.
               </NoticeBanner>
             )}
 

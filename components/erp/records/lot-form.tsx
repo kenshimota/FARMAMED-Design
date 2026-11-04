@@ -27,6 +27,7 @@ import {
   SelectField,
   TextField,
 } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import {
   LOT_COPY,
   LOT_FIELD_IDS,
@@ -54,8 +55,9 @@ import {
   RecordsLoadError,
 } from "@/components/erp/records/record-states";
 import {
-  fetchProducts,
+  fetchProduct,
   isPositiveRecordId,
+  searchProducts,
   toApiId,
 } from "@/components/erp/records/records-api";
 import { fetchItemStates } from "@/components/erp/records/item-states-api";
@@ -134,7 +136,6 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
 
   const lotLoader = useCallback(() => fetchLot(lotId ?? ""), [lotId]);
   const lotResource = useAsyncResource(lotLoader, { enabled: editing });
-  const productsResource = useAsyncResource(fetchProducts);
   const itemStatesResource = useAsyncResource(fetchItemStates);
   const warehousesResource = useAsyncResource(fetchWarehouses);
 
@@ -146,9 +147,48 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
   const [showSummary, setShowSummary] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resolvedProduct, setResolvedProduct] = useState<{
+    id: string;
+    label: string;
+    missing: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const id = values.product_id;
+    if (!id) return;
+
+    let active = true;
+    fetchProduct(id)
+      .then((product) => {
+        if (!active) return;
+        setResolvedProduct({
+          id,
+          label: `${product.name} (${product.reference})`,
+          missing: false,
+        });
+      })
+      .catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResolvedProduct({
+            id,
+            label: `Producto #${id}`,
+            missing: true,
+          });
+          return;
+        }
+        setResolvedProduct({
+          id,
+          label: `Producto #${id}`,
+          missing: false,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [values.product_id]);
 
   const lot = lotResource.data;
-  const products = productsResource.data ?? [];
   const itemStates = itemStatesResource.data ?? [];
   const warehouses = warehousesResource.data ?? [];
   const canWriteBandeja = canWriteModule(user.role, "bandeja_almacen");
@@ -490,10 +530,12 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
     );
   }
 
-  const productOptions = products.map((product) => ({
-    value: String(product.id),
-    label: `${product.name} (${product.reference})`,
-  }));
+  const resolvedProductForValue =
+    resolvedProduct?.id === values.product_id ? resolvedProduct : null;
+  const selectedProductLabel = resolvedProductForValue?.label || undefined;
+  const productUnavailable = Boolean(
+    resolvedProductForValue?.missing && values.product_id,
+  );
   const itemStateOptions = itemStates.map((itemState) => ({
     value: String(itemState.id),
     label: itemState.label,
@@ -604,24 +646,29 @@ function LotFormContent({ mode, lotId }: LotFormPageProps) {
               required
               value={values.number}
             />
-            <SelectField
-              emptyLabel="No hay productos registrados."
-              error={errors.product_id}
-              help="Obligatorio. El número de lote se valida contra este producto."
-              id={LOT_FIELD_IDS.product_id}
-              label="Producto"
-              loading={productsResource.status === "loading"}
-              loadingLabel="Cargando productos…"
-              loadError={
-                productsResource.status === "error"
-                  ? productsResource.error?.message ??
-                    "No pudimos cargar los productos."
-                  : null
+            <EntityAutocompleteField
+              emptyLabel="No hay productos que coincidan."
+              error={
+                errors.product_id ??
+                (productUnavailable
+                  ? "La opción seleccionada ya no está disponible. Elige otra."
+                  : undefined)
               }
+              help="Busca por nombre o referencia. El número de lote se valida contra este producto."
+              id={LOT_FIELD_IDS.product_id}
+              initialLabel={selectedProductLabel}
+              label="Producto"
+              loadingLabel="Buscando productos…"
+              loadOptions={async (query) => {
+                const found = await searchProducts(query);
+                return found.map((product) => ({
+                  value: String(product.id),
+                  label: `${product.name} (${product.reference})`,
+                  description: product.description || undefined,
+                }));
+              }}
               onChange={(value) => updateField("product_id", value)}
-              onRetry={productsResource.reload}
-              options={productOptions}
-              placeholder="Selecciona un producto"
+              placeholder="Busca por nombre o referencia"
               required
               value={values.product_id}
             />

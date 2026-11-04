@@ -92,7 +92,7 @@ export const MODULE_PERMISSIONS: Record<ModuleKey, ModulePermission> = {
   },
   pedidos_estados: {
     read: ["admin"],
-    write: ["admin"],
+    write: [],
   },
   alistamiento: {
     read: ["admin", "seller", "manager_warehouse", "dispatcher"],

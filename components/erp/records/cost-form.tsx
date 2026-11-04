@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -40,14 +41,16 @@ import {
   type CostRecord,
 } from "@/components/erp/records/costs-api";
 import { SelectField, TextField } from "@/components/erp/records/form-controls";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import {
   RecordsFormSkeleton,
   RecordsLoadError,
 } from "@/components/erp/records/record-states";
 import {
-  fetchProducts,
+  fetchProduct,
   isPositiveRecordId,
+  searchProducts,
   toApiId,
 } from "@/components/erp/records/records-api";
 import { fetchItemStates } from "@/components/erp/records/item-states-api";
@@ -102,7 +105,6 @@ const COPY = {
   validation: "Revisa los datos del formulario.",
   generic:
     "No pudimos guardar el costo. Revisa tu conexión e intenta de nuevo.",
-  productsError: "No pudimos cargar los productos.",
   statesError: "No pudimos cargar los estados de ítem.",
   currenciesError: "No pudimos cargar las monedas.",
 } as const;
@@ -187,7 +189,6 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
 
   const costLoader = useCallback(() => fetchCost(costId ?? ""), [costId]);
   const costResource = useAsyncResource(costLoader, { enabled: editing });
-  const productsResource = useAsyncResource(fetchProducts);
   const itemStatesResource = useAsyncResource(fetchItemStates);
 
   const [values, setValues] = useState<CostFormValues>(EMPTY_VALUES);
@@ -213,9 +214,48 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     getCurrencyNoticeSnapshot,
     getCurrencyNoticeSnapshot,
   );
+  const [resolvedProduct, setResolvedProduct] = useState<{
+    id: string;
+    label: string;
+    missing: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const id = values.product_id;
+    if (!id) return;
+
+    let active = true;
+    fetchProduct(id)
+      .then((product) => {
+        if (!active) return;
+        setResolvedProduct({
+          id,
+          label: `${product.name} (${product.reference})`,
+          missing: false,
+        });
+      })
+      .catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResolvedProduct({
+            id,
+            label: `Producto #${id}`,
+            missing: true,
+          });
+          return;
+        }
+        setResolvedProduct({
+          id,
+          label: `Producto #${id}`,
+          missing: false,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [values.product_id]);
 
   const cost = costResource.data;
-  const products = productsResource.data ?? [];
   const itemStates = itemStatesResource.data ?? [];
   const currencies = currencyStatus?.currencies ?? [];
   const defaultCurrency = currencyStatus?.defaultCurrency ?? null;
@@ -257,16 +297,9 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     }
   }
 
-  if (
-    !editing &&
-    !initialProductApplied &&
-    productsResource.data !== null
-  ) {
+  if (!editing && !initialProductApplied) {
     setInitialProductApplied(true);
-    const exists = products.some(
-      (product) => String(product.id) === initialProductId,
-    );
-    if (initialProductId && exists) {
+    if (initialProductId) {
       setValues((current) =>
         current.product_id
           ? current
@@ -568,10 +601,12 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
     );
   }
 
-  const productOptions = products.map((product) => ({
-    value: String(product.id),
-    label: `${product.name} (${product.reference})`,
-  }));
+  const resolvedProductForValue =
+    resolvedProduct?.id === values.product_id ? resolvedProduct : null;
+  const selectedProductLabel = resolvedProductForValue?.label || undefined;
+  const productUnavailable = Boolean(
+    resolvedProductForValue?.missing && values.product_id,
+  );
   const itemStateOptions = itemStates.map((itemState) => ({
     value: String(itemState.id),
     label: itemState.label,
@@ -675,23 +710,29 @@ function CostFormContent({ mode, costId, initialProductId }: CostFormPageProps) 
           onSubmit={handleSubmit}
         >
           <div className="grid gap-5 lg:grid-cols-2">
-            <SelectField
-              emptyLabel="No hay productos registrados."
-              error={errors.product_id}
-              help="Obligatorio. La combinación de producto y estado debe ser única."
-              id={COST_FIELD_IDS.product_id}
-              label="Producto"
-              loading={productsResource.status === "loading"}
-              loadingLabel="Cargando productos…"
-              loadError={
-                productsResource.status === "error"
-                  ? productsResource.error?.message ?? COPY.productsError
-                  : null
+            <EntityAutocompleteField
+              emptyLabel="No hay productos que coincidan."
+              error={
+                errors.product_id ??
+                (productUnavailable
+                  ? "La opción seleccionada ya no está disponible. Elige otra."
+                  : undefined)
               }
+              help="Busca por nombre o referencia. La combinación de producto y estado debe ser única."
+              id={COST_FIELD_IDS.product_id}
+              initialLabel={selectedProductLabel}
+              label="Producto"
+              loadingLabel="Buscando productos…"
+              loadOptions={async (query) => {
+                const found = await searchProducts(query);
+                return found.map((product) => ({
+                  value: String(product.id),
+                  label: `${product.name} (${product.reference})`,
+                  description: product.description || undefined,
+                }));
+              }}
               onChange={(value) => updateField("product_id", value)}
-              onRetry={productsResource.reload}
-              options={productOptions}
-              placeholder="Selecciona un producto"
+              placeholder="Busca por nombre o referencia"
               required
               value={values.product_id}
             />
