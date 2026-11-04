@@ -491,7 +491,8 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
             <p className="mt-5 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
               Este detalle no expone lotes, reservas, costos, bodegas ni notas
               internas. La reserva de existencia se gestiona al generar el
-              pedido y el stock se descuenta al facturar.
+              pedido y el stock se descuenta al facturar. Los lotes y las
+              ubicaciones se consultan en “Alistamiento”.
             </p>
           </section>
 
