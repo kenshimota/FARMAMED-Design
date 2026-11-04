@@ -16,6 +16,7 @@ import {
   InvoicePaymentDialog,
 } from "@/components/erp/records/invoice-payment-dialog";
 import { InvoiceLinesSection } from "@/components/erp/records/invoice-lines";
+import { RecordEquivalencePanel } from "@/components/erp/records/equivalence/equivalence-panel";
 import {
   INVOICE_COPY,
   invoiceLoadErrorMessage,
@@ -407,6 +408,17 @@ function InvoiceDetailContent({ invoiceId }: { invoiceId: string }) {
       {invoiceResource.status === "refreshing" && (
         <div aria-hidden="true" className="reload-bar" />
       )}
+
+      <RecordEquivalencePanel
+        documentCash={
+          invoice.paymentTerm?.days === 0
+            ? { isCash: true, amount: invoice.balanceDue }
+            : null
+        }
+        documentCurrency={invoice.currency}
+        recordId={String(invoice.id)}
+        scope="invoice"
+      />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">
