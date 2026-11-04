@@ -82,6 +82,7 @@ type DateFieldProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onFocus?: () => void;
   error?: string;
   help?: ReactNode;
   required?: boolean;
@@ -95,6 +96,7 @@ export function DateField({
   label,
   value,
   onChange,
+  onFocus,
   error,
   help,
   required = false,
@@ -124,6 +126,7 @@ export function DateField({
             min={min}
             name={id}
             onChange={(event) => onChange(event.target.value)}
+            onFocus={onFocus}
             type="date"
             value={value}
           />
