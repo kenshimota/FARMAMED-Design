@@ -1,5 +1,9 @@
-import { API_BASE_URL, ApiError, apiFetch } from "@/lib/api";
+import { API_BASE_URL, ApiError } from "@/lib/api";
 import { fetchCurrencies } from "@/lib/finance/currencies-api";
+import {
+  fetchOrderEquivalence,
+  type OrderEquivalence,
+} from "@/lib/finance/equivalence-api";
 import { getStoredToken } from "@/lib/session-store";
 import type {
   OrderCurrency,
@@ -16,21 +20,14 @@ export type DocumentCurrency = {
   isOrderCurrency: boolean;
 };
 
-export type DocumentCurrencyCatalog = {
-  options: DocumentCurrency[];
-  warning: string | null;
+export type DocumentCatalogNotice = {
+  message: string;
+  tone: "info" | "warning";
 };
 
-export type QuotationPreview = {
-  sourceCurrency: DocumentCurrency;
-  targetCurrency: DocumentCurrency;
-  sourceTotal: number;
-  targetTotal: number;
-  exchangeRate: number;
-  roundingAdjustment: number;
-  sourceRateUpdatedAt: string | null;
-  targetRateUpdatedAt: string | null;
-  calculatedAt: string | null;
+export type DocumentCurrencyCatalog = {
+  options: DocumentCurrency[];
+  notice: DocumentCatalogNotice | null;
 };
 
 export type DocumentErrorInfo = {
@@ -43,60 +40,6 @@ export type DocumentFile = {
   blob: Blob;
   filename: string;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function readId(value: unknown): RecordId | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : value.trim();
-  }
-  return null;
-}
-
-function readNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function readTimestamp(value: unknown) {
-  const text = readText(value);
-  return text || null;
-}
-
-function unwrapRecord(payload: unknown) {
-  if (isRecord(payload) && isRecord(payload.data)) return payload.data;
-  return payload;
-}
-
-function toDocumentCurrency(
-  source: unknown,
-  isOrderCurrency: boolean,
-): DocumentCurrency | null {
-  if (!isRecord(source)) return null;
-  const id = readId(source.id);
-  const code = readText(source.code);
-  if (id === null || !code) return null;
-  return {
-    id,
-    code,
-    name: readText(source.name) || code,
-    symbol: readText(source.symbol) || code,
-    isBase: source.is_base === true,
-    isOrderCurrency,
-  };
-}
 
 function toOrderCurrency(currency: OrderCurrency | null): DocumentCurrency | null {
   if (!currency) return null;
@@ -138,78 +81,77 @@ function sortCurrencyOptions(options: DocumentCurrency[]) {
   });
 }
 
-export function parseQuotationPreview(payload: unknown): QuotationPreview {
-  const record = unwrapRecord(payload);
-  if (!isRecord(record)) throw new ApiError(500, null);
-
-  const source = isRecord(record.source) ? record.source : null;
-  const target = isRecord(record.target) ? record.target : null;
-  const sourceCurrency = toDocumentCurrency(source?.currency, false);
-  const targetCurrency = toDocumentCurrency(target?.currency, false);
-  const sourceTotal = readNumber(source?.total);
-  const targetTotal = readNumber(target?.total);
-  const exchangeRate = readNumber(record.exchange_rate);
-
-  if (
-    !sourceCurrency ||
-    !targetCurrency ||
-    sourceTotal === null ||
-    targetTotal === null ||
-    exchangeRate === null
-  ) {
-    throw new ApiError(500, null);
+async function fetchBaseCurrencyOption(
+  order: OrderRecord,
+  orderOption: DocumentCurrency | null,
+): Promise<DocumentCurrency | null> {
+  if (orderOption && orderOption.code.toUpperCase() === "VES") {
+    return { ...orderOption, isBase: true, isOrderCurrency: true };
   }
 
-  const ratesUpdatedAt = isRecord(record.rates_updated_at)
-    ? record.rates_updated_at
-    : null;
-
-  return {
-    sourceCurrency,
-    targetCurrency,
-    sourceTotal,
-    targetTotal,
-    exchangeRate,
-    roundingAdjustment: readNumber(record.rounding_adjustment) ?? 0,
-    sourceRateUpdatedAt: readTimestamp(ratesUpdatedAt?.source),
-    targetRateUpdatedAt: readTimestamp(ratesUpdatedAt?.target),
-    calculatedAt: readTimestamp(record.calculated_at),
-  };
-}
-
-export async function fetchQuotationPreview(
-  orderId: RecordId,
-  currencyId: RecordId | null,
-) {
-  const query =
-    currencyId === null
-      ? ""
-      : `?currency_id=${encodeURIComponent(String(currencyId))}`;
-  const payload = await apiFetch<unknown>(
-    `/orders/${encodeURIComponent(String(orderId))}/equivalence${query}`,
-    { token: getStoredToken() ?? undefined },
-  );
-  return parseQuotationPreview(payload);
-}
-
-export async function fetchQuotationBaseCurrency(orderId: RecordId) {
-  const preview = await fetchQuotationPreview(orderId, null);
-  return preview.targetCurrency;
+  try {
+    const equivalence = await fetchOrderEquivalence(String(order.id), null);
+    const target = equivalence.target.currency;
+    if (!target || target.id === null || target.code.toUpperCase() !== "VES") {
+      return null;
+    }
+    return {
+      id: target.id,
+      code: target.code,
+      name: target.name,
+      symbol: target.symbol,
+      isBase: true,
+      isOrderCurrency:
+        orderOption !== null &&
+        orderOption.code.toLowerCase() === target.code.toLowerCase(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchQuotationCurrencyCatalog(
   order: OrderRecord,
+  options: { includeActiveCurrencies?: boolean } = {},
 ): Promise<DocumentCurrencyCatalog> {
   const orderOption = toOrderCurrency(order.currency);
+
+  async function fallback(
+    notice: DocumentCatalogNotice | null,
+  ): Promise<DocumentCurrencyCatalog> {
+    const base = await fetchBaseCurrencyOption(order, orderOption);
+    const list: DocumentCurrency[] = [];
+    if (base) addCurrencyOption(list, base);
+    if (orderOption) addCurrencyOption(list, orderOption);
+
+    const resolvedNotice =
+      base === null
+        ? {
+            tone: "info" as const,
+            message: orderOption
+              ? "No pudimos consultar la tasa del bolívar. Puedes cotizar en la moneda del pedido."
+              : "No pudimos consultar las monedas disponibles para cotizar.",
+          }
+        : notice;
+
+    return {
+      options: sortCurrencyOptions(list),
+      notice: resolvedNotice,
+    };
+  }
+
+  if (options.includeActiveCurrencies === false) {
+    return fallback(null);
+  }
 
   try {
     const currencies = await fetchCurrencies();
     const active = currencies.filter((currency) => currency.is_active);
     const source = active.length > 0 ? active : currencies;
-    const options: DocumentCurrency[] = [];
+    const list: DocumentCurrency[] = [];
 
     for (const currency of source) {
-      addCurrencyOption(options, {
+      addCurrencyOption(list, {
         id: currency.id,
         code: currency.code,
         name: currency.name,
@@ -221,36 +163,52 @@ export async function fetchQuotationCurrencyCatalog(
       });
     }
 
-    if (orderOption) addCurrencyOption(options, orderOption);
+    if (orderOption) addCurrencyOption(list, orderOption);
 
     return {
-      options: sortCurrencyOptions(options),
-      warning: null,
+      options: sortCurrencyOptions(list),
+      notice: null,
     };
-  } catch {
-    let base: DocumentCurrency | null = null;
-    try {
-      base = await fetchQuotationBaseCurrency(order.id);
-    } catch {
-      base = null;
-    }
-
-    const options: DocumentCurrency[] = [];
-    if (base) addCurrencyOption(options, base);
-    if (orderOption) addCurrencyOption(options, orderOption);
-
-    return {
-      options: sortCurrencyOptions(options),
-      warning: base
-        ? "No pudimos cargar el catálogo de monedas. Puedes cotizar en bolívares o en la moneda del pedido."
-        : "No pudimos cargar el catálogo de monedas. Puedes cotizar en la moneda del pedido.",
-    };
+  } catch (caught) {
+    const forbidden = caught instanceof ApiError && caught.status === 403;
+    return fallback(
+      forbidden
+        ? null
+        : {
+            tone: "warning",
+            message:
+              "No pudimos cargar el catálogo completo de monedas. Puedes cotizar en bolívar o en la moneda del pedido.",
+          },
+    );
   }
 }
 
-function sanitizeFilename(value: string) {
-  const clean = value.replace(/[\\/:*?"<>|]/g, "_").trim();
-  return clean || "documento.pdf";
+export async function fetchQuotationPreview(
+  orderId: RecordId,
+  currencyId: RecordId | null,
+): Promise<OrderEquivalence> {
+  return fetchOrderEquivalence(String(orderId), currencyId);
+}
+
+function sanitizeFilenamePart(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, "_").trim();
+}
+
+function stripPdfExtension(value: string) {
+  return value.replace(/(?:\.pdf)+$/i, "").trim();
+}
+
+function ensurePdfFilename(value: string) {
+  const stem = stripPdfExtension(sanitizeFilenamePart(value));
+  return `${stem || "documento"}.pdf`;
+}
+
+function pdfFilename(prefix: string, ...parts: string[]) {
+  const suffix = parts
+    .map((part) => stripPdfExtension(sanitizeFilenamePart(part)))
+    .filter(Boolean)
+    .join("-");
+  return suffix ? `${prefix}-${suffix}.pdf` : `${prefix}.pdf`;
 }
 
 function filenameFromDisposition(header: string | null) {
@@ -259,16 +217,16 @@ function filenameFromDisposition(header: string | null) {
   const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
   if (utf8?.[1]) {
     try {
-      return sanitizeFilename(
+      return ensurePdfFilename(
         decodeURIComponent(utf8[1].replace(/^"|"$/g, "").trim()),
       );
     } catch {
-      return sanitizeFilename(utf8[1].replace(/^"|"$/g, "").trim());
+      return ensurePdfFilename(utf8[1].replace(/^"|"$/g, "").trim());
     }
   }
 
   const ascii = /filename="?([^";]+)"?/i.exec(header);
-  if (ascii?.[1]) return sanitizeFilename(ascii[1].trim());
+  if (ascii?.[1]) return ensurePdfFilename(ascii[1].trim());
   return null;
 }
 
@@ -312,7 +270,7 @@ async function requestPdf(path: string, fallbackFilename: string) {
     blob,
     filename:
       filenameFromDisposition(response.headers.get("Content-Disposition")) ??
-      sanitizeFilename(fallbackFilename),
+      ensurePdfFilename(fallbackFilename),
   } satisfies DocumentFile;
 }
 
@@ -334,7 +292,7 @@ export async function downloadInvoicePdf(
 ) {
   const file = await requestPdf(
     `/invoices/${encodeURIComponent(String(invoiceId))}/pdf?download=true`,
-    `factura-${sanitizeFilename(String(invoiceNumber))}.pdf`,
+    pdfFilename("factura", String(invoiceNumber)),
   );
   triggerDownload(file);
   return file;
@@ -351,9 +309,7 @@ export async function downloadQuotationPdf(
 
   const file = await requestPdf(
     `/orders/${encodeURIComponent(String(orderId))}/quotation?${query.toString()}`,
-    `cotizacion-pedido-${sanitizeFilename(String(orderNumber))}-${sanitizeFilename(
-      currencyCode,
-    )}.pdf`,
+    pdfFilename("cotizacion-pedido", String(orderNumber), currencyCode),
   );
   triggerDownload(file);
   return file;

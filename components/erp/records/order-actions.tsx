@@ -132,7 +132,12 @@ export function OrderActionsSection({
   function handleQuotationConflict(caught: unknown) {
     setDocumentNotice(documentErrorCopy(caught).message);
     setQuotationOpen(false);
-    focusMobileActions();
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      setMobileActionsOpen(true);
+    }
     onReload();
   }
 
@@ -232,6 +237,12 @@ export function OrderActionsSection({
 
   const actionsContent = (
     <>
+      {documentNotice && (
+        <NoticeBanner className="mb-4" role="alert" tone="warning">
+          {documentNotice}
+        </NoticeBanner>
+      )}
+
       <div className="rounded-2xl border border-line bg-background px-4 py-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
           Término de pago
@@ -592,10 +603,6 @@ export function OrderActionsSection({
           </div>
         </form>
       </FormDialog>
-
-      <p aria-live="assertive" className="sr-only" role="alert">
-        {documentNotice}
-      </p>
 
       {quotationOpen && (
         <QuotationPdfDialog

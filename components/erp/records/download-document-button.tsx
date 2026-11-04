@@ -17,6 +17,7 @@ type DownloadDocumentButtonProps = {
   className?: string;
   supportingText?: ReactNode;
   disabled?: boolean;
+  fullWidth?: boolean;
 };
 
 export function DownloadDocumentButton({
@@ -30,6 +31,7 @@ export function DownloadDocumentButton({
   className = "",
   supportingText,
   disabled = false,
+  fullWidth = false,
 }: DownloadDocumentButtonProps) {
   const messageId = useId();
   const [busy, setBusy] = useState(false);
@@ -67,7 +69,7 @@ export function DownloadDocumentButton({
         aria-label={busy ? busyLabel : (accessibleLabel ?? label)}
         className={`button-base min-h-11 px-5 text-[13px] ${
           variant === "primary" ? "button-primary" : "button-secondary"
-        }`}
+        } ${fullWidth ? "w-full" : ""}`}
         disabled={disabled || busy}
         onClick={() => void handleClick()}
         type="button"
@@ -80,10 +82,13 @@ export function DownloadDocumentButton({
         <p className="mt-2 text-[12px] leading-5 text-muted">{supportingText}</p>
       )}
 
+      <p aria-live="polite" className="sr-only">
+        {busy ? busyLabel : announcement}
+      </p>
+
       {error ? (
         <div id={messageId}>
           <p
-            aria-live="polite"
             className="mt-2 text-[12px] font-semibold leading-5 text-alert-ink"
             role="alert"
           >
@@ -107,11 +112,7 @@ export function DownloadDocumentButton({
             </Link>
           )}
         </div>
-      ) : (
-        <p aria-live="polite" className="sr-only">
-          {busy ? busyLabel : announcement}
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }

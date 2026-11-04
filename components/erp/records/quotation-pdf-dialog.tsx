@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { ApiError } from "@/lib/api";
+import { translateApiError } from "@/lib/api-errors";
 import { formatDateTime, formatMoney, formatRate } from "@/lib/format";
 import { buildLoginUrl, getCurrentReturnPath } from "@/lib/session-store";
+import { canReadModule } from "@/lib/permissions";
+import { useSession } from "@/components/erp/session-context";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { FormDialog } from "@/components/erp/ui/form-dialog";
@@ -13,13 +16,19 @@ import {
   downloadQuotationPdf,
   fetchQuotationCurrencyCatalog,
   fetchQuotationPreview,
+  type DocumentCatalogNotice,
   type DocumentCurrency,
-  type QuotationPreview,
 } from "@/components/erp/records/document-api";
+import {
+  EQUIVALENCE_COPY,
+  equivalenceErrorCopy,
+  type EquivalenceErrorCopy,
+} from "@/components/erp/records/equivalence/equivalence-copy";
 import { orderMoney } from "@/components/erp/records/orders-shared";
 import type { OrderRecord } from "@/components/erp/records/orders-api";
+import type { OrderEquivalence } from "@/lib/finance/equivalence-api";
 
-type CatalogStatus = "loading" | "ready" | "error";
+type CatalogStatus = "loading" | "ready";
 type PreviewStatus = "idle" | "loading" | "ready" | "error";
 
 function currencyOptionLabel(currency: DocumentCurrency) {
@@ -28,8 +37,8 @@ function currencyOptionLabel(currency: DocumentCurrency) {
   return currency.isOrderCurrency ? `${base} · Moneda del pedido` : base;
 }
 
-function rateUpdatedAt(preview: QuotationPreview) {
-  return preview.targetRateUpdatedAt ?? preview.sourceRateUpdatedAt;
+function rateUpdatedAt(preview: OrderEquivalence | null) {
+  return preview?.ratesUpdatedAt?.target ?? preview?.ratesUpdatedAt?.source ?? null;
 }
 
 export function QuotationPdfDialog({
@@ -43,24 +52,35 @@ export function QuotationPdfDialog({
   onClose: () => void;
   onConflict: (caught: unknown) => void;
 }) {
+  const { user } = useSession();
+  const canReadCurrencies = canReadModule(user.role, "monedas");
   const selectId = useId();
   const helpId = useId();
   const [catalogStatus, setCatalogStatus] = useState<CatalogStatus>("loading");
   const [options, setOptions] = useState<DocumentCurrency[]>([]);
-  const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
+  const [catalogNotice, setCatalogNotice] =
+    useState<DocumentCatalogNotice | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [previewStatus, setPreviewStatus] = useState<PreviewStatus>("idle");
-  const [preview, setPreview] = useState<QuotationPreview | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<OrderEquivalence | null>(null);
+  const [previewError, setPreviewError] = useState<EquivalenceErrorCopy | null>(
+    null,
+  );
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const [errorCanRetry, setErrorCanRetry] = useState(false);
   const [announcement, setAnnouncement] = useState("");
 
   const selectedOption =
     options.find((option) => String(option.id) === selectedId) ?? null;
   const selectedIsOrderCurrency = selectedOption?.isOrderCurrency === true;
   const selectedCurrencyId = selectedOption?.id ?? null;
+  const previewCurrency = preview?.target.currency ?? null;
+  const previewTotal =
+    typeof preview?.target.total === "number" ? preview.target.total : null;
+  const rateUpdate = rateUpdatedAt(preview);
 
   useEffect(() => {
     if (!open) return;
@@ -68,20 +88,26 @@ export function QuotationPdfDialog({
 
     async function loadCatalog() {
       try {
-        const catalog = await fetchQuotationCurrencyCatalog(order);
+        const catalog = await fetchQuotationCurrencyCatalog(order, {
+          includeActiveCurrencies: canReadCurrencies,
+        });
         if (!active) return;
         setOptions(catalog.options);
-        setCatalogWarning(catalog.warning);
+        setCatalogNotice(catalog.notice);
         setSelectedId(
           catalog.options[0] ? String(catalog.options[0].id) : "",
         );
         setCatalogStatus("ready");
       } catch {
         if (!active) return;
-        setCatalogStatus("error");
-        setCatalogWarning(
-          "No pudimos cargar las monedas. Intenta de nuevo en unos momentos.",
-        );
+        setOptions([]);
+        setSelectedId("");
+        setCatalogStatus("ready");
+        setCatalogNotice({
+          tone: "warning",
+          message:
+            "No pudimos cargar las monedas. Intenta de nuevo en unos momentos.",
+        });
       }
     }
 
@@ -89,7 +115,7 @@ export function QuotationPdfDialog({
     return () => {
       active = false;
     };
-  }, [open, order]);
+  }, [canReadCurrencies, open, order]);
 
   useEffect(() => {
     if (!open) return;
@@ -109,12 +135,23 @@ export function QuotationPdfDialog({
         if (!active) return;
         setPreview(result);
         setPreviewStatus("ready");
-      } catch {
+      } catch (caught) {
         if (!active) return;
         setPreview(null);
         setPreviewStatus("error");
+        const translated = translateApiError(caught);
+        const info = equivalenceErrorCopy(translated);
         setPreviewError(
-          "No pudimos consultar la tasa vigente. La cotización se calculará al generar el documento.",
+          translated.status === 404 || translated.status === 422
+            ? {
+                ...info,
+                canRetry: false,
+                description:
+                  translated.status === 404
+                    ? "No encontramos el pedido ni la moneda seleccionada. Cambia de moneda para continuar."
+                    : "La moneda seleccionada no está disponible. Corrige la selección o cambia de moneda.",
+              }
+            : info,
         );
       }
     }
@@ -123,13 +160,20 @@ export function QuotationPdfDialog({
     return () => {
       active = false;
     };
-  }, [open, order.id, selectedCurrencyId, selectedIsOrderCurrency]);
+  }, [
+    open,
+    order.id,
+    previewAttempt,
+    selectedCurrencyId,
+    selectedIsOrderCurrency,
+  ]);
 
   async function handleDownload() {
     if (!selectedOption || busy) return;
     setBusy(true);
     setError(null);
     setErrorStatus(null);
+    setErrorCanRetry(false);
     setAnnouncement("");
     try {
       await downloadQuotationPdf(
@@ -142,12 +186,12 @@ export function QuotationPdfDialog({
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 409) {
         onConflict(caught);
-        onClose();
         return;
       }
       const info = documentErrorCopy(caught);
       setError(info.message);
       setErrorStatus(info.status);
+      setErrorCanRetry(info.canRetry);
     } finally {
       setBusy(false);
     }
@@ -157,12 +201,48 @@ export function QuotationPdfDialog({
     ? orderMoney(order.total, order.currency)
     : selectedCurrencyId === null
       ? "Selecciona una moneda."
-      : previewStatus === "ready" && preview
-        ? formatMoney(preview.targetTotal, preview.targetCurrency)
+      : previewStatus === "ready" &&
+          previewTotal !== null &&
+          previewCurrency !== null
+        ? formatMoney(previewTotal, previewCurrency)
         : previewStatus === "loading"
           ? "Calculando…"
           : "Se calcula al generar el documento.";
-  const rateUpdate = preview ? rateUpdatedAt(preview) : null;
+  const liveMessage = selectedIsOrderCurrency
+    ? `Moneda del pedido. Total ${orderMoney(order.total, order.currency)}.`
+    : previewStatus === "loading"
+      ? "Calculando la conversión."
+      : previewStatus === "ready" &&
+          previewTotal !== null &&
+          previewCurrency !== null &&
+          preview !== null
+        ? `Total en ${previewCurrency.name} (${previewCurrency.code}): ${formatMoney(
+            previewTotal,
+            previewCurrency,
+          )}. Tasa ${formatRate(preview.exchangeRate)}.`
+        : "";
+  const errorAction =
+    errorCanRetry || errorStatus === 401 ? (
+      <div className="flex flex-wrap gap-2">
+        {errorCanRetry && (
+          <button
+            className="min-h-11 rounded-full border border-alert/30 px-3 text-[12px] font-semibold text-alert-ink transition-colors hover:bg-surface"
+            onClick={() => void handleDownload()}
+            type="button"
+          >
+            Reintentar
+          </button>
+        )}
+        {errorStatus === 401 && (
+          <Link
+            className="inline-flex min-h-11 items-center text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+            href={buildLoginUrl(getCurrentReturnPath(), "expirada")}
+          >
+            Iniciar sesión
+          </Link>
+        )}
+      </div>
+    ) : undefined;
 
   return (
     <FormDialog
@@ -173,23 +253,18 @@ export function QuotationPdfDialog({
       title={`Cotización del pedido #${order.number}`}
     >
       <div className="mt-6 space-y-5">
-        {catalogWarning && <NoticeBanner tone="warning">{catalogWarning}</NoticeBanner>}
+        <p aria-live="polite" className="sr-only">
+          {busy ? "Generando PDF…" : liveMessage}
+        </p>
+
+        {catalogNotice && (
+          <NoticeBanner tone={catalogNotice.tone}>
+            {catalogNotice.message}
+          </NoticeBanner>
+        )}
 
         {error && (
-          <NoticeBanner
-            action={
-              errorStatus === 401 ? (
-                <Link
-                  className="inline-flex min-h-11 items-center text-[12px] font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
-                  href={buildLoginUrl(getCurrentReturnPath(), "expirada")}
-                >
-                  Iniciar sesión
-                </Link>
-              ) : undefined
-            }
-            role="alert"
-            tone="danger"
-          >
+          <NoticeBanner action={errorAction} role="alert" tone="danger">
             {error}
           </NoticeBanner>
         )}
@@ -197,10 +272,6 @@ export function QuotationPdfDialog({
         {announcement && (
           <NoticeBanner tone="success">{announcement}</NoticeBanner>
         )}
-
-        <p aria-live="polite" className="sr-only">
-          {busy ? "Generando PDF…" : ""}
-        </p>
 
         <div>
           <label
@@ -225,6 +296,7 @@ export function QuotationPdfDialog({
               setPreviewError(null);
               setError(null);
               setErrorStatus(null);
+              setErrorCanRetry(false);
               setAnnouncement("");
             }}
             value={selectedId}
@@ -232,7 +304,7 @@ export function QuotationPdfDialog({
             {catalogStatus === "loading" ? (
               <option value="">Cargando monedas…</option>
             ) : options.length === 0 ? (
-              <option value="">No hay monedas activas para cotizar.</option>
+              <option value="">No hay monedas disponibles para cotizar.</option>
             ) : (
               options.map((option) => (
                 <option key={`${String(option.id)}-${option.code}`} value={String(option.id)}>
@@ -260,7 +332,7 @@ export function QuotationPdfDialog({
         <dl className="grid gap-4 rounded-2xl border border-line bg-background p-4 sm:grid-cols-2">
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Total del pedido
+              {EQUIVALENCE_COPY.totalOrder}
             </dt>
             <dd className="mt-1 text-[16px] font-semibold tabular-nums text-ink">
               {orderMoney(order.total, order.currency)}
@@ -278,8 +350,10 @@ export function QuotationPdfDialog({
 
         {selectedIsOrderCurrency ? (
           <p className="rounded-2xl border border-line bg-surface px-4 py-3 text-[13px] leading-6 text-muted">
-            <span className="font-semibold text-ink">Sin conversión.</span> La
-            cotización se genera en la moneda original del pedido.
+            <span className="font-semibold text-ink">
+              {EQUIVALENCE_COPY.noConversion}.
+            </span>{" "}
+            La cotización se genera en la moneda original del pedido.
           </p>
         ) : previewStatus === "loading" ? (
           <p className="rounded-2xl border border-line bg-surface px-4 py-3 text-[13px] leading-6 text-muted">
@@ -288,7 +362,7 @@ export function QuotationPdfDialog({
         ) : previewStatus === "ready" && preview ? (
           <div className="rounded-2xl border border-line bg-surface p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Tasa aplicada
+              {EQUIVALENCE_COPY.rate}
             </p>
             <p className="mt-1 font-mono text-[18px] font-semibold tabular-nums text-ink">
               {formatRate(preview.exchangeRate)}
@@ -299,7 +373,11 @@ export function QuotationPdfDialog({
                   Moneda origen
                 </dt>
                 <dd className="mt-0.5 text-ink">
-                  {preview.sourceCurrency.name} ({preview.sourceCurrency.code})
+                  {preview.source.currency
+                    ? `${preview.source.currency.name} (${preview.source.currency.code})`
+                    : order.currency
+                      ? `${order.currency.name} (${order.currency.code})`
+                      : "—"}
                 </dd>
               </div>
               <div>
@@ -307,12 +385,16 @@ export function QuotationPdfDialog({
                   Moneda destino
                 </dt>
                 <dd className="mt-0.5 text-ink">
-                  {preview.targetCurrency.name} ({preview.targetCurrency.code})
+                  {preview.target.currency
+                    ? `${preview.target.currency.name} (${preview.target.currency.code})`
+                    : selectedOption
+                      ? `${selectedOption.name} (${selectedOption.code})`
+                      : "—"}
                 </dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="font-semibold uppercase tracking-[0.06em] text-[10px]">
-                  Última actualización de la tasa
+                  {EQUIVALENCE_COPY.rateUpdatedAt}
                 </dt>
                 <dd className="mt-0.5 tabular-nums text-ink">
                   {rateUpdate ? formatDateTime(rateUpdate) : "Sin fecha registrada"}
@@ -321,18 +403,33 @@ export function QuotationPdfDialog({
             </dl>
             {preview.roundingAdjustment !== 0 && (
               <p className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-line pt-3 text-[12px]">
-                <span className="text-muted">Ajuste por redondeo</span>
+                <span className="text-muted">{EQUIVALENCE_COPY.rounding}</span>
                 <span className="font-semibold tabular-nums text-ink">
                   {formatMoney(
                     preview.roundingAdjustment,
-                    preview.targetCurrency,
+                    previewCurrency ?? selectedOption ?? {},
                   )}
                 </span>
               </p>
             )}
           </div>
         ) : previewError ? (
-          <NoticeBanner tone="warning">{previewError}</NoticeBanner>
+          <NoticeBanner
+            action={
+              previewError.canRetry ? (
+                <button
+                  className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+                  onClick={() => setPreviewAttempt((current) => current + 1)}
+                  type="button"
+                >
+                  Reintentar
+                </button>
+              ) : undefined
+            }
+            tone="warning"
+          >
+            {previewError.description}
+          </NoticeBanner>
         ) : (
           <p className="rounded-2xl border border-line bg-surface px-4 py-3 text-[13px] leading-6 text-muted">
             La tasa se calculará al generar el documento.
@@ -341,8 +438,8 @@ export function QuotationPdfDialog({
 
         <div className="space-y-3">
           <NoticeBanner tone="info">
-            La cotización se calcula con la tasa vigente. No modifica el pedido.
-            La tasa puede cambiar. La cotización es informativa.
+            La cotización se calcula con la tasa vigente. No modifica el pedido.{" "}
+            {EQUIVALENCE_COPY.rateMayChange}
           </NoticeBanner>
           <p className="rounded-2xl border border-olive/35 bg-soft-lime px-4 py-3 text-[13px] font-semibold text-ink">
             Documento no fiscal.

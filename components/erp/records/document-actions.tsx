@@ -13,6 +13,30 @@ import type { OrderInvoiceRef, OrderRecord } from "@/components/erp/records/orde
 import type { RecordId } from "@/components/erp/records/records-api";
 import { fetchOrderInvoice } from "@/lib/finance/invoices-api";
 
+const invoiceRefCache = new Map<string, OrderInvoiceRef>();
+const invoiceRefRequests = new Map<string, Promise<OrderInvoiceRef>>();
+
+async function loadOrderInvoiceRef(orderId: string): Promise<OrderInvoiceRef> {
+  const cached = invoiceRefCache.get(orderId);
+  if (cached) return cached;
+
+  const pending = invoiceRefRequests.get(orderId);
+  if (pending) return pending;
+
+  const request = fetchOrderInvoice(orderId).then((invoice) => {
+    const value: OrderInvoiceRef = { id: invoice.id, number: invoice.number };
+    invoiceRefCache.set(orderId, value);
+    return value;
+  });
+
+  invoiceRefRequests.set(orderId, request);
+  try {
+    return await request;
+  } finally {
+    invoiceRefRequests.delete(orderId);
+  }
+}
+
 export function InvoicePdfAction({
   invoiceId,
   invoiceNumber,
@@ -20,6 +44,7 @@ export function InvoicePdfAction({
   variant = "primary",
   className = "",
   supportingText = "La factura conserva la moneda en que fue emitida.",
+  fullWidth = false,
 }: {
   invoiceId: RecordId;
   invoiceNumber: number | string;
@@ -27,6 +52,7 @@ export function InvoicePdfAction({
   variant?: "primary" | "secondary";
   className?: string;
   supportingText?: string;
+  fullWidth?: boolean;
 }) {
   return (
     <DownloadDocumentButton
@@ -35,6 +61,7 @@ export function InvoicePdfAction({
         `Descargar factura PDF de la factura #${invoiceNumber}`
       }
       className={className}
+      fullWidth={fullWidth}
       label="Descargar factura PDF"
       onDownload={() => downloadInvoicePdf(invoiceId, invoiceNumber)}
       successMessage="Descarga iniciada."
@@ -102,9 +129,9 @@ export function OrderDocumentActions({
       setLookupStatus("loading");
       setFetchedInvoice(null);
       try {
-        const invoice = await fetchOrderInvoice(String(order.id));
+        const invoice = await loadOrderInvoiceRef(String(order.id));
         if (!active) return;
-        setFetchedInvoice({ id: invoice.id, number: invoice.number });
+        setFetchedInvoice(invoice);
         setLookupStatus("ready");
       } catch {
         if (!active) return;
@@ -128,14 +155,10 @@ export function OrderDocumentActions({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      {notice && (
-        <p aria-live="assertive" className="sr-only" role="alert">
+      {notice && !cancelled && (
+        <NoticeBanner role="alert" tone="warning">
           {notice}
-        </p>
-      )}
-
-      {notice && !invoiced && !cancelled && (
-        <NoticeBanner tone="warning">{notice}</NoticeBanner>
+        </NoticeBanner>
       )}
 
       {cancelled && (
@@ -210,6 +233,7 @@ export function OrderDocumentActions({
             invoiceRef?.id !== undefined && (
               <InvoicePdfAction
                 accessibleLabel={`Descargar factura PDF del pedido #${order.number}`}
+                fullWidth
                 invoiceId={invoiceRef.id}
                 invoiceNumber={invoiceRef.number ?? invoiceRef.id}
                 supportingText="Este pedido ya fue facturado. Descarga la factura."
