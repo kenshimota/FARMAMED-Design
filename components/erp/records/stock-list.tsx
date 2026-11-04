@@ -51,10 +51,14 @@ import {
   type StockRecord,
 } from "@/components/erp/records/stocks-api";
 import {
+  StockAvailabilityNotice,
+  StockLocatedQuantity,
+  StockNonSellableQuantity,
   StockQuantity,
   StockSyncNotice,
   stockCountLabel,
   stockItemStateLabel,
+  stockNonSellableQuantity,
   stockProductName,
 } from "@/components/erp/records/stock-shared";
 import { formatInteger, formatMoney } from "@/lib/format";
@@ -335,7 +339,7 @@ function StockListContent({
     },
     {
       key: "cantidad",
-      header: "Cantidad",
+      header: "Existencia física",
       className: "whitespace-nowrap",
       render: (stock) => <StockQuantity quantity={stock.quantity} />,
     },
@@ -390,7 +394,7 @@ function StockListContent({
         <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Cantidad
+              Existencia física
             </dt>
             <dd className="mt-1">
               <StockQuantity quantity={stock.quantity} />
@@ -413,7 +417,7 @@ function StockListContent({
             <Icon name="clipboard" size={16} />
           </Link>
         }
-        description="Consulta el agregado por producto y estado, y la disponibilidad vendible con su costo vigente. Este módulo es de solo lectura."
+        description="Consulta la existencia física agregada y la disponibilidad vendible real por producto y estado de ítem. Solo los lotes ubicados y no vencidos cuentan para la venta. Este módulo es de solo lectura."
         eyebrow="Inventario"
         title="Existencias"
       />
@@ -614,7 +618,7 @@ function StockListContent({
                 <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                   <RecordsTable
                     busy={list.status === "refreshing"}
-                    caption="Existencias agregadas por producto y estado de ítem, con su cantidad y enlace a lotes"
+                    caption="Existencias físicas agregadas por producto y estado de ítem, con enlace a lotes y a la disponibilidad vendible"
                     columns={aggregatedColumns}
                     getRowKey={(stock) => String(stock.id)}
                     getRowLabel={(stock) =>
@@ -656,7 +660,22 @@ function StockListContent({
         role="tabpanel"
         tabIndex={0}
       >
-        <h2 className="sr-only">Disponibilidad vendible</h2>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-[-0.03em] text-ink">
+              Disponibilidad vendible
+            </h2>
+            <p className="mt-1 text-[12px] leading-5 text-muted">
+              Consulta la existencia física y la cantidad realmente vendible
+              por estado de ítem.
+            </p>
+          </div>
+          <span className="inline-flex rounded-full border border-ink/15 bg-background px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+            Solo lectura
+          </span>
+        </div>
+
+        <StockAvailabilityNotice />
 
         <section
           aria-label="Selector de producto para disponibilidad"
@@ -690,15 +709,15 @@ function StockListContent({
           </div>
           <p aria-live="polite" className="mt-4 text-[12px] text-muted">
             {availableProductValid
-              ? `Consultando la disponibilidad vendible de ${availableProductName}.`
-              : "Elige un producto para consultar su disponibilidad vendible y su costo vigente."}
+              ? `Consultando la existencia física y la disponibilidad vendible de ${availableProductName}.`
+              : "Elige un producto para consultar su existencia física, su disponibilidad vendible y su costo vigente."}
           </p>
         </section>
 
         {availableActive &&
           (!availableProductValid ? (
             <EmptyState
-              description="Solo se muestran los estados de ítem vendibles con cantidad mayor que cero."
+              description="Elige un producto para consultar su existencia física y la cantidad disponible para la venta."
               title="Selecciona un producto"
             />
           ) : (
@@ -727,6 +746,12 @@ function AvailableStocksPanel({
   const resource = useAsyncResource(loader);
   const currencyStatus = useCurrencyStatusContext();
   const stocks = resource.data ?? NO_AVAILABLE_STOCKS;
+  const missingAvailabilityCount = stocks.filter(
+    (stock) => stock.quantity > 0 && stock.locatedQuantity <= 0,
+  ).length;
+  const hasPartialDifference = stocks.some(
+    (stock) => stockNonSellableQuantity(stock) > 0,
+  );
 
   const countLabel = resource.data
     ? stockCountLabel(stocks.length)
@@ -764,10 +789,34 @@ function AvailableStocksPanel({
       ),
     },
     {
-      key: "cantidad",
-      header: "Cantidad",
-      className: "whitespace-nowrap",
+      key: "existencia-fisica",
+      header: "Existencia física",
+      className: "whitespace-nowrap text-right",
+      headerClassName: "text-right",
       render: (stock) => <StockQuantity quantity={stock.quantity} />,
+    },
+    {
+      key: "disponible-vendible",
+      header: "Disponible vendible",
+      className: "whitespace-nowrap text-right",
+      headerClassName: "text-right",
+      render: (stock) => (
+        <StockLocatedQuantity
+          locatedQuantity={stock.locatedQuantity}
+          physicalQuantity={stock.quantity}
+        />
+      ),
+    },
+    {
+      key: "no-vendible",
+      header: "No vendible",
+      className: "whitespace-nowrap text-right",
+      headerClassName: "text-right",
+      render: (stock) => (
+        <StockNonSellableQuantity
+          quantity={stockNonSellableQuantity(stock)}
+        />
+      ),
     },
     {
       key: "costo",
@@ -829,12 +878,38 @@ function AvailableStocksPanel({
         <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Cantidad
+              Existencia física
             </dt>
             <dd className="mt-1">
               <StockQuantity quantity={stock.quantity} />
             </dd>
           </div>
+          <div>
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Disponible vendible
+            </dt>
+            <dd className="mt-1">
+              <StockLocatedQuantity
+                locatedQuantity={stock.locatedQuantity}
+                physicalQuantity={stock.quantity}
+              />
+            </dd>
+          </div>
+          {stockNonSellableQuantity(stock) > 0 && (
+            <div className="col-span-2 rounded-xl border border-alert/20 bg-alert/[0.04] px-3 py-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                No vendible
+              </dt>
+              <dd className="mt-1 flex flex-wrap items-baseline gap-2">
+                <StockNonSellableQuantity
+                  quantity={stockNonSellableQuantity(stock)}
+                />
+                <span className="text-[11px] leading-5 text-muted">
+                  Parte de la existencia no está disponible para la venta.
+                </span>
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               Costo
@@ -881,7 +956,7 @@ function AvailableStocksPanel({
     >
       {resource.status === "loading" && (
         <RecordsTableSkeleton
-          columns={5}
+          columns={7}
           label="Cargando disponibilidad…"
           rows={5}
         />
@@ -922,8 +997,18 @@ function AvailableStocksPanel({
               >
                 {stockErrorMessage(
                   resource.error,
-                  "No pudimos actualizar la disponibilidad. Mostramos los datos disponibles.",
+                  "No pudimos actualizar la disponibilidad vendible. Mostramos los datos disponibles.",
                 )}
+              </NoticeBanner>
+            )}
+
+            {missingAvailabilityCount > 0 && (
+              <NoticeBanner title="Sin disponibilidad vendible" tone="warning">
+                Hay existencia física, pero no disponibilidad vendible
+                {missingAvailabilityCount === 1
+                  ? " en un estado de ítem."
+                  : ` en ${formatInteger(missingAvailabilityCount)} estados de ítem.`}{" "}
+                Revisa los lotes pendientes, en ubicación o vencidos.
               </NoticeBanner>
             )}
 
@@ -938,7 +1023,7 @@ function AvailableStocksPanel({
                     <Icon name="layers" size={16} />
                   </Link>
                 }
-                description="Solo se muestran estados vendibles con cantidad mayor que cero."
+                description="No hay estados de ítem vendibles con existencia registrada para este producto. La existencia puede estar en lotes pendientes, en ubicación o vencidos; revísalos o elige otro producto."
                 title="No hay existencias vendibles para este producto."
               />
             ) : (
@@ -955,7 +1040,7 @@ function AvailableStocksPanel({
                   </p>
                 </div>
                 <RecordsTable
-                  caption={`Disponibilidad vendible de ${productName} por estado de ítem, con costo y moneda`}
+                  caption={`Disponibilidad vendible de ${productName} por estado de ítem: existencia física, disponible vendible, no vendible, costo y moneda. Solo los lotes ubicados y no vencidos cuentan para la venta.`}
                   columns={columns}
                   getRowKey={(stock) =>
                     `${stock.product_id}-${stock.item_state_id}`
@@ -971,8 +1056,12 @@ function AvailableStocksPanel({
             )}
 
             <p className="text-[12px] leading-6 text-muted">
-              La cantidad reservada no se muestra en existencias; vive en los
-              lotes.{" "}
+              {hasPartialDifference
+                ? "Parte de la existencia no está disponible para la venta. "
+                : ""}
+              La existencia física incluye lotes pendientes, en ubicación o
+              vencidos. Solo los lotes ubicados y no vencidos cuentan para la
+              disponibilidad vendible. La cantidad reservada vive en los lotes.{" "}
               <Link
                 className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
                 href={`/app/lotes?product_id=${productId}`}

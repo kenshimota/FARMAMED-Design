@@ -22,19 +22,22 @@ import { LotDeleteDialog } from "@/components/erp/records/lot-delete-dialog";
 import {
   addDaysIso,
   getLotExpiryStatus,
+  LotExpiredReservationBadge,
   LotExpiryBadge,
-  LotLocationStatusBadge,
-  lotItemStateLabel,
+  LotItemStateBadge,
+  lotExpiredWithReservation,
+  lotItemStateIsExpired,
   lotLocationLabel,
   lotProductName,
   lotProductReference,
   lotSectionLabel,
+  lotSellableAvailable,
   lotShelfLabel,
+  LotLocationStatusBadge,
   LotSyncNotice,
 } from "@/components/erp/records/lot-shared";
 import {
   fetchLotPage,
-  lotAvailable,
   type LotLocationStatus,
   type LotRecord,
 } from "@/components/erp/records/lots-api";
@@ -262,6 +265,9 @@ function LotListContent({ initialFilters }: LotListPageProps) {
   const sections = selectedShelf?.sections ?? NO_SECTIONS;
 
   const lots = list.items;
+  const expiredReservationCount = lots.filter((lot) =>
+    lotExpiredWithReservation(lot, itemStates),
+  ).length;
   const productIds = useMemo(
     () => [
       ...(productId ? [productId] : []),
@@ -577,11 +583,21 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     {
       key: "estado",
       header: "Estado",
-      render: (lot) => (
-        <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
-          {lotItemStateLabel(lot, itemStates)}
-        </span>
-      ),
+      render: (lot) => {
+        const expired = lotItemStateIsExpired(lot, itemStates);
+        const reserved = lotExpiredWithReservation(lot, itemStates);
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <LotItemStateBadge itemStates={itemStates} lot={lot} />
+            {reserved && <LotExpiredReservationBadge />}
+            {expired && (
+              <span className="text-[10px] font-semibold text-muted">
+                Actualizado por el job diario
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "ubicacion-estado",
@@ -590,7 +606,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     },
     {
       key: "existencia",
-      header: "Existencia",
+      header: "Existencia física",
       className: "whitespace-nowrap text-right",
       headerClassName: "text-right",
       render: (lot) => (
@@ -612,12 +628,12 @@ function LotListContent({ initialFilters }: LotListPageProps) {
     },
     {
       key: "disponible",
-      header: "Disponible",
+      header: "Disponible vendible",
       className: "whitespace-nowrap text-right",
       headerClassName: "text-right",
       render: (lot) => (
         <span className="font-semibold tabular-nums text-brand">
-          {formatInteger(lotAvailable(lot))}
+          {formatInteger(lotSellableAvailable(lot, itemStates))}
         </span>
       ),
     },
@@ -681,6 +697,8 @@ function LotListContent({ initialFilters }: LotListPageProps) {
 
   function renderCard(lot: LotRecord) {
     const product = productFor(lot);
+    const expired = lotItemStateIsExpired(lot, itemStates);
+    const reserved = lotExpiredWithReservation(lot, itemStates);
     return (
       <div>
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -701,9 +719,8 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             )}
           </div>
           <div className="flex flex-col items-end gap-1.5">
-            <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
-              {lotItemStateLabel(lot, itemStates)}
-            </span>
+            <LotItemStateBadge itemStates={itemStates} lot={lot} />
+            {reserved && <LotExpiredReservationBadge />}
             <LotLocationStatusBadge lot={lot} />
             <LotExpiryBadge expirationDate={lot.expiration_date} />
           </div>
@@ -712,7 +729,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
         <dl className="mt-3 grid grid-cols-3 gap-3 text-[12px]">
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Existencia
+              Existencia física
             </dt>
             <dd className="mt-1 font-semibold tabular-nums text-ink">
               {formatInteger(lot.stock)}
@@ -728,13 +745,27 @@ function LotListContent({ initialFilters }: LotListPageProps) {
           </div>
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Disponible
+              Disponible vendible
             </dt>
             <dd className="mt-1 font-semibold tabular-nums text-brand">
-              {formatInteger(lotAvailable(lot))}
+              {formatInteger(lotSellableAvailable(lot, itemStates))}
             </dd>
           </div>
         </dl>
+
+        {reserved && (
+          <p className="mt-3 rounded-xl border border-alert/25 bg-alert/[0.06] px-3 py-2 text-[11px] leading-5 text-alert-ink">
+            <span className="font-semibold">Vencido con reserva:</span> no
+            cuenta para la disponibilidad vendible; se moverá a Vencido cuando
+            la reserva se libere.
+          </p>
+        )}
+
+        {expired && (
+          <p className="mt-1 text-[11px] leading-5 text-muted">
+            El job diario actualizó este lote al estado Vencido.
+          </p>
+        )}
 
         <p className="mt-3 text-[12px] leading-5 text-muted">
           <span className="font-semibold text-ink">Vence el</span>{" "}
@@ -764,7 +795,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             </Link>
           ) : undefined
         }
-        description="Consulta los lotes de Farmamed con su vencimiento, cantidades, estado de ubicación y ubicación física. Los lotes pendientes no están disponibles para la venta y los lotes y las existencias son fuentes independientes."
+        description="Consulta los lotes de Farmamed con su vencimiento, cantidades, estado de ubicación y ubicación física. Solo los lotes ubicados y no vencidos cuentan para la venta."
         eyebrow="Inventario"
         title="Lotes"
       />
@@ -780,7 +811,23 @@ function LotListContent({ initialFilters }: LotListPageProps) {
             </Link>
           ) : undefined
         }
+        withExpiryAutomation
       />
+
+      {expiredReservationCount > 0 && (
+        <NoticeBanner
+          role="note"
+          title="Vencidos con reserva"
+          tone="warning"
+        >
+          {expiredReservationCount === 1
+            ? "En esta página, 1 lote vencido conserva reservas."
+            : `En esta página, ${formatInteger(expiredReservationCount)} lotes vencidos conservan reservas.`}{" "}
+          {expiredReservationCount === 1
+            ? "No cuenta para la disponibilidad vendible; se moverá al estado Vencido cuando la reserva se libere."
+            : "No cuentan para la disponibilidad vendible; se moverán al estado Vencido cuando la reserva se libere."}
+        </NoticeBanner>
+      )}
 
       {deleteConflict && (
         <NoticeBanner
@@ -1062,7 +1109,7 @@ function LotListContent({ initialFilters }: LotListPageProps) {
               <div className="rounded-[24px] border border-line bg-surface p-4 sm:p-5">
                 <RecordsTable
                   busy={list.status === "refreshing"}
-                  caption="Lotes con número, producto, vencimiento, estado, estado de ubicación, existencia, reservado, disponible, ubicación y acciones"
+                  caption="Lotes con número, producto, vencimiento, estado, estado de ubicación, existencia física, reservado, disponible vendible, ubicación y acciones"
                   columns={columns}
                   getRowAttributes={(lot) => {
                     const status = getLotExpiryStatus(lot.expiration_date);

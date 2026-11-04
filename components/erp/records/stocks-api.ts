@@ -38,6 +38,7 @@ export type AvailableStockRecord = {
   product_id: RecordId;
   item_state_id: RecordId;
   quantity: number;
+  locatedQuantity: number;
   cost: number | null;
   currency_id: RecordId | null;
   currency: StockCurrency | null;
@@ -145,10 +146,14 @@ export function parseAvailableStock(source: unknown): AvailableStockRecord | nul
   const quantity = readNumber(record.quantity);
   if (productId === null || itemStateId === null || quantity === null) return null;
 
+  const locatedQuantity =
+    readNumber(record.located_quantity ?? record.locatedQuantity) ?? 0;
+
   return {
     product_id: productId,
     item_state_id: itemStateId,
     quantity,
+    locatedQuantity,
     cost: readNumber(record.cost),
     currency_id: readId(record.currency_id),
     currency: parseStockCurrency(record.currency),

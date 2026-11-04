@@ -7,7 +7,7 @@ import {
 export const metadata: Metadata = {
   title: "Lotes",
   description:
-    "Consulta los lotes de Farmamed con su número, producto, vencimiento, cantidades, estado de ubicación y ubicación física.",
+    "Consulta los lotes de Farmamed con su número, producto, vencimiento, cantidades, estado de ubicación y ubicación física. El job diario mueve los lotes vencidos sin reservas al estado Vencido.",
 };
 
 type LotsRouteProps = {

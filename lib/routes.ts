@@ -513,7 +513,7 @@ export const ERP_ROUTES: readonly ErpRouteDefinition[] = [
   },
   {
     path: "/app/existencias/disponibles",
-    title: "Existencias disponibles",
+    title: "Disponibilidad vendible",
     label: "Disponibles",
     group: "Inventario",
     module: "existencias",

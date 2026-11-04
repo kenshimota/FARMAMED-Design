@@ -198,7 +198,7 @@ function StockDetailContent({ stockId }: { stockId: string }) {
 
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Cantidad
+              Existencia física
             </dt>
             <dd className="mt-1.5">
               <StockQuantity quantity={stock.quantity} />
@@ -230,7 +230,14 @@ function StockDetailContent({ stockId }: { stockId: string }) {
 
         <p className="mt-6 rounded-xl border border-brand/15 bg-soft-blue px-4 py-3 text-[12px] leading-5 text-ink">
           Las existencias se crean al confirmar una compra y no se editan desde
-          esta pantalla.
+          esta pantalla. La existencia física puede incluir lotes pendientes, en
+          ubicación o vencidos; revisa la disponibilidad vendible del producto.{" "}
+          <Link
+            className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+            href={`/app/existencias/disponibles?product_id=${stock.product_id}`}
+          >
+            Ver disponibilidad vendible
+          </Link>
         </p>
       </section>
 

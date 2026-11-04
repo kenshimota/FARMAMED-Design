@@ -101,7 +101,7 @@ function ProductStocksContent({ productId }: { productId: string }) {
     },
     {
       key: "cantidad",
-      header: "Cantidad",
+      header: "Existencia física",
       className: "whitespace-nowrap",
       render: (stock) => <StockQuantity quantity={stock.quantity} />,
     },
@@ -129,7 +129,7 @@ function ProductStocksContent({ productId }: { productId: string }) {
           href={`/app/existencias/disponibles?product_id=${stock.product_id}`}
           icon="box"
         >
-          Disponibles
+          Disponibilidad vendible
         </RecordActionLink>
       </RecordActions>
     );
@@ -144,7 +144,7 @@ function ProductStocksContent({ productId }: { productId: string }) {
         <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
           <div>
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Cantidad
+              Existencia física
             </dt>
             <dd className="mt-1">
               <StockQuantity quantity={stock.quantity} />
@@ -156,8 +156,8 @@ function ProductStocksContent({ productId }: { productId: string }) {
   }
 
   const headerDescription = product
-    ? `Existencias de ${product.name} (${product.reference}) por estado de ítem. Los lotes se consultan aparte.`
-    : "Existencias del producto por estado de ítem. Los lotes se consultan aparte.";
+    ? `Existencia física de ${product.name} (${product.reference}) por estado de ítem. Puede incluir lotes no vendibles; consulta la disponibilidad vendible para la cantidad real.`
+    : "Existencia física del producto por estado de ítem. Puede incluir lotes no vendibles; consulta la disponibilidad vendible para la cantidad real.";
 
   return (
     <div className="space-y-5">
@@ -175,7 +175,7 @@ function ProductStocksContent({ productId }: { productId: string }) {
                 className="button-base button-primary min-h-11 px-5 text-[13px]"
                 href={`/app/existencias/disponibles?product_id=${productId}`}
               >
-                Ver disponibles
+                Ver disponibilidad vendible
                 <Icon name="arrow-right" size={17} />
               </Link>
             )}
@@ -306,7 +306,7 @@ function ProductStocksContent({ productId }: { productId: string }) {
               />
             ) : (
               <RecordsTable
-                caption={`Existencias de ${productName} por estado de ítem, con enlaces a lotes y disponibilidad`}
+                caption={`Existencias físicas de ${productName} por estado de ítem, con enlaces a lotes y disponibilidad vendible`}
                 columns={columns}
                 getRowKey={(stock) => String(stock.id)}
                 getRowLabel={(stock) =>

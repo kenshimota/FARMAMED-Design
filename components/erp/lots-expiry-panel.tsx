@@ -124,8 +124,11 @@ export function LotsExpiryPanel({
         >
           Lotes vencidos y próximos a vencer
         </h2>
-        <p className="mt-2 text-[12px] text-muted">
-          Información para tu revisión; no es una alerta automática.
+        <p className="mt-2 text-[12px] leading-6 text-muted" role="note">
+          El job diario corre una vez al día y mueve los lotes vencidos sin
+          reservas al estado Vencido. Los lotes vencidos con reservas se mueven
+          cuando la reserva se libere. No requiere una acción manual y no se
+          ejecuta desde el navegador.
         </p>
       </div>
 

@@ -12,19 +12,27 @@ import { LotDeleteDialog } from "@/components/erp/records/lot-delete-dialog";
 import {
   getLotExpiryStatus,
   lotActorLabel,
+  LotExpiredReservationBadge,
   LotExpiryBadge,
-  lotItemStateLabel,
+  LotItemStateBadge,
+  lotExpiredWithReservation,
+  lotItemStateIsExpired,
   lotLocationLabel,
   lotLocationStatusLabel,
   LotLocationStatusBadge,
   lotProductName,
   lotProductReference,
   lotSectionLabel,
+  lotSellableAvailable,
   lotShelfLabel,
   lotWarehouseName,
   LotSyncNotice,
 } from "@/components/erp/records/lot-shared";
-import { fetchLot, lotAvailable } from "@/components/erp/records/lots-api";
+import {
+  fetchItemStates,
+  type ItemStateRecord,
+} from "@/components/erp/records/item-states-api";
+import { fetchLot } from "@/components/erp/records/lots-api";
 import { RecordsPageHeader } from "@/components/erp/records/page-header";
 import { RecordActionButton } from "@/components/erp/records/record-actions";
 import {
@@ -34,6 +42,8 @@ import {
 import { isPositiveRecordId } from "@/components/erp/records/records-api";
 import { formatDateOnly, formatDateTime, formatInteger } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
+
+const NO_ITEM_STATES: ItemStateRecord[] = [];
 
 function locationMoment(
   date: string | null,
@@ -82,6 +92,8 @@ function LotDetailContent({ lotId }: { lotId: string }) {
 
   const loader = useCallback(() => fetchLot(lotId), [lotId]);
   const resource = useAsyncResource(loader);
+  const itemStatesResource = useAsyncResource(fetchItemStates);
+  const itemStates = itemStatesResource.data ?? NO_ITEM_STATES;
 
   if (resource.status === "loading") {
     return (
@@ -127,9 +139,10 @@ function LotDetailContent({ lotId }: { lotId: string }) {
   const lot = resource.data;
   const productName = lotProductName(lot.product, lot.product_id);
   const productReference = lotProductReference(lot.product);
-  const itemStateLabel = lotItemStateLabel(lot);
-  const available = lotAvailable(lot);
+  const available = lotSellableAvailable(lot, itemStates);
   const expiryStatus = getLotExpiryStatus(lot.expiration_date);
+  const itemStateExpired = lotItemStateIsExpired(lot, itemStates);
+  const expiredWithReservation = lotExpiredWithReservation(lot, itemStates);
   const located = lot.location_status === "located";
   const warehouseHref =
     lot.warehouse_id !== null ? `/app/bodegas/${lot.warehouse_id}` : null;
@@ -209,6 +222,7 @@ function LotDetailContent({ lotId }: { lotId: string }) {
           ) : undefined
         }
         variant="detail"
+        withExpiryAutomation
       />
 
       {deleteConflict && (
@@ -229,9 +243,22 @@ function LotDetailContent({ lotId }: { lotId: string }) {
       )}
 
       {expiryStatus === "vencido" && (
-        <NoticeBanner tone="danger">
-          Este lote está vencido. Revisa el estado del ítem y su disponibilidad
-          antes de usarlo.
+        <NoticeBanner
+          tone={expiredWithReservation ? "warning" : "danger"}
+          title={expiredWithReservation ? "Vencido con reserva" : "Lote vencido"}
+        >
+          {expiredWithReservation
+            ? "Este lote está vencido y conserva reservas. No cuenta para la disponibilidad vendible; se moverá al estado Vencido cuando la reserva se libere."
+            : itemStateExpired
+              ? "Este lote está vencido y ya está en el estado Vencido. No cuenta para la disponibilidad vendible."
+              : "Este lote está vencido y no cuenta para la disponibilidad vendible. El job diario lo moverá al estado Vencido."}
+        </NoticeBanner>
+      )}
+
+      {itemStateExpired && expiryStatus !== "vencido" && (
+        <NoticeBanner tone="danger" title="Estado Vencido">
+          Este lote está en estado Vencido. El job diario lo actualizó
+          automáticamente y no cuenta para la disponibilidad vendible.
         </NoticeBanner>
       )}
 
@@ -286,10 +313,9 @@ function LotDetailContent({ lotId }: { lotId: string }) {
             <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
               Estado del ítem
             </dt>
-            <dd className="mt-1.5">
-              <span className="inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand">
-                {itemStateLabel}
-              </span>
+            <dd className="mt-1.5 flex flex-wrap items-center gap-2">
+              <LotItemStateBadge itemStates={itemStates} lot={lot} />
+              {expiredWithReservation && <LotExpiredReservationBadge />}
             </dd>
           </div>
 
@@ -325,13 +351,13 @@ function LotDetailContent({ lotId }: { lotId: string }) {
           className="mt-3 text-xl font-semibold tracking-[-0.03em] text-ink"
           id="cantidades-lote"
         >
-          Existencia, reservado y disponible
+          Existencia física, reservado y disponible vendible
         </h2>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-line bg-background p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Existencia
+              Existencia física
             </p>
             <p className="mt-1.5 text-2xl font-semibold tabular-nums text-ink">
               {formatInteger(lot.stock)}
@@ -347,7 +373,7 @@ function LotDetailContent({ lotId }: { lotId: string }) {
           </div>
           <div className="rounded-2xl border border-brand/20 bg-soft-blue p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand">
-              Disponible
+              Disponible vendible
             </p>
             <p className="mt-1.5 text-2xl font-semibold tabular-nums text-brand">
               {formatInteger(available)}
@@ -356,9 +382,21 @@ function LotDetailContent({ lotId }: { lotId: string }) {
         </div>
 
         <p className="mt-4 text-[12px] leading-6 text-muted">
-          El disponible se calcula como existencia − reservado. En lotes
-          pendientes o en ubicación el disponible es 0. No se envía al API y no
-          modifica las existencias agregadas.
+          El disponible vendible se calcula como existencia − reservado. En
+          lotes pendientes, en ubicación o vencidos es 0. Un lote vencido con
+          reservas no cuenta para la disponibilidad vendible hasta que la
+          reserva se libere.
+          {canReadExistencias && (
+            <>
+              {" "}
+              <Link
+                className="font-semibold text-brand underline-offset-4 hover:text-ink hover:underline"
+                href={`/app/existencias/disponibles?product_id=${lot.product_id}`}
+              >
+                Ver disponibilidad vendible
+              </Link>
+            </>
+          )}
         </p>
       </section>
 

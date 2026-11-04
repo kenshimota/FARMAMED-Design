@@ -4,7 +4,7 @@ import { StockDetailPage } from "@/components/erp/records/stock-detail";
 export const metadata: Metadata = {
   title: "Detalle de existencia",
   description:
-    "Consulta una existencia agregada de Farmamed con su producto, estado de ítem y cantidad registrada.",
+    "Consulta una existencia física agregada de Farmamed con su producto, estado de ítem y cantidad registrada.",
 };
 
 type StockDetailRouteProps = {
