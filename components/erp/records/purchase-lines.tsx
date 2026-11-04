@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Icon } from "@/components/icons";
 import { BusyButton } from "@/components/erp/ui/action-button";
 import { NoticeBanner } from "@/components/erp/ui/banner";
@@ -44,11 +51,21 @@ import {
   type PurchaseMoney,
 } from "@/components/erp/records/purchase-shared";
 import {
+  addDaysIso,
+  caracasIsoDate,
   isValidIsoDate,
   normalizeDateInput,
 } from "@/components/erp/records/lot-shared";
 import { ApiError } from "@/lib/api";
 import { formatDateOnly } from "@/lib/format";
+
+function expirationMinIsoDate() {
+  return addDaysIso(1);
+}
+
+function expirationTodayIsoDate() {
+  return caracasIsoDate();
+}
 
 export type PurchaseLineValues = {
   product_id: string;
@@ -130,10 +147,13 @@ export function validateLineValues(
   }
 
   const expiration = values.expiration_date.trim();
+  const normalizedExpiration = normalizeDateInput(expiration);
   if (!expiration) {
     errors.expiration_date = PURCHASE_COPY.expirationRequired;
-  } else if (!isValidIsoDate(normalizeDateInput(expiration))) {
+  } else if (!isValidIsoDate(normalizedExpiration)) {
     errors.expiration_date = PURCHASE_COPY.expirationInvalid;
+  } else if (normalizedExpiration <= expirationTodayIsoDate()) {
+    errors.expiration_date = PURCHASE_COPY.expirationFuture;
   }
 
   return errors as Record<string, string>;
@@ -177,7 +197,6 @@ function duplicateLotError(
 type PurchaseLinesEditorProps = {
   rows: PurchaseLineRow[];
   currency: PurchaseMoney | null;
-  products: ProductRecord[];
   itemStates: ItemStateRecord[];
   itemStatesLoading: boolean;
   itemStatesError: string | null;
@@ -188,10 +207,18 @@ type PurchaseLinesEditorProps = {
   onDelete: (row: PurchaseLineRow) => void | Promise<void>;
 };
 
+type ProductLookupEntry = {
+  product: ProductRecord | null;
+  missing: boolean;
+};
+
+function provisionalProductLabel(id: RecordId | string) {
+  return `Producto #${id}`;
+}
+
 export function PurchaseLinesEditor({
   rows,
   currency,
-  products,
   itemStates,
   itemStatesLoading,
   itemStatesError,
@@ -209,42 +236,84 @@ export function PurchaseLinesEditor({
   const [showSummary, setShowSummary] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [expirationMin, setExpirationMin] = useState<string | null>(null);
+  const [productsById, setProductsById] = useState<
+    Record<string, ProductLookupEntry>
+  >({});
+  const [productLookupErrors, setProductLookupErrors] = useState<
+    Record<string, boolean>
+  >({});
+  const pendingProductIds = useRef(new Set<string>());
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      setExpirationMin(expirationMinIsoDate());
+    });
+    return () => {
+      mounted.current = false;
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   const editingRow = editingKey
     ? (rows.find((row) => row.key === editingKey) ?? null)
     : null;
   const values = editingRow ? editValues : addValues;
-  const [resolvedProduct, setResolvedProduct] = useState<{
-    id: string;
-    product: ProductRecord | null;
-    missing: boolean;
-  } | null>(null);
-  const listedProduct = values.product_id
-    ? findById(products, values.product_id)
-    : null;
+
+  const productIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (values.product_id) ids.add(values.product_id);
+    for (const row of rows) ids.add(String(row.product_id));
+    return Array.from(ids);
+  }, [rows, values.product_id]);
 
   useEffect(() => {
-    const id = values.product_id;
-    if (!id || listedProduct) return;
-    if (resolvedProduct?.id === id) return;
+    const missing = productIds.filter(
+      (id) =>
+        !productsById[id] &&
+        !productLookupErrors[id] &&
+        !pendingProductIds.current.has(id),
+    );
+    if (missing.length === 0) return;
 
-    let active = true;
-    fetchProduct(id)
-      .then((product) => {
-        if (active) setResolvedProduct({ id, product, missing: false });
-      })
-      .catch((caught) => {
-        if (!active) return;
-        setResolvedProduct({
-          id,
-          product: null,
-          missing: caught instanceof ApiError && caught.status === 404,
+    for (const id of missing) {
+      pendingProductIds.current.add(id);
+      fetchProduct(id)
+        .then((product) => {
+          if (!mounted.current) return;
+          setProductsById((current) => ({
+            ...current,
+            [id]: { product, missing: false },
+          }));
+        })
+        .catch((caught) => {
+          if (!mounted.current) return;
+          if (caught instanceof ApiError && caught.status === 404) {
+            setProductsById((current) => ({
+              ...current,
+              [id]: { product: null, missing: true },
+            }));
+            return;
+          }
+          setProductLookupErrors((current) => ({ ...current, [id]: true }));
+        })
+        .finally(() => {
+          pendingProductIds.current.delete(id);
         });
-      });
-    return () => {
-      active = false;
-    };
-  }, [listedProduct, resolvedProduct, values.product_id]);
+    }
+  }, [productIds, productsById, productLookupErrors]);
+
+  function retryProductLookup(id: string) {
+    if (!id) return;
+    setProductLookupErrors((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
 
   function updateField(field: PurchaseLineFieldKey, value: string) {
     if (editingRow) {
@@ -262,10 +331,16 @@ export function PurchaseLinesEditor({
   }
 
   function startEdit(row: PurchaseLineRow) {
+    const nextValues = lineValuesFromRow(row);
     setEditingKey(row.key);
-    setEditValues(lineValuesFromRow(row));
-    setErrors({});
-    setShowSummary(false);
+    setEditValues(nextValues);
+    const dateErrors = validateLineValues(nextValues, { requireTax: false });
+    const nextErrors: Record<string, string> = {};
+    if (dateErrors.expiration_date) {
+      nextErrors.expiration_date = dateErrors.expiration_date;
+    }
+    setErrors(nextErrors);
+    setShowSummary(Boolean(nextErrors.expiration_date));
     setNotice(null);
     window.requestAnimationFrame(() => {
       document.getElementById(PURCHASE_LINE_FIELD_IDS.product_id)?.focus();
@@ -310,7 +385,11 @@ export function PurchaseLinesEditor({
     event.preventDefault();
     if (busy) return;
 
+    setExpirationMin(expirationMinIsoDate());
     const nextErrors = validateLineValues(values, { requireTax: !editingRow });
+    if (productUnavailable) {
+      nextErrors.product_id = PURCHASE_COPY.productUnavailable;
+    }
     const duplicate = duplicateLotError(values, rows, editingKey);
     if (duplicate) nextErrors.lot_number = duplicate;
     if (Object.keys(nextErrors).length > 0) {
@@ -331,7 +410,9 @@ export function PurchaseLinesEditor({
   }));
 
   function productNameFor(row: PurchaseLineRow) {
-    return findById(products, row.product_id)?.name ?? `Producto #${row.product_id}`;
+    const entry = productsById[String(row.product_id)];
+    if (entry?.missing) return PURCHASE_COPY.productUnavailableShort;
+    return entry?.product?.name ?? provisionalProductLabel(row.product_id);
   }
 
   function itemStateLabelFor(row: PurchaseLineRow) {
@@ -341,19 +422,22 @@ export function PurchaseLinesEditor({
   }
 
   const summaryItems = lineSummaryItems(errors);
-  const resolvedProductForValue =
-    resolvedProduct?.id === values.product_id ? resolvedProduct : null;
-  const selectedProduct =
-    listedProduct ?? resolvedProductForValue?.product ?? null;
+  const selectedProductEntry = values.product_id
+    ? (productsById[values.product_id] ?? null)
+    : null;
+  const selectedProduct = selectedProductEntry?.product ?? null;
   const selectedProductLabel = selectedProduct
-    ? `${selectedProduct.name} (${selectedProduct.reference})`
-    : resolvedProductForValue && values.product_id
-      ? `Producto #${values.product_id}`
-      : undefined;
+    ? selectedProduct.name
+    : selectedProductEntry?.missing
+      ? PURCHASE_COPY.productUnavailableShort
+      : values.product_id
+        ? provisionalProductLabel(values.product_id)
+        : undefined;
   const productUnavailable = Boolean(
-    resolvedProductForValue?.missing &&
-      values.product_id &&
-      !selectedProduct,
+    values.product_id && selectedProductEntry?.missing,
+  );
+  const productLookupFailed = Boolean(
+    values.product_id && productLookupErrors[values.product_id],
   );
   const selectedProductName = selectedProduct?.name ?? null;
   const lotFieldLabel = selectedProductName
@@ -365,32 +449,53 @@ export function PurchaseLinesEditor({
 
   const fields: ReactNode = (
     <>
-      <EntityAutocompleteField
-        emptyLabel="No hay productos que coincidan."
-        error={
-          errors.product_id ??
-          (productUnavailable
-            ? "La opción seleccionada ya no está disponible. Elige otra."
-            : undefined)
-        }
-        help="Busca por nombre o referencia."
-        id={PURCHASE_LINE_FIELD_IDS.product_id}
-        initialLabel={selectedProductLabel}
-        label={PURCHASE_LINE_LABELS.product_id}
-        loadingLabel="Buscando productos…"
-        loadOptions={async (query) => {
-          const found = await searchProducts(query);
-          return found.map((product) => ({
-            value: String(product.id),
-            label: `${product.name} (${product.reference})`,
-            description: product.description || undefined,
-          }));
-        }}
-        onChange={(value) => updateField("product_id", value)}
-        placeholder="Busca por nombre o referencia"
-        required
-        value={values.product_id}
-      />
+      <div className="min-w-0">
+        <EntityAutocompleteField
+          clearLabel="Limpiar producto"
+          emptyLabel="No hay productos que coincidan con la búsqueda."
+          error={
+            errors.product_id ??
+            (productUnavailable ? PURCHASE_COPY.productUnavailable : undefined)
+          }
+          errorLabel="No pudimos cargar los productos."
+          help="Busca por nombre o referencia."
+          id={PURCHASE_LINE_FIELD_IDS.product_id}
+          initialLabel={selectedProductLabel}
+          key={editingKey ?? "nueva-linea"}
+          label={PURCHASE_LINE_LABELS.product_id}
+          loadingLabel="Buscando productos…"
+          loadOptions={async (query) => {
+            const found = await searchProducts(query);
+            return found.map((product) => ({
+              value: String(product.id),
+              label: product.name,
+              description: product.reference || product.description || undefined,
+            }));
+          }}
+          noRecordsLabel="No hay productos registrados."
+          onChange={(value) => updateField("product_id", value)}
+          placeholder="Busca por nombre o referencia"
+          required
+          value={values.product_id}
+        />
+        {productLookupFailed && (
+          <div
+            className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-alert/30 bg-alert/[0.06] px-3 py-2"
+            role="alert"
+          >
+            <p className="text-[12px] leading-5 text-alert-ink">
+              {PURCHASE_COPY.productLoadError}
+            </p>
+            <button
+              className="min-h-9 rounded-full border border-alert/30 px-3 text-[12px] font-semibold text-alert-ink transition-colors hover:border-alert hover:bg-surface"
+              onClick={() => retryProductLookup(values.product_id)}
+              type="button"
+            >
+              Reintentar la carga del producto
+            </button>
+          </div>
+        )}
+      </div>
       <SelectField
         emptyLabel="No hay estados de ítem registrados."
         error={errors.item_state_id}
@@ -465,10 +570,12 @@ export function PurchaseLinesEditor({
       <DateField
         disabled={busy}
         error={errors.expiration_date}
-        help="Obligatoria. Se guarda como fecha sin hora."
+        help="Obligatoria. Debe ser posterior a hoy y se guarda como fecha sin hora."
         id={PURCHASE_LINE_FIELD_IDS.expiration_date}
         label={expirationFieldLabel}
+        min={expirationMin ?? undefined}
         onChange={(value) => updateField("expiration_date", value)}
+        onFocus={() => setExpirationMin(expirationMinIsoDate())}
         required
         value={values.expiration_date}
       />

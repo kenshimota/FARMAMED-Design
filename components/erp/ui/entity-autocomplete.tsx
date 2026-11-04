@@ -17,8 +17,10 @@ type EntityAutocompleteFieldProps = {
   help?: ReactNode;
   error?: string | null;
   emptyLabel?: string;
+  noRecordsLabel?: string;
   loadingLabel?: string;
   errorLabel?: string;
+  clearLabel?: string;
   createHref?: string;
   createLabel?: string;
   disabled?: boolean;
@@ -37,8 +39,10 @@ export function EntityAutocompleteField({
   help,
   error,
   emptyLabel = "No hay coincidencias.",
+  noRecordsLabel,
   loadingLabel = "Buscando…",
   errorLabel = "No pudimos cargar las opciones.",
+  clearLabel = "Limpiar selección",
   createHref,
   createLabel,
   disabled = false,
@@ -49,15 +53,29 @@ export function EntityAutocompleteField({
   const [draft, setDraft] = useState(initial);
   const [selected, setSelected] = useState(Boolean(value && initial));
   const selectedLabel = useRef(initial);
+  const previousInitialLabel = useRef(initial);
   const previousValue = useRef(value);
   const pendingLabel = useRef<string | null>(null);
   const ignoreNextReset = useRef(false);
 
   useEffect(() => {
     const nextLabel = initialLabel?.trim() ?? "";
+    const lastLabel = previousInitialLabel.current;
+    previousInitialLabel.current = nextLabel;
 
     if (value === previousValue.current) {
       if (value && nextLabel && !selectedLabel.current) {
+        selectedLabel.current = nextLabel;
+        setDraft(nextLabel);
+        setSelected(true);
+        return;
+      }
+      if (
+        value &&
+        nextLabel &&
+        nextLabel !== lastLabel &&
+        selectedLabel.current === lastLabel
+      ) {
         selectedLabel.current = nextLabel;
         setDraft(nextLabel);
         setSelected(true);
@@ -127,11 +145,12 @@ export function EntityAutocompleteField({
 
   return (
     <AutocompleteField
-      clearAriaLabel="Limpiar selección"
+      clearAriaLabel={clearLabel}
       createHref={createHref}
       createLabel={createLabel}
       disabled={disabled}
       emptyLabel={emptyLabel}
+      emptyQueryLabel={noRecordsLabel}
       error={error}
       errorLabel={errorLabel}
       help={help}
