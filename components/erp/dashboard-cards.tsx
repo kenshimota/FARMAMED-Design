@@ -88,7 +88,7 @@ const CARD_ORDER: {
     label: "Lotes vencidos",
     icon: "clock",
     module: "lotes",
-    href: "/app/lotes",
+    href: "/app/lotes?expired=true",
   },
   {
     key: "stocks",

@@ -8,7 +8,7 @@ import {
 export const metadata: Metadata = {
   title: "Existencias",
   description:
-    "Consulta las existencias agregadas por producto y estado de ítem en Farmamed, con acceso a la disponibilidad vendible y sus costos.",
+    "Consulta las existencias físicas agregadas por producto y estado de ítem en Farmamed, con acceso a la disponibilidad vendible y sus costos.",
 };
 
 type StocksRouteProps = {

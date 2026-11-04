@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { NoticeBanner } from "@/components/erp/ui/banner";
-import type {
-  LotActor,
-  LotLocationStatus,
-  LotProduct,
-  LotRecord,
-  LotShelf,
-  LotShelfSection,
+import {
+  lotAvailable,
+  type LotActor,
+  type LotLocationStatus,
+  type LotProduct,
+  type LotRecord,
+  type LotShelf,
+  type LotShelfSection,
 } from "@/components/erp/records/lots-api";
 import type { ItemStateRecord } from "@/components/erp/records/item-states-api";
 import type { ProductRecord } from "@/components/erp/records/records-api";
@@ -152,15 +153,106 @@ export function lotProductReference(
   return product?.reference?.trim() || null;
 }
 
+function isExpiredItemStateName(name: string | null | undefined) {
+  return name?.trim().toLowerCase() === "expired";
+}
+
+function resolveLotItemState(
+  lot: Pick<LotRecord, "item_state" | "item_state_id">,
+  itemStates: ItemStateRecord[] = [],
+) {
+  if (lot.item_state) return lot.item_state;
+  return (
+    itemStates.find(
+      (itemState) => String(itemState.id) === String(lot.item_state_id),
+    ) ?? null
+  );
+}
+
+export function lotItemStateIsExpired(
+  lot: Pick<LotRecord, "item_state" | "item_state_id">,
+  itemStates: ItemStateRecord[] = [],
+) {
+  return isExpiredItemStateName(resolveLotItemState(lot, itemStates)?.name);
+}
+
 export function lotItemStateLabel(
   lot: Pick<LotRecord, "item_state" | "item_state_id">,
   itemStates: ItemStateRecord[] = [],
 ) {
-  if (lot.item_state?.label) return lot.item_state.label;
-  const match = itemStates.find(
-    (itemState) => String(itemState.id) === String(lot.item_state_id),
+  const resolved = resolveLotItemState(lot, itemStates);
+  if (isExpiredItemStateName(resolved?.name)) return "Vencido";
+  return resolved?.label ?? `Estado #${lot.item_state_id}`;
+}
+
+export function LotItemStateBadge({
+  itemStates,
+  lot,
+}: {
+  itemStates?: ItemStateRecord[];
+  lot: Pick<LotRecord, "item_state" | "item_state_id">;
+}) {
+  const expired = lotItemStateIsExpired(lot, itemStates);
+  return (
+    <span
+      className={
+        expired
+          ? "inline-flex items-center gap-1.5 rounded-full border border-alert/25 bg-alert/[0.06] px-2.5 py-1 text-[11px] font-semibold text-alert-ink"
+          : "inline-flex rounded-full bg-soft-blue px-2.5 py-1 text-[11px] font-semibold text-brand"
+      }
+    >
+      {expired && <Icon name="alert" size={13} />}
+      {lotItemStateLabel(lot, itemStates)}
+    </span>
   );
-  return match?.label ?? `Estado #${lot.item_state_id}`;
+}
+
+export function lotExpiredWithReservation(
+  lot: Pick<
+    LotRecord,
+    "expiration_date" | "item_state" | "item_state_id" | "reserved"
+  >,
+  itemStates: ItemStateRecord[] = [],
+) {
+  const expiredByDate = getLotExpiryStatus(lot.expiration_date) === "vencido";
+  return (
+    (expiredByDate || lotItemStateIsExpired(lot, itemStates)) &&
+    lot.reserved > 0
+  );
+}
+
+export function LotExpiredReservationBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-alert/25 bg-alert/[0.06] px-2.5 py-1 text-[11px] font-semibold text-alert-ink">
+      <Icon name="alert" size={13} />
+      Vencido con reserva
+    </span>
+  );
+}
+
+function lotItemStateIsSellable(
+  lot: Pick<LotRecord, "item_state" | "item_state_id">,
+  itemStates: ItemStateRecord[] = [],
+) {
+  return resolveLotItemState(lot, itemStates)?.is_sellable !== false;
+}
+
+export function lotSellableAvailable(
+  lot: Pick<
+    LotRecord,
+    | "stock"
+    | "reserved"
+    | "location_status"
+    | "expiration_date"
+    | "item_state"
+    | "item_state_id"
+  >,
+  itemStates: ItemStateRecord[] = [],
+) {
+  if (getLotExpiryStatus(lot.expiration_date) === "vencido") return 0;
+  if (lotItemStateIsExpired(lot, itemStates)) return 0;
+  if (!lotItemStateIsSellable(lot, itemStates)) return 0;
+  return lotAvailable(lot);
 }
 
 export function lotWarehouseName(
@@ -240,15 +332,22 @@ export function lotActorLabel(actor: LotActor | null | undefined) {
 export function LotSyncNotice({
   variant = "list",
   action,
+  withExpiryAutomation = false,
 }: {
   variant?: "list" | "detail";
   action?: ReactNode;
+  withExpiryAutomation?: boolean;
 }) {
+  const description = withExpiryAutomation
+    ? variant === "detail"
+      ? "La existencia y la cantidad reservada de este lote se editan desde el formulario del lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
+      : "La existencia y la cantidad reservada se editan desde el formulario de cada lote. Además, el job diario de vencimiento corre una vez al día: mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada; los lotes vencidos con reservas se mueven cuando la reserva se libere. Este proceso no se puede ejecutar desde esta pantalla."
+    : variant === "detail"
+      ? "Este lote no actualiza automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada."
+      : "Los lotes no actualizan automáticamente las existencias, salvo el job diario de vencimiento, que mueve los lotes vencidos sin reservas al estado Vencido y recalcula la existencia agregada.";
   return (
     <NoticeBanner role="note" title="Lotes y existencias" action={action}>
-      {variant === "detail"
-        ? "Este lote no actualiza automáticamente las existencias. Revisa ambas vistas."
-        : "Los lotes no actualizan automáticamente las existencias. Revisa ambas vistas."}
+      {description}
     </NoticeBanner>
   );
 }

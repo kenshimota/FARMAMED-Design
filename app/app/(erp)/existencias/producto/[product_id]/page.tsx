@@ -4,7 +4,7 @@ import { ProductStocksPage } from "@/components/erp/records/product-stocks";
 export const metadata: Metadata = {
   title: "Existencias del producto",
   description:
-    "Consulta todas las existencias de un producto en Farmamed por estado de ítem, con enlaces a lotes y disponibilidad.",
+    "Consulta la existencia física de un producto en Farmamed por estado de ítem, con enlaces a lotes y disponibilidad vendible.",
 };
 
 type ProductStocksRouteProps = {

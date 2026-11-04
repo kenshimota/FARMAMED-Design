@@ -5,9 +5,9 @@ import {
 } from "@/components/erp/records/stock-list";
 
 export const metadata: Metadata = {
-  title: "Existencias disponibles",
+  title: "Disponibilidad vendible",
   description:
-    "Consulta la disponibilidad vendible de un producto en Farmamed, con su cantidad, costo vigente y moneda.",
+    "Consulta la existencia física y la disponibilidad vendible de un producto en Farmamed, con su costo vigente y moneda. Solo los lotes ubicados, no vencidos y con estado de ítem vendible cuentan para la venta.",
 };
 
 type AvailableStocksRouteProps = {
