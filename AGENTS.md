@@ -48,6 +48,7 @@ Landing page en español para presentar el ERP de Farmamed orientado a droguerí
 - `components/erp/ui/pagination-controls.tsx`: navegación y tamaño de página accesibles.
 - `components/erp/ui/filter-bar.tsx`: barra responsive de filtros y chips activos.
 - `components/erp/ui/autocomplete-field.tsx`: autocompletado con debounce y navegación por teclado.
+- `components/erp/ui/entity-autocomplete.tsx`: selector de entidad que conserva el identificador, precarga la selección y admite enlaces de alta.
 - `lib/store.ts`: cliente de productos, variantes, moneda y disponibilidad de la tienda.
 - `components/pharma-experience.tsx`: límite cliente y carga diferida de la escena.
 - `components/pharma-scene.tsx`: geometría, texturas, animación y limpieza de Three.js.

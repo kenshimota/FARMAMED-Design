@@ -40,7 +40,9 @@ export function OrderStatusChain({ statuses }: { statuses: OrderStatus[] }) {
   const chainCodes = new Set(chain.map((status) => status.code));
   const alternatives = statuses.filter(
     (status) =>
-      status.is_terminal && !chainCodes.has(status.code) && status.code !== chain.at(-1)?.code,
+      status.is_terminal &&
+      !chainCodes.has(status.code) &&
+      status.code !== chain.at(-1)?.code,
   );
 
   const accessibleChain = chain
@@ -54,7 +56,7 @@ export function OrderStatusChain({ statuses }: { statuses: OrderStatus[] }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <span className="eyebrow">Flujo configurado</span>
+          <span className="eyebrow">Ciclo de vida del pedido</span>
           <h2
             className="mt-3 text-xl font-semibold tracking-[-0.025em] text-ink"
             id="flujo-estados-pedido"
@@ -62,8 +64,8 @@ export function OrderStatusChain({ statuses }: { statuses: OrderStatus[] }) {
             Cadena principal de estados
           </h2>
           <p className="mt-2 max-w-2xl text-[13px] leading-6 text-muted">
-            El orden solo afecta la presentación; las transiciones las define el
-            siguiente estado de cada registro.
+            El pedido avanza por estas etapas en el orden indicado. Cada estado
+            define cuál sigue y si cierra el ciclo.
           </p>
         </div>
         <span className="rounded-full bg-soft-blue px-3 py-1.5 text-[11px] font-semibold text-brand">
@@ -104,64 +106,28 @@ export function OrderStatusChain({ statuses }: { statuses: OrderStatus[] }) {
         ))}
       </ol>
 
-      <details className="mt-4 border-t border-line pt-3">
-        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full text-[12px] font-semibold text-brand">
-          Ver flujo
-        </summary>
-        <div className="mt-2 space-y-4">
-          <p className="text-[13px] leading-6 text-muted">
-            Los estados terminales no tienen siguiente estado. Un estado en uso
-            puede seguir siendo terminal si esa es la configuración del catálogo.
-          </p>
-
-          {alternatives.length > 0 && (
-            <div>
-              <h3 className="text-[12px] font-semibold text-ink">
-                Terminales alternativos
-              </h3>
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {alternatives.map((status) => (
-                  <li
-                    className="inline-flex items-center gap-2 rounded-xl border border-line bg-background px-3 py-2"
-                    key={status.code}
-                  >
-                    <span className="text-[13px] font-semibold text-ink">
-                      {statusName(status)}
-                    </span>
-                    <span className="font-mono text-[11px] text-muted">
-                      {status.code}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div>
-            <h3 className="text-[12px] font-semibold text-ink">
-              Orden de presentación
-            </h3>
-            <ol className="mt-2 space-y-2">
-              {statuses.map((status) => (
-                <li
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-background px-3 py-2"
-                  key={status.code}
-                >
-                  <span className="text-[13px] font-semibold text-ink">
-                    {status.sort_order}. {statusName(status)}
-                  </span>
-                  <span className="text-[12px] text-muted">
-                    Siguiente:{" "}
-                    <span className="font-mono">
-                      {status.next_status_code ?? "sin siguiente"}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </div>
+      {alternatives.length > 0 && (
+        <div className="mt-5 border-t border-line pt-4">
+          <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">
+            Estados terminales
+          </h3>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {alternatives.map((status) => (
+              <li
+                className="inline-flex items-center gap-2 rounded-xl border border-line bg-background px-3 py-2"
+                key={status.code}
+              >
+                <span className="text-[13px] font-semibold text-ink">
+                  {statusName(status)}
+                </span>
+                <span className="font-mono text-[11px] text-muted">
+                  {status.code}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-      </details>
+      )}
     </section>
   );
 }

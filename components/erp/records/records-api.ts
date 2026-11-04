@@ -216,6 +216,11 @@ export async function fetchProductPage(
   });
 }
 
+export async function searchProducts(query: string) {
+  const page = await fetchProductPage({ q: query, pageSize: 10 });
+  return page.data;
+}
+
 export async function fetchProduct(id: string) {
   const payload = await apiFetch<unknown>(
     `/products/${encodeURIComponent(id)}`,

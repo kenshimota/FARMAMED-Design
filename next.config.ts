@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return [
+      {
+        source: "/app/pedidos/estados/nuevo",
+        destination: "/app/pedidos/estados",
+        permanent: false,
+      },
+      {
+        source: "/app/pedidos/estados/:id/editar",
+        destination: "/app/pedidos/estados",
+        permanent: false,
+      },
+    ];
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { AccessState } from "@/components/erp/access-state";
 import { useSession } from "@/components/erp/session-context";
@@ -12,6 +12,7 @@ import { useCurrencyStatusContext } from "@/components/erp/ui/currency-status-co
 import { EmptyState } from "@/components/erp/ui/empty-state";
 import { NoticeBanner } from "@/components/erp/ui/banner";
 import { AutocompleteField } from "@/components/erp/ui/autocomplete-field";
+import { EntityAutocompleteField } from "@/components/erp/ui/entity-autocomplete";
 import { ConfirmDialog } from "@/components/erp/ui/confirm-dialog";
 import { FilterBar, type FilterChip } from "@/components/erp/ui/filter-bar";
 import { PaginationControls } from "@/components/erp/ui/pagination-controls";
@@ -39,6 +40,7 @@ import {
   type CustomerRecord,
 } from "@/components/erp/records/customers-api";
 import {
+  fetchMethodPayment,
   fetchMethodPayments,
   type MethodPayment,
 } from "@/components/erp/records/method-payments-api";
@@ -64,6 +66,7 @@ import {
 import type { WalletCurrency } from "@/components/erp/records/wallets-api";
 import { formatDateOnly, formatInteger, formatMoney } from "@/lib/format";
 import { canReadModule, canWriteModule } from "@/lib/permissions";
+import { ApiError } from "@/lib/api";
 import type { UiError } from "@/lib/api-errors";
 import { useRecordsById } from "@/components/erp/records/use-records-by-id";
 
@@ -88,6 +91,12 @@ export const EMPTY_PAYMENT_FILTERS: PaymentListFilters = {
 const NO_METHODS: MethodPayment[] = [];
 
 const PAYMENT_STATUS_FILTER_OPTIONS = paymentStatusOptions();
+
+function methodPaymentOptionLabel(method: MethodPayment) {
+  return method.currency
+    ? `${method.label} · ${method.currency.code}`
+    : method.label;
+}
 
 function listErrorMessage(error: UiError | null) {
   if (!error) return "No pudimos cargar los pagos.";
@@ -156,6 +165,12 @@ function PaymentListContent({
     Record<string, PaymentStatusResult>
   >({});
   const [customerDraft, setCustomerDraft] = useState("");
+  const [filterResetKey, setFilterResetKey] = useState(0);
+  const [resolvedMethod, setResolvedMethod] = useState<{
+    id: string;
+    label: string;
+    missing: boolean;
+  } | null>(null);
 
   const customerId = list.filters.customer_id ?? "";
   const methodPaymentId = list.filters.method_payment_id ?? "";
@@ -196,11 +211,58 @@ function PaymentListContent({
     () =>
       methods.map((method) => ({
         value: String(method.id),
-        label: method.currency
-          ? `${method.label} · ${method.currency.code}`
-          : method.label,
+        label: methodPaymentOptionLabel(method),
       })),
     [methods],
+  );
+
+  const listedMethod = methodPaymentId
+    ? methodOptions.find((option) => option.value === methodPaymentId)
+    : undefined;
+
+  useEffect(() => {
+    if (!methodPaymentId || listedMethod) return;
+    if (resolvedMethod?.id === methodPaymentId) return;
+
+    let active = true;
+    fetchMethodPayment(methodPaymentId)
+      .then((method) => {
+        if (active) {
+          setResolvedMethod({
+            id: methodPaymentId,
+            label: methodPaymentOptionLabel(method),
+            missing: false,
+          });
+        }
+      })
+      .catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResolvedMethod({
+            id: methodPaymentId,
+            label: `Método #${methodPaymentId}`,
+            missing: true,
+          });
+          return;
+        }
+        setResolvedMethod({
+          id: methodPaymentId,
+          label: `Método #${methodPaymentId}`,
+          missing: false,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [listedMethod, methodPaymentId, resolvedMethod]);
+
+  const selectedMethodLabel = listedMethod
+    ? listedMethod.label
+    : resolvedMethod?.id === methodPaymentId
+      ? resolvedMethod.label
+      : undefined;
+  const methodMissing = Boolean(
+    resolvedMethod?.id === methodPaymentId && resolvedMethod.missing,
   );
 
   const payments = useMemo(
@@ -230,6 +292,12 @@ function PaymentListContent({
     paidFrom && paidTo && paidFrom > paidTo,
   );
 
+  function clearFilters() {
+    setCustomerDraft("");
+    setFilterResetKey((current) => current + 1);
+    list.clearFilters();
+  }
+
   const chips: FilterChip[] = [];
   if (customerId) {
     chips.push({
@@ -251,10 +319,7 @@ function PaymentListContent({
   if (methodPaymentId) {
     chips.push({
       id: "method_payment_id",
-      label: `Método: ${
-        methodOptions.find((option) => option.value === methodPaymentId)?.label ??
-        `#${methodPaymentId}`
-      }`,
+      label: `Método: ${selectedMethodLabel ?? `#${methodPaymentId}`}`,
       onRemove: () => list.setFilter("method_payment_id", ""),
     });
   }
@@ -554,7 +619,7 @@ function PaymentListContent({
         chips={chips}
         id="pagos-filtros"
         loading={list.status === "loading"}
-        onClear={list.clearFilters}
+        onClear={clearFilters}
         results={
           list.status === "loading"
             ? "Cargando pagos…"
@@ -603,22 +668,34 @@ function PaymentListContent({
           placeholder="Todos los estados"
           value={status}
         />
-        <SelectField
-          emptyLabel="No hay métodos registrados."
-          id="filtro-pago-metodo"
-          label="Método de pago"
-          loading={methodsResource.status === "loading"}
-          loadingLabel="Cargando métodos…"
-          loadError={
+        <EntityAutocompleteField
+          disabled={
+            methodsResource.status === "loading" ||
             methodsResource.status === "error"
-              ? methodsResource.error?.message ??
-                "No pudimos cargar los métodos de pago."
-              : null
           }
+          emptyLabel={
+            methods.length === 0
+              ? "No hay métodos registrados."
+              : "No hay métodos de pago que coincidan."
+          }
+          id="filtro-pago-metodo"
+          initialLabel={selectedMethodLabel}
+          key={`filtro-pago-metodo-${filterResetKey}`}
+          label="Método de pago"
+          loadingLabel="Buscando métodos de pago…"
+          loadOptions={async (query) => {
+            const search = query.trim().toLocaleLowerCase("es");
+            if (!search) return methodOptions;
+            return methodOptions.filter((option) =>
+              option.label.toLocaleLowerCase("es").includes(search),
+            );
+          }}
           onChange={(value) => list.setFilter("method_payment_id", value)}
-          onRetry={methodsResource.reload}
-          options={methodOptions}
-          placeholder="Todos los métodos"
+          placeholder={
+            methodsResource.status === "loading"
+              ? "Cargando métodos…"
+              : "Busca un método de pago"
+          }
           value={methodPaymentId}
         />
         <CurrencySelect
@@ -650,6 +727,43 @@ function PaymentListContent({
         <NoticeBanner tone="warning">
           La fecha “desde” es posterior a la fecha “hasta”. Ajusta el rango para
           ver resultados.
+        </NoticeBanner>
+      )}
+
+      {methodMissing && (
+        <NoticeBanner
+          action={
+            <button
+              className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+              onClick={clearFilters}
+              type="button"
+            >
+              Limpiar filtros
+            </button>
+          }
+          tone="warning"
+        >
+          El método de pago seleccionado ya no existe. Limpia el filtro para
+          continuar.
+        </NoticeBanner>
+      )}
+
+      {methodsResource.status === "error" && (
+        <NoticeBanner
+          action={
+            <button
+              className="min-h-11 rounded-full border border-olive/35 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface"
+              onClick={methodsResource.reload}
+              type="button"
+            >
+              Reintentar
+            </button>
+          }
+          role="alert"
+          tone="warning"
+        >
+          {methodsResource.error?.message ??
+            "No pudimos cargar los métodos de pago."}
         </NoticeBanner>
       )}
 
@@ -717,7 +831,7 @@ function PaymentListContent({
                       onClick={
                         list.isPageOutOfRange
                           ? list.goToFirstPage
-                          : list.clearFilters
+                          : clearFilters
                       }
                       type="button"
                     >

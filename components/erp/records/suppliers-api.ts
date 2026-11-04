@@ -160,6 +160,11 @@ export async function fetchSupplierPage(
   });
 }
 
+export async function searchSuppliers(query: string) {
+  const page = await fetchSupplierPage({ q: query, pageSize: 10 });
+  return page.data;
+}
+
 export async function fetchSupplier(id: string) {
   const payload = await apiFetch<unknown>(
     `/suppliers/${encodeURIComponent(id)}`,

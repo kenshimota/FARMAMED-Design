@@ -16,21 +16,6 @@ export type OrderStatus = {
   is_terminal: boolean;
 };
 
-export type OrderStatusInput = {
-  code: string;
-  name: string;
-  description?: string | null;
-  sort_order: number;
-  next_status_code?: string | null;
-};
-
-export type OrderStatusUpdate = {
-  name: string;
-  description?: string | null;
-  sort_order: number;
-  next_status_code?: string | null;
-};
-
 export const BASE_ORDER_STATUS_CODES = [
   "draft",
   "request",
@@ -156,45 +141,4 @@ function authOptions(): { token?: string } {
 export async function fetchOrderStatuses() {
   const payload = await apiFetch<unknown>("/order-statuses", authOptions());
   return parseOrderStatusList(payload);
-}
-
-export async function fetchOrderStatus(id: string) {
-  const payload = await apiFetch<unknown>(
-    `/order-statuses/${encodeURIComponent(id)}`,
-    authOptions(),
-  );
-  const status = parseOrderStatus(payload);
-  if (!status) throw new ApiError(500, null);
-  return status;
-}
-
-export function createOrderStatus(input: OrderStatusInput) {
-  return apiFetch<void>("/order-statuses", {
-    ...authOptions(),
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function updateOrderStatus(id: RecordId, input: OrderStatusUpdate) {
-  return apiFetch<void>(
-    `/order-statuses/${encodeURIComponent(String(id))}`,
-    {
-      ...authOptions(),
-      method: "PUT",
-      body: JSON.stringify(input),
-    },
-  );
-}
-
-export function deleteOrderStatus(id: RecordId) {
-  return apiFetch<void>(`/order-statuses/${encodeURIComponent(String(id))}`, {
-    ...authOptions(),
-    method: "DELETE",
-  });
-}
-
-export function getOrderStatusLabel(code: string | null | undefined) {
-  if (!code) return "Sin siguiente estado";
-  return ORDER_STATUS_LABELS[code] ?? code;
 }
